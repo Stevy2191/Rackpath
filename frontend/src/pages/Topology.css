@@ -1,0 +1,9 @@
+.topology-page {
+  flex: 1;
+  position: relative;
+}
+
+.topology-page .react-flow {
+  width: 100%;
+  height: 100%;
+}

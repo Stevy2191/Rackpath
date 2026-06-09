@@ -1,0 +1,65 @@
+.scan-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 2rem;
+  min-height: 0;
+}
+
+.scan-form {
+  max-width: 400px;
+}
+
+.scan-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.scan-jobs {
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.scan-jobs ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.scan-jobs li {
+  margin-bottom: 0.25rem;
+}
+
+.scan-jobs button {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem;
+  border: 1px solid #e0e0e8;
+  background: #f9f9fb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.scan-jobs button.active {
+  background: #383852;
+  color: #fff;
+  border-color: #383852;
+}
+
+.scan-results {
+  flex: 1;
+  overflow: auto;
+}
+
+.scan-json {
+  background: #1e1e2f;
+  color: #d6d6e0;
+  padding: 1rem;
+  border-radius: 4px;
+  overflow: auto;
+  font-size: 0.8rem;
+}

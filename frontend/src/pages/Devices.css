@@ -1,0 +1,148 @@
+.devices-page {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.devices-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  padding: 1rem;
+  background-color: #fff;
+  border-right: 1px solid #e0e0e8;
+  overflow-y: auto;
+}
+
+.port-editor {
+  flex: 1;
+  padding: 1rem 2rem;
+  overflow: auto;
+}
+
+.device-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+}
+
+.device-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.device-select {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.5rem;
+  border: 1px solid #e0e0e8;
+  background: #f9f9fb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.device-list li.active .device-select {
+  background: #383852;
+  color: #fff;
+  border-color: #383852;
+}
+
+.device-type {
+  font-size: 0.75rem;
+  color: #9090a0;
+}
+
+.device-list li.active .device-type {
+  color: #c9c9d8;
+}
+
+.delete-btn {
+  border: none;
+  background: transparent;
+  color: #b3261e;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.device-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #f9f9fb;
+  border: 1px solid #e0e0e8;
+  border-radius: 4px;
+}
+
+.device-form input,
+.device-form textarea {
+  padding: 0.4rem;
+  border: 1px solid #d0d0da;
+  border-radius: 4px;
+}
+
+.device-form button {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  background-color: #1e1e2f;
+  color: #fff;
+  cursor: pointer;
+}
+
+.port-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.port-table th,
+.port-table td {
+  border: 1px solid #e0e0e8;
+  padding: 0.4rem;
+  text-align: left;
+}
+
+.port-table input,
+.port-table select {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0.2rem;
+}
+
+.port-table input:focus,
+.port-table select:focus {
+  border-color: #d0d0da;
+  background: #fff;
+}
+
+.port-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #f9f9fb;
+  border: 1px solid #e0e0e8;
+  border-radius: 4px;
+  max-width: 600px;
+}
+
+.port-form input {
+  padding: 0.4rem;
+  border: 1px solid #d0d0da;
+  border-radius: 4px;
+}
+
+.port-form button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: #1e1e2f;
+  color: #fff;
+  cursor: pointer;
+}
