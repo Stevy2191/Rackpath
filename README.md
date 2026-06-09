@@ -76,3 +76,4 @@ Results are returned as structured JSON which the API persists to MariaDB.
 `.github/workflows/docker-publish.yml` builds and pushes the frontend, API,
 and scanner images to GHCR (`ghcr.io/stevy2191/rackpath-*`) on every push to
 `main`.
+# Rackpath
