@@ -69,6 +69,7 @@ def _run_scan(job_id, target_subnet, snmp_community, callback_url):
             snmp_info = snmp_discovery.get_system_info(ip, snmp_community)
             interfaces = snmp_discovery.get_interfaces(ip, snmp_community) if snmp_info else []
             neighbors = lldp_discovery.get_neighbors(ip, snmp_community) if snmp_info else []
+            snmp_arp_table = snmp_discovery.get_arp_table(ip, snmp_community) if snmp_info else {}
 
             ports = nmap_result.get("ports", [])
             for iface in interfaces:
@@ -84,8 +85,10 @@ def _run_scan(job_id, target_subnet, snmp_community, callback_url):
                 "hostname": snmp_info.get("sysName") or nmap_result.get("hostname"),
                 "type": nmap_result.get("os_guess"),
                 "snmp_community": snmp_community if snmp_info else None,
+                "snmp_descr": snmp_info.get("sysDescr"),
                 "ports": ports,
                 "neighbors": neighbors,
+                "arp_table": snmp_arp_table,
             })
 
         results = {

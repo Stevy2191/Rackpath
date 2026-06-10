@@ -7,7 +7,7 @@ const router = express.Router();
 const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:8000';
 const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://rackpath-api:${process.env.API_PORT || 3000}`;
 
-// GET /api/scan - list scan jobs
+// GET /api/scans - list scan jobs
 router.get('/', async (req, res, next) => {
   try {
     const [rows] = await pool.query(
@@ -19,7 +19,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /api/scan/:id - job status + results
+// GET /api/scans/:id - job status + results
 router.get('/:id', async (req, res, next) => {
   try {
     const [rows] = await pool.query('SELECT * FROM scan_jobs WHERE id = ?', [req.params.id]);
@@ -30,7 +30,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/scan - start a new scan job for a subnet
+// POST /api/scans - start a new scan job for a subnet
 router.post('/', async (req, res, next) => {
   try {
     const { target_subnet, snmp_community } = req.body;
@@ -50,7 +50,7 @@ router.post('/', async (req, res, next) => {
         job_id: jobId,
         target_subnet,
         snmp_community: snmp_community || process.env.SNMP_COMMUNITY || 'public',
-        callback_url: `${API_PUBLIC_URL}/api/scan/${jobId}/results`,
+        callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/results`,
       });
 
       await pool.query("UPDATE scan_jobs SET status = 'running' WHERE id = ?", [jobId]);
@@ -68,7 +68,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// POST /api/scan/:id/results - callback used by the scanner service to
+// POST /api/scans/:id/results - callback used by the scanner service to
 // report completed scan results, which are persisted to the DB.
 router.post('/:id/results', async (req, res, next) => {
   const conn = await pool.getConnection();

@@ -4,6 +4,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         nmap \
         iputils-ping \
         libpcap-dev \
+        libpcap0.8 \
+        gcc \
+        python3-dev \
         net-tools \
     && rm -rf /var/lib/apt/lists/*
 

@@ -1,0 +1,55 @@
+.device-node {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 2px solid #1e1e2f;
+  background: #fff;
+  min-width: 140px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.device-node-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.device-node-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.device-node-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-node-ip {
+  font-size: 0.7rem;
+  color: #6b6b80;
+}
+
+.device-node-router {
+  border-color: #1d6f42;
+  background: #eaf6ee;
+}
+
+.device-node-switch {
+  border-color: #b3540e;
+  background: #fdf1e6;
+}
+
+.device-node-server {
+  border-color: #2557a7;
+  background: #e9f0fc;
+}
+
+.device-node-unknown {
+  border-color: #6b6b80;
+  background: #f4f5f7;
+}

@@ -7,7 +7,7 @@ const router = express.Router();
 router.get('/', async (req, res, next) => {
   try {
     const [nodes] = await pool.query(
-      `SELECT d.id, d.hostname, d.ip, d.mac, d.type,
+      `SELECT d.id, d.hostname, d.ip, d.mac, d.type, d.snmp_community, d.notes,
               COALESCE(tl.x, 0) AS x, COALESCE(tl.y, 0) AS y
        FROM devices d
        LEFT JOIN topology_layout tl ON tl.device_id = d.id`

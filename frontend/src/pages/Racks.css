@@ -133,13 +133,83 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
   padding: 0 0.5rem;
 }
 
-.rack-unit-device button {
+.rack-unit-device-name {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #2557a7;
+  font-size: 0.85rem;
+  text-align: left;
+  flex: 1;
+}
+
+.rack-unit-device-name:hover {
+  text-decoration: underline;
+}
+
+.rack-unit-size {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: #6b6b80;
+  flex-shrink: 0;
+}
+
+.rack-unit-size input {
+  width: 48px;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid #d0d0da;
+  border-radius: 4px;
+}
+
+.rack-unit-remove {
   border: none;
   background: transparent;
   cursor: pointer;
   color: #b3261e;
   font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.rack-view-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.rack-view-header h2 {
+  margin: 0;
+}
+
+.rack-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.rack-edit-form input {
+  padding: 0.4rem;
+  border: 1px solid #d0d0da;
+  border-radius: 4px;
+}
+
+.rack-edit-form button {
+  padding: 0.4rem 0.9rem;
+  border: none;
+  border-radius: 4px;
+  background-color: #1e1e2f;
+  color: #fff;
+  cursor: pointer;
+}
+
+.rack-edit-form button.danger {
+  background-color: #b3261e;
 }

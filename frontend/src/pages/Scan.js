@@ -12,7 +12,7 @@ export default function ScanPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const loadJobs = () => {
-    client.get('/scan').then((res) => setJobs(res.data)).catch((err) => setError(err.message));
+    client.get('/scans').then((res) => setJobs(res.data)).catch((err) => setError(err.message));
   };
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function ScanPage() {
 
     const interval = setInterval(() => {
       client
-        .get(`/scan/${selectedJob.id}`)
+        .get(`/scans/${selectedJob.id}`)
         .then((res) => {
           setSelectedJob(res.data);
           if (!ACTIVE_STATUSES.includes(res.data.status)) {
@@ -44,7 +44,7 @@ export default function ScanPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await client.post('/scan', { target_subnet: subnet });
+      const res = await client.post('/scans', { target_subnet: subnet });
       setSelectedJob(res.data);
       loadJobs();
     } catch (err) {

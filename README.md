@@ -6,7 +6,7 @@ Self-hosted network topology and rack management web app.
 
 - **Frontend**: React + React Flow (topology diagram) + custom rack builder UI, served via nginx
 - **API**: Node.js + Express + MariaDB (`mysql2` driver)
-- **Scanner**: Python service using `nmap`, `pysnmp`, `scapy`, and `python-lldp` for network discovery
+- **Scanner**: Python service using `nmap`, `pysnmp`, and `scapy` for network discovery (LLDP/CDP via SNMP OIDs)
 - **Database**: MariaDB
 
 ## Project layout

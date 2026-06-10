@@ -27,7 +27,7 @@ app.use('/api/ports', portsRouter);
 app.use('/api/racks', racksRouter);
 app.use('/api/rack-slots', rackSlotsRouter);
 app.use('/api/topology', topologyRouter);
-app.use('/api/scan', scanRouter);
+app.use('/api/scans', scanRouter);
 
 // Fallback error handler
 app.use((err, req, res, next) => {
