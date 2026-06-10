@@ -1,15 +1,6 @@
 """SNMP v2c helpers for system info, interface tables, and ARP tables."""
 
-from pysnmp.hlapi import (
-    CommunityData,
-    ContextData,
-    ObjectIdentity,
-    ObjectType,
-    SnmpEngine,
-    UdpTransportTarget,
-    getCmd,
-    nextCmd,
-)
+from puresnmp import get as snmp_get, walk as snmp_walk
 
 SYS_NAME_OID = '1.3.6.1.2.1.1.5.0'
 SYS_DESCR_OID = '1.3.6.1.2.1.1.1.0'
@@ -18,47 +9,32 @@ IF_SPEED_OID = '1.3.6.1.2.1.2.2.1.5'
 IP_NET_TO_MEDIA_PHYS_ADDRESS_OID = '1.3.6.1.2.1.4.22.1.2'
 
 SNMP_TIMEOUT = 1
-SNMP_RETRIES = 0
+
+
+def _decode(value):
+    """Render a puresnmp value as text: printable bytes decode to str, binary bytes become 0x-hex."""
+    if isinstance(value, bytes):
+        try:
+            return value.decode('ascii')
+        except UnicodeDecodeError:
+            return '0x' + value.hex()
+    return str(value)
 
 
 def _get(ip, community, oid):
-    iterator = getCmd(
-        SnmpEngine(),
-        CommunityData(community, mpModel=1),
-        UdpTransportTarget((ip, 161), timeout=SNMP_TIMEOUT, retries=SNMP_RETRIES),
-        ContextData(),
-        ObjectType(ObjectIdentity(oid)),
-    )
     try:
-        error_indication, error_status, _error_index, var_binds = next(iterator)
+        value = snmp_get(ip, community, oid, timeout=SNMP_TIMEOUT)
     except Exception:
         return None
 
-    if error_indication or error_status:
-        return None
-
-    for var_bind in var_binds:
-        return str(var_bind[1])
-    return None
+    return _decode(value)
 
 
 def _walk(ip, community, oid):
     results = {}
-    iterator = nextCmd(
-        SnmpEngine(),
-        CommunityData(community, mpModel=1),
-        UdpTransportTarget((ip, 161), timeout=SNMP_TIMEOUT, retries=SNMP_RETRIES),
-        ContextData(),
-        ObjectType(ObjectIdentity(oid)),
-        lexicographicMode=False,
-    )
-
     try:
-        for error_indication, error_status, _error_index, var_binds in iterator:
-            if error_indication or error_status:
-                break
-            for var_bind in var_binds:
-                results[str(var_bind[0])] = str(var_bind[1])
+        for varbind in snmp_walk(ip, community, oid, timeout=SNMP_TIMEOUT):
+            results[str(varbind.oid)] = _decode(varbind.value)
     except Exception:
         return {}
 
