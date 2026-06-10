@@ -156,6 +156,7 @@ sed -i "s/^RACKPATH_ADMIN_PASSWORD=.*/RACKPATH_ADMIN_PASSWORD=$(escape_sed_repl 
 # ---------------------------------------------------------------------------
 
 log "Pulling images and starting containers"
+"${COMPOSE[@]}" pull
 "${COMPOSE[@]}" up -d
 
 log "Waiting for the database to become healthy"
