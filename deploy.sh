@@ -12,7 +12,7 @@
 #   RACKPATH_DEPLOY_DIR      - directory to install into (default: ./rackpath)
 #   RACKPATH_REPO_RAW_BASE   - base URL to fetch config files from
 # ---------------------------------------------------------------------------
-set -euo pipefail
+set -uo pipefail
 
 REPO_RAW_BASE="${RACKPATH_REPO_RAW_BASE:-https://raw.githubusercontent.com/Stevy2191/Rackpath/main}"
 DEPLOY_DIR="${RACKPATH_DEPLOY_DIR:-rackpath}"
@@ -107,11 +107,11 @@ fi
 # ---------------------------------------------------------------------------
 
 log "Setting up deployment directory: $DEPLOY_DIR"
-mkdir -p "$DEPLOY_DIR/db"
-curl -fsSL "$REPO_RAW_BASE/docker-compose.yml" -o "$DEPLOY_DIR/docker-compose.yml"
-curl -fsSL "$REPO_RAW_BASE/.env.example" -o "$DEPLOY_DIR/.env.example"
-curl -fsSL "$REPO_RAW_BASE/db/init.sql" -o "$DEPLOY_DIR/db/init.sql"
-cd "$DEPLOY_DIR"
+mkdir -p "$DEPLOY_DIR/db" || die "Failed to create deployment directory: $DEPLOY_DIR/db"
+curl -fsSL "$REPO_RAW_BASE/docker-compose.yml" -o "$DEPLOY_DIR/docker-compose.yml" || die "Failed to download docker-compose.yml from $REPO_RAW_BASE"
+curl -fsSL "$REPO_RAW_BASE/.env.example" -o "$DEPLOY_DIR/.env.example" || die "Failed to download .env.example from $REPO_RAW_BASE"
+curl -fsSL "$REPO_RAW_BASE/db/init.sql" -o "$DEPLOY_DIR/db/init.sql" || die "Failed to download db/init.sql from $REPO_RAW_BASE"
+cd "$DEPLOY_DIR" || die "Failed to cd into deployment directory: $DEPLOY_DIR"
 
 # ---------------------------------------------------------------------------
 # Port conflict check
@@ -141,16 +141,16 @@ fi
 # ---------------------------------------------------------------------------
 
 log "Writing .env"
-cp .env.example .env
-sed -i "s/^RACKPATH_JWT_SECRET=.*/RACKPATH_JWT_SECRET=$(escape_sed_repl "$jwt_secret")/" .env
+cp .env.example .env || die "Failed to create .env from .env.example"
+sed -i "s/^RACKPATH_JWT_SECRET=.*/RACKPATH_JWT_SECRET=$(escape_sed_repl "$jwt_secret")/" .env || die "Failed to write JWT secret into .env"
 
 # ---------------------------------------------------------------------------
 # Start the stack
 # ---------------------------------------------------------------------------
 
 log "Pulling images and starting containers"
-"${COMPOSE[@]}" pull
-"${COMPOSE[@]}" up -d
+"${COMPOSE[@]}" pull || die "Failed to pull images. Check your network connection and try again."
+"${COMPOSE[@]}" up -d || die "Failed to start containers. Check 'docker compose logs' for details."
 
 log "Waiting for the database to become healthy"
 if ! wait_for_healthy rackpath-db "$DB_HEALTH_TIMEOUT"; then
@@ -158,7 +158,9 @@ if ! wait_for_healthy rackpath-db "$DB_HEALTH_TIMEOUT"; then
 fi
 
 log "Applying database schema"
-"${COMPOSE[@]}" exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql
+if ! "${COMPOSE[@]}" exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql; then
+  die "Failed to apply database schema. Check 'docker compose logs rackpath-db'."
+fi
 
 log "Creating default admin user"
 if ! "${COMPOSE[@]}" exec -T rackpath-api npm run seed; then
@@ -171,10 +173,11 @@ fi
 
 # These are best-effort lookups for the summary message below - if either
 # command is unavailable or returns nothing, fall back to defaults rather
-# than letting `set -e`/`pipefail` abort the script before it can print.
+# than aborting before the success message can print.
 frontend_port=$(grep -E '^FRONTEND_PORT=' .env | cut -d= -f2) || true
 host_ip=$(hostname -I 2>/dev/null | awk '{print $1}') || true
 
+echo "==> Deployment complete"
 echo ""
 echo "=========================================="
 echo "  Rackpath is ready!"
