@@ -168,19 +168,21 @@ log "Creating default admin user"
 # ---------------------------------------------------------------------------
 
 frontend_port=$(grep -E '^FRONTEND_PORT=' .env | cut -d= -f2)
+host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 
-cat <<EOF
-
-==========================================================================
- Rackpath is up!
-
- URL: http://localhost:${frontend_port:-8080}
-
- Default login: username: admin / password: rackpath
- You will be prompted to change your password on first login.
-
- Configuration file: $(pwd)/.env
- Edit this file for future config changes, then run:
-   cd $(pwd) && ${COMPOSE[*]} up -d
-==========================================================================
-EOF
+echo ""
+echo "=========================================="
+echo "  Rackpath is ready!"
+echo "=========================================="
+echo ""
+echo "  URL:      http://${host_ip:-localhost}:${frontend_port:-8080}"
+echo ""
+echo "  Login with the default credentials:"
+echo "  Username: admin"
+echo "  Password: rackpath"
+echo ""
+echo "  You will be asked to change your password on first login."
+echo ""
+echo "  Config file: $(pwd)/.env"
+echo "=========================================="
+echo ""
