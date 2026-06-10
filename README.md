@@ -53,7 +53,6 @@ directory containing `docker-compose.yml`, `.env`, and `db/init.sql`. Set
 During setup you'll be prompted for:
 
 - **JWT signing secret** - leave blank to auto-generate a secure random value (recommended)
-- **Admin password** - leave blank to use the default `rackpath` (you'll be forced to change it on first login)
 
 When it finishes, it prints the URL, login credentials, and the path to
 your `.env` file.
@@ -73,7 +72,7 @@ file:
    ```
 
    At minimum, set `RACKPATH_JWT_SECRET` to a long random value
-   (`openssl rand -hex 32`) and review `RACKPATH_ADMIN_PASSWORD`.
+   (`openssl rand -hex 32`).
    See the comments in `.env.example` for what every variable controls.
 
 3. Start the stack (pulls pre-built images from GHCR by default):
@@ -142,8 +141,7 @@ Rackpath requires a login. The seed script (`npm run seed`, run
 automatically by `deploy.sh`) creates a default user:
 
 - **Username**: `admin`
-- **Password**: `rackpath`, or whatever you entered during `deploy.sh` setup
-  (`RACKPATH_ADMIN_PASSWORD` in `.env`)
+- **Password**: `rackpath`
 
 This account has `must_change_password` set, so you'll be redirected to a
 change-password screen immediately after the first login. The JWT used for

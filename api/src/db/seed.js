@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const pool = require('./pool');
 
 const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = process.env.RACKPATH_ADMIN_PASSWORD || 'rackpath';
+const ADMIN_PASSWORD = 'rackpath';
 
 async function seed() {
   const [rows] = await pool.query('SELECT id FROM users WHERE username = ?', [ADMIN_USERNAME]);

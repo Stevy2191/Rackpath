@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import './Login.css';
 
 export default function ChangePasswordPage() {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -27,6 +29,7 @@ export default function ChangePasswordPage() {
         new_password: newPassword,
       });
       await refreshUser();
+      navigate('/topology', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to change password');
     } finally {

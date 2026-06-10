@@ -136,12 +136,6 @@ if [ -z "$jwt_secret" ]; then
   echo "Generated a random JWT secret."
 fi
 
-admin_password=$(prompt "Enter a password for the default 'admin' user (leave blank to use 'rackpath'): ")
-if [ -z "$admin_password" ]; then
-  admin_password="rackpath"
-  warn "Using the default admin password 'rackpath'. You will be required to change it on first login."
-fi
-
 # ---------------------------------------------------------------------------
 # Write .env
 # ---------------------------------------------------------------------------
@@ -149,7 +143,6 @@ fi
 log "Writing .env"
 cp .env.example .env
 sed -i "s/^RACKPATH_JWT_SECRET=.*/RACKPATH_JWT_SECRET=$(escape_sed_repl "$jwt_secret")/" .env
-sed -i "s/^RACKPATH_ADMIN_PASSWORD=.*/RACKPATH_ADMIN_PASSWORD=$(escape_sed_repl "$admin_password")/" .env
 
 # ---------------------------------------------------------------------------
 # Start the stack
@@ -181,11 +174,10 @@ cat <<EOF
 ==========================================================================
  Rackpath is up!
 
- URL:      http://localhost:${frontend_port:-8080}
- Username: admin
- Password: ${admin_password}
+ URL: http://localhost:${frontend_port:-8080}
 
- You will be required to change this password on first login.
+ Default login: username: admin / password: rackpath
+ You will be prompted to change your password on first login.
 
  Configuration file: $(pwd)/.env
  Edit this file for future config changes, then run:
