@@ -161,7 +161,9 @@ log "Applying database schema"
 "${COMPOSE[@]}" exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql
 
 log "Creating default admin user"
-"${COMPOSE[@]}" exec -T rackpath-api npm run seed
+if ! "${COMPOSE[@]}" exec -T rackpath-api npm run seed; then
+  warn "Seeding the default admin user failed. You can re-run it manually with: cd $(pwd) && ${COMPOSE[*]} exec -T rackpath-api npm run seed"
+fi
 
 # ---------------------------------------------------------------------------
 # Done
