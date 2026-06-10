@@ -164,7 +164,7 @@ if ! wait_for_healthy rackpath-db "$DB_HEALTH_TIMEOUT"; then
 fi
 
 log "Applying database schema"
-"${COMPOSE[@]}" exec -T rackpath-db sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql
+"${COMPOSE[@]}" exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql
 
 log "Creating default admin user"
 "${COMPOSE[@]}" exec -T rackpath-api npm run seed

@@ -93,7 +93,7 @@ file:
    you need to (re-)apply it manually, it's safe to re-run:
 
    ```bash
-   docker compose exec -T rackpath-db sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql
+   docker compose exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql
    ```
 
 6. Create the default admin user:
