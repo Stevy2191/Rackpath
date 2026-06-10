@@ -154,8 +154,11 @@ changing it invalidates all existing sessions.
 
 - `/topology` — React Flow canvas of discovered devices and links
 - `/racks` — Rack builder: create racks and place devices into U slots
-- `/devices` — Device list with per-port editor (cabling/connections)
-- `/scan` — Trigger discovery scans and view job progress/results
+- `/devices` — Device list with an editable detail form and per-port editor (cabling/connections)
+- `/scan` — Trigger discovery scans, watch live progress, and review/import discovered devices
+
+A light/dark theme toggle is available in the navbar; the choice is remembered
+per-browser.
 
 ## Scanner capabilities
 
@@ -165,7 +168,14 @@ changing it invalidates all existing sessions.
 - LLDP/CDP neighbor discovery via SNMP OIDs
 - ARP table read (IP → MAC mapping)
 
-Results are returned as structured JSON which the API persists to MariaDB.
+While a scan runs, the scanner reports per-host progress back to the API so
+the `/scan` page can show a live progress bar.
+
+Results are returned as structured JSON and stored on the scan job, but
+devices found during a scan are **not** added to your inventory
+automatically. Review the discovered devices on the `/scan` page, select the
+ones you want, and click "Add Selected" to import them into the
+devices/ports tables.
 
 ## CI/CD
 

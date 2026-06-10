@@ -115,6 +115,8 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
     target_subnet   VARCHAR(64)         NOT NULL,
     status          ENUM('pending', 'running', 'completed', 'failed')
                         NOT NULL DEFAULT 'pending',
+    progress_current INT UNSIGNED       NULL,
+    progress_total  INT UNSIGNED        NULL,
     started_at      TIMESTAMP           NULL,
     completed_at    TIMESTAMP           NULL,
     results         JSON                NULL,
@@ -122,5 +124,11 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
     updated_at      TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_scan_jobs_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Upgrade path for existing deployments: db/init.sql is safe to re-run, and
+-- these add the progress columns to a scan_jobs table created before they
+-- existed (no-op if the table was just created above with them already).
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS progress_current INT UNSIGNED NULL AFTER status;
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS progress_total INT UNSIGNED NULL AFTER progress_current;
 
 SET FOREIGN_KEY_CHECKS = 1;

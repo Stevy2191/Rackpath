@@ -8,8 +8,8 @@
   width: 280px;
   flex-shrink: 0;
   padding: 1rem;
-  background-color: #fff;
-  border-right: 1px solid #e0e0e8;
+  background-color: var(--color-bg-elevated);
+  border-right: 1px solid var(--color-border);
   overflow-y: auto;
 }
 
@@ -35,29 +35,31 @@
   width: 100%;
   text-align: left;
   padding: 0.5rem;
-  border: 1px solid #e0e0e8;
-  background: #f9f9fb;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .rack-list button.active {
-  background: #383852;
+  background: var(--color-accent-hover);
   color: #fff;
-  border-color: #383852;
+  border-color: var(--color-accent-hover);
 }
 
 .device-list li {
   padding: 0.5rem;
-  border: 1px solid #e0e0e8;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: #f9f9fb;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
   cursor: grab;
 }
 
 .hint {
   font-size: 0.85rem;
-  color: #6b6b80;
+  color: var(--color-text-muted);
 }
 
 .rack-form,
@@ -68,8 +70,8 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: #f9f9fb;
-  border: 1px solid #e0e0e8;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   margin-bottom: 1rem;
 }
@@ -80,8 +82,10 @@
 .port-form input,
 .scan-form input {
   padding: 0.4rem;
-  border: 1px solid #d0d0da;
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
 }
 
 .rack-form button,
@@ -91,15 +95,15 @@
   padding: 0.5rem;
   border: none;
   border-radius: 4px;
-  background-color: #1e1e2f;
-  color: #fff;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
 }
 
 .rack-frame {
   display: flex;
   flex-direction: column;
-  border: 2px solid #1e1e2f;
+  border: 2px solid var(--color-text);
   border-radius: 4px;
   width: 360px;
 }
@@ -108,7 +112,7 @@
   display: flex;
   align-items: center;
   height: 28px;
-  border-bottom: 1px solid #e0e0e8;
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.75rem;
   position: relative;
 }
@@ -120,12 +124,12 @@
 .rack-unit-label {
   width: 40px;
   text-align: center;
-  color: #9090a0;
+  color: var(--color-text-faint);
   flex-shrink: 0;
 }
 
 .rack-unit.occupied {
-  background-color: #e7f0ff;
+  background-color: var(--color-occupied-bg);
 }
 
 .rack-unit-device {
@@ -141,7 +145,7 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #2557a7;
+  color: var(--color-link);
   font-size: 0.85rem;
   text-align: left;
   flex: 1;
@@ -156,22 +160,24 @@
   align-items: center;
   gap: 0.25rem;
   font-size: 0.7rem;
-  color: #6b6b80;
+  color: var(--color-text-muted);
   flex-shrink: 0;
 }
 
 .rack-unit-size input {
   width: 48px;
   padding: 0.1rem 0.25rem;
-  border: 1px solid #d0d0da;
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
 }
 
 .rack-unit-remove {
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #b3261e;
+  color: var(--color-danger);
   font-size: 0.9rem;
   flex-shrink: 0;
 }
@@ -197,19 +203,21 @@
 
 .rack-edit-form input {
   padding: 0.4rem;
-  border: 1px solid #d0d0da;
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
 }
 
 .rack-edit-form button {
   padding: 0.4rem 0.9rem;
   border: none;
   border-radius: 4px;
-  background-color: #1e1e2f;
-  color: #fff;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
 }
 
 .rack-edit-form button.danger {
-  background-color: #b3261e;
+  background-color: var(--color-danger);
 }

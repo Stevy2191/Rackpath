@@ -59,12 +59,18 @@ def scan_status(job_id):
 
 
 def _run_scan(job_id, target_subnet, snmp_community, callback_url):
+    progress_url = callback_url.replace('/results', '/progress') if callback_url else None
+
     try:
         live_hosts = ping_sweep.sweep(target_subnet)
         local_arp = arp_table.read_arp_table()
 
+        total = len(live_hosts)
+        jobs[job_id] = {"status": "running", "target_subnet": target_subnet, "progress_current": 0, "progress_total": total}
+        _post_callback(progress_url, {"progress_current": 0, "progress_total": total})
+
         devices = []
-        for ip in live_hosts:
+        for index, ip in enumerate(live_hosts):
             nmap_result = nmap_scan.scan_host(ip)
             snmp_info = snmp_discovery.get_system_info(ip, snmp_community)
             interfaces = snmp_discovery.get_interfaces(ip, snmp_community) if snmp_info else []
@@ -90,6 +96,10 @@ def _run_scan(job_id, target_subnet, snmp_community, callback_url):
                 "neighbors": neighbors,
                 "arp_table": snmp_arp_table,
             })
+
+            processed = index + 1
+            jobs[job_id]["progress_current"] = processed
+            _post_callback(progress_url, {"progress_current": processed, "progress_total": total})
 
         results = {
             "target_subnet": target_subnet,

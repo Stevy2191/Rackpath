@@ -1,7 +1,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(30, 30, 47, 0.5);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -10,7 +10,8 @@
 
 .modal {
   position: relative;
-  background: #fff;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
   border-radius: 6px;
   padding: 1.5rem;
   width: min(900px, 90vw);
@@ -26,7 +27,7 @@
   background: transparent;
   font-size: 1.25rem;
   cursor: pointer;
-  color: #6b6b80;
+  color: var(--color-text-muted);
 }
 
 .modal h2 {
@@ -42,7 +43,7 @@
 
 .port-table th,
 .port-table td {
-  border: 1px solid #e0e0e8;
+  border: 1px solid var(--color-border);
   padding: 0.4rem;
   text-align: left;
 }
@@ -52,13 +53,14 @@
   width: 100%;
   border: 1px solid transparent;
   background: transparent;
+  color: var(--color-text);
   padding: 0.2rem;
 }
 
 .port-table input:focus,
 .port-table select:focus {
-  border-color: #d0d0da;
-  background: #fff;
+  border-color: var(--color-border-strong);
+  background: var(--color-bg-elevated);
 }
 
 .port-form {
@@ -67,8 +69,8 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: #f9f9fb;
-  border: 1px solid #e0e0e8;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
 }
 
@@ -80,15 +82,17 @@
 .port-form input,
 .port-form select {
   padding: 0.4rem;
-  border: 1px solid #d0d0da;
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
 }
 
 .port-form button {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
-  background-color: #1e1e2f;
-  color: #fff;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
 }

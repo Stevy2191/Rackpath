@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
 import './Navbar.css';
 
 const links = [
@@ -12,6 +13,7 @@ const links = [
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <nav className="navbar">
@@ -28,6 +30,14 @@ export default function Navbar() {
         ))}
       </div>
       <div className="navbar-user">
+        <button
+          className="navbar-theme-toggle"
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label="Toggle dark mode"
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
         {user && <span className="navbar-username">{user.username}</span>}
         <button className="navbar-logout" onClick={logout}>
           Logout

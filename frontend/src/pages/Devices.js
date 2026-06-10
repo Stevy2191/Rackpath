@@ -11,6 +11,9 @@ export default function DevicesPage() {
   const [ports, setPorts] = useState([]);
   const [newDevice, setNewDevice] = useState(emptyDevice);
   const [newPort, setNewPort] = useState(emptyPort);
+  const [editDevice, setEditDevice] = useState(emptyDevice);
+  const [savingDevice, setSavingDevice] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
   const [error, setError] = useState(null);
 
   const loadDevices = () => {
@@ -34,6 +37,10 @@ export default function DevicesPage() {
 
   useEffect(() => {
     loadPorts(selectedDeviceId);
+    const device = devices.find((d) => d.id === selectedDeviceId);
+    setEditDevice(device ? { ...emptyDevice, ...device } : emptyDevice);
+    setSavedAt(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeviceId]);
 
   const handleCreateDevice = async (e) => {
@@ -54,6 +61,22 @@ export default function DevicesPage() {
       loadDevices();
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleSaveDevice = async (e) => {
+    e.preventDefault();
+    if (!selectedDeviceId) return;
+    setSavingDevice(true);
+    setSavedAt(null);
+    try {
+      const res = await client.put(`/devices/${selectedDeviceId}`, editDevice);
+      setDevices((prev) => prev.map((d) => (d.id === selectedDeviceId ? res.data : d)));
+      setSavedAt(Date.now());
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingDevice(false);
     }
   };
 
@@ -152,7 +175,62 @@ export default function DevicesPage() {
       <section className="port-editor">
         {selectedDevice ? (
           <>
-            <h2>{selectedDevice.hostname || selectedDevice.ip} &mdash; Ports</h2>
+            <div className="device-detail-header">
+              <h2>{selectedDevice.hostname || selectedDevice.ip}</h2>
+            </div>
+
+            <form onSubmit={handleSaveDevice} className="device-edit-form">
+              <label>
+                Hostname
+                <input
+                  value={editDevice.hostname || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, hostname: e.target.value })}
+                />
+              </label>
+              <label>
+                IP Address
+                <input
+                  value={editDevice.ip || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, ip: e.target.value })}
+                />
+              </label>
+              <label>
+                MAC Address
+                <input
+                  value={editDevice.mac || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, mac: e.target.value })}
+                />
+              </label>
+              <label>
+                Type
+                <input
+                  value={editDevice.type || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, type: e.target.value })}
+                />
+              </label>
+              <label>
+                SNMP Community
+                <input
+                  value={editDevice.snmp_community || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, snmp_community: e.target.value })}
+                />
+              </label>
+              <label className="full-width">
+                Notes
+                <textarea
+                  value={editDevice.notes || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, notes: e.target.value })}
+                />
+              </label>
+              <div className="device-edit-actions">
+                <button type="submit" disabled={savingDevice}>
+                  {savingDevice ? 'Saving...' : 'Save Changes'}
+                </button>
+                {savedAt && <span className="device-edit-saved">Saved.</span>}
+              </div>
+            </form>
+
+            <h2>Ports</h2>
             <table className="port-table">
               <thead>
                 <tr>

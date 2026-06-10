@@ -11,7 +11,9 @@ const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://rackpath-api:${proc
 router.get('/', async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      'SELECT id, target_subnet, status, started_at, completed_at, created_at, updated_at FROM scan_jobs ORDER BY id DESC'
+      `SELECT id, target_subnet, status, progress_current, progress_total,
+              started_at, completed_at, created_at, updated_at
+       FROM scan_jobs ORDER BY id DESC`
     );
     res.json(rows);
   } catch (err) {
@@ -69,78 +71,126 @@ router.post('/', async (req, res, next) => {
 });
 
 // POST /api/scans/:id/results - callback used by the scanner service to
-// report completed scan results, which are persisted to the DB.
+// report completed scan results. Discovered devices are stored alongside
+// the job (in `results`) but are NOT written to the devices/ports tables -
+// the user reviews them and chooses which to import via /:id/import.
 router.post('/:id/results', async (req, res, next) => {
+  try {
+    const jobId = req.params.id;
+    const { status, results } = req.body;
+
+    const [jobRows] = await pool.query('SELECT id FROM scan_jobs WHERE id = ?', [jobId]);
+    if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+
+    const finalStatus = status === 'failed' ? 'failed' : 'completed';
+    const total = results && Array.isArray(results.live_hosts) ? results.live_hosts.length : null;
+
+    await pool.query(
+      `UPDATE scan_jobs
+       SET status = ?, completed_at = NOW(), results = ?,
+           progress_total = COALESCE(?, progress_total),
+           progress_current = COALESCE(?, progress_current)
+       WHERE id = ?`,
+      [finalStatus, JSON.stringify(results || req.body), total, total, jobId]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/scans/:id/progress - callback used by the scanner service to
+// report incremental scan progress while a job is running.
+router.post('/:id/progress', async (req, res, next) => {
+  try {
+    const jobId = req.params.id;
+    const { progress_current, progress_total } = req.body;
+
+    const [result] = await pool.query(
+      'UPDATE scan_jobs SET progress_current = ?, progress_total = ? WHERE id = ?',
+      [progress_current ?? null, progress_total ?? null, jobId]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Scan job not found' });
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/scans/:id/import - import a user-selected subset of devices
+// discovered by a scan job into the devices/ports tables.
+router.post('/:id/import', async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     const jobId = req.params.id;
-    const { status, devices, results } = req.body;
+    const { devices } = req.body;
 
-    const [jobRows] = await conn.query('SELECT * FROM scan_jobs WHERE id = ?', [jobId]);
+    const [jobRows] = await conn.query('SELECT id FROM scan_jobs WHERE id = ?', [jobId]);
     if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+
+    if (!Array.isArray(devices) || devices.length === 0) {
+      return res.status(400).json({ error: 'devices must be a non-empty array' });
+    }
 
     await conn.beginTransaction();
 
-    if (Array.isArray(devices)) {
-      for (const device of devices) {
-        const { ip, mac, hostname, type, snmp_community, ports, neighbors } = device;
+    const importedIds = [];
+    for (const device of devices) {
+      const { ip, mac, hostname, type, snmp_community, ports } = device;
 
-        const [existing] = await conn.query(
-          'SELECT id FROM devices WHERE (ip IS NOT NULL AND ip = ?) OR (mac IS NOT NULL AND mac = ?) LIMIT 1',
-          [ip || null, mac || null]
+      const [existing] = await conn.query(
+        'SELECT id FROM devices WHERE (ip IS NOT NULL AND ip = ?) OR (mac IS NOT NULL AND mac = ?) LIMIT 1',
+        [ip || null, mac || null]
+      );
+
+      let deviceId;
+      if (existing.length > 0) {
+        deviceId = existing[0].id;
+        await conn.query(
+          `UPDATE devices SET hostname = COALESCE(?, hostname), ip = COALESCE(?, ip),
+                               mac = COALESCE(?, mac), type = COALESCE(?, type),
+                               snmp_community = COALESCE(?, snmp_community)
+           WHERE id = ?`,
+          [hostname || null, ip || null, mac || null, type || null, snmp_community || null, deviceId]
         );
+      } else {
+        const [insertResult] = await conn.query(
+          `INSERT INTO devices (hostname, ip, mac, type, snmp_community)
+           VALUES (?, ?, ?, ?, ?)`,
+          [hostname || null, ip || null, mac || null, type || null, snmp_community || null]
+        );
+        deviceId = insertResult.insertId;
+      }
 
-        let deviceId;
-        if (existing.length > 0) {
-          deviceId = existing[0].id;
-          await conn.query(
-            `UPDATE devices SET hostname = COALESCE(?, hostname), ip = COALESCE(?, ip),
-                                 mac = COALESCE(?, mac), type = COALESCE(?, type),
-                                 snmp_community = COALESCE(?, snmp_community)
-             WHERE id = ?`,
-            [hostname || null, ip || null, mac || null, type || null, snmp_community || null, deviceId]
+      if (Array.isArray(ports)) {
+        for (const port of ports) {
+          const { port_name, port_number, speed } = port;
+          const [existingPort] = await conn.query(
+            'SELECT id FROM ports WHERE device_id = ? AND port_name = ? LIMIT 1',
+            [deviceId, port_name || null]
           );
-        } else {
-          const [insertResult] = await conn.query(
-            `INSERT INTO devices (hostname, ip, mac, type, snmp_community)
-             VALUES (?, ?, ?, ?, ?)`,
-            [hostname || null, ip || null, mac || null, type || null, snmp_community || null]
-          );
-          deviceId = insertResult.insertId;
-        }
-
-        if (Array.isArray(ports)) {
-          for (const port of ports) {
-            const { port_name, port_number, speed } = port;
-            const [existingPort] = await conn.query(
-              'SELECT id FROM ports WHERE device_id = ? AND port_name = ? LIMIT 1',
-              [deviceId, port_name || null]
+          if (existingPort.length > 0) {
+            await conn.query(
+              'UPDATE ports SET port_number = ?, speed = ? WHERE id = ?',
+              [port_number || null, speed || null, existingPort[0].id]
             );
-            if (existingPort.length > 0) {
-              await conn.query(
-                'UPDATE ports SET port_number = ?, speed = ? WHERE id = ?',
-                [port_number || null, speed || null, existingPort[0].id]
-              );
-            } else {
-              await conn.query(
-                `INSERT INTO ports (device_id, port_name, port_number, speed)
-                 VALUES (?, ?, ?, ?)`,
-                [deviceId, port_name || null, port_number || null, speed || null]
-              );
-            }
+          } else {
+            await conn.query(
+              `INSERT INTO ports (device_id, port_name, port_number, speed)
+               VALUES (?, ?, ?, ?)`,
+              [deviceId, port_name || null, port_number || null, speed || null]
+            );
           }
         }
       }
+
+      importedIds.push(deviceId);
     }
 
-    const finalStatus = status === 'failed' ? 'failed' : 'completed';
-    await conn.query(
-      "UPDATE scan_jobs SET status = ?, completed_at = NOW(), results = ? WHERE id = ?",
-      [finalStatus, JSON.stringify(results || req.body), jobId]
-    );
-
     await conn.commit();
-    res.json({ ok: true });
+    res.json({ ok: true, device_ids: importedIds });
   } catch (err) {
     await conn.rollback();
     next(err);

@@ -60,3 +60,17 @@
   color: #fff;
   border-color: #fff;
 }
+
+.navbar-theme-toggle {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #4a4a68;
+  border-radius: 4px;
+  background-color: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.navbar-theme-toggle:hover {
+  border-color: #fff;
+}

@@ -38,16 +38,17 @@
   width: 100%;
   text-align: left;
   padding: 0.5rem;
-  border: 1px solid #e0e0e8;
-  background: #f9f9fb;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .scan-jobs button.active {
-  background: #383852;
+  background: var(--color-accent-hover);
   color: #fff;
-  border-color: #383852;
+  border-color: var(--color-accent-hover);
 }
 
 .scan-results {
@@ -56,10 +57,93 @@
 }
 
 .scan-json {
-  background: #1e1e2f;
-  color: #d6d6e0;
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
   padding: 1rem;
   border-radius: 4px;
   overflow: auto;
   font-size: 0.8rem;
+}
+
+.scan-progress {
+  margin: 0.75rem 0;
+  max-width: 480px;
+}
+
+.scan-progress-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.scan-progress-fill {
+  height: 100%;
+  background: var(--color-accent-hover);
+  transition: width 0.3s ease;
+}
+
+.scan-progress-label {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.scan-devices {
+  margin-top: 1rem;
+}
+
+.scan-devices-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.scan-devices-actions button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
+  cursor: pointer;
+}
+
+.scan-devices-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.scan-devices-status {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.scan-device-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.scan-device-table th,
+.scan-device-table td {
+  border: 1px solid var(--color-border);
+  padding: 0.4rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.scan-device-table th {
+  background: var(--color-bg-subtle);
+}
+
+details.scan-raw-results {
+  margin-top: 1rem;
+}
+
+details.scan-raw-results summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
 }

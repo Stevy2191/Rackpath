@@ -10,6 +10,7 @@ import LoginPage from './pages/Login';
 import ChangePasswordPage from './pages/ChangePassword';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import RequireAuth from './auth/RequireAuth';
+import { ThemeProvider } from './theme/ThemeContext';
 import './App.css';
 
 function AppShell() {
@@ -78,10 +79,12 @@ function AppShell() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppShell />
-      </AuthProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppShell />
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }

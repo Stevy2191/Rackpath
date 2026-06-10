@@ -8,8 +8,8 @@
   width: 320px;
   flex-shrink: 0;
   padding: 1rem;
-  background-color: #fff;
-  border-right: 1px solid #e0e0e8;
+  background-color: var(--color-bg-elevated);
+  border-right: 1px solid var(--color-border);
   overflow-y: auto;
 }
 
@@ -39,21 +39,22 @@
   align-items: flex-start;
   text-align: left;
   padding: 0.5rem;
-  border: 1px solid #e0e0e8;
-  background: #f9f9fb;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .device-list li.active .device-select {
-  background: #383852;
+  background: var(--color-accent-hover);
   color: #fff;
-  border-color: #383852;
+  border-color: var(--color-accent-hover);
 }
 
 .device-type {
   font-size: 0.75rem;
-  color: #9090a0;
+  color: var(--color-text-faint);
 }
 
 .device-list li.active .device-type {
@@ -63,7 +64,7 @@
 .delete-btn {
   border: none;
   background: transparent;
-  color: #b3261e;
+  color: var(--color-danger);
   cursor: pointer;
   font-size: 0.75rem;
 }
@@ -73,25 +74,94 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: #f9f9fb;
-  border: 1px solid #e0e0e8;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
 }
 
 .device-form input,
 .device-form textarea {
   padding: 0.4rem;
-  border: 1px solid #d0d0da;
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
 }
 
 .device-form button {
   padding: 0.5rem;
   border: none;
   border-radius: 4px;
-  background-color: #1e1e2f;
-  color: #fff;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
+}
+
+.device-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.device-detail-header h2 {
+  margin: 0;
+}
+
+.device-edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  gap: 0.5rem 1rem;
+  padding: 0.75rem;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+}
+
+.device-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.device-edit-form label.full-width {
+  grid-column: 1 / -1;
+}
+
+.device-edit-form input,
+.device-edit-form textarea {
+  padding: 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.device-edit-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.device-edit-actions button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
+  cursor: pointer;
+}
+
+.device-edit-saved {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 
 .port-table {
@@ -102,7 +172,7 @@
 
 .port-table th,
 .port-table td {
-  border: 1px solid #e0e0e8;
+  border: 1px solid var(--color-border);
   padding: 0.4rem;
   text-align: left;
 }
@@ -112,13 +182,14 @@
   width: 100%;
   border: 1px solid transparent;
   background: transparent;
+  color: var(--color-text);
   padding: 0.2rem;
 }
 
 .port-table input:focus,
 .port-table select:focus {
-  border-color: #d0d0da;
-  background: #fff;
+  border-color: var(--color-border-strong);
+  background: var(--color-bg-elevated);
 }
 
 .port-form {
@@ -126,23 +197,25 @@
   align-items: flex-end;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: #f9f9fb;
-  border: 1px solid #e0e0e8;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   max-width: 600px;
 }
 
 .port-form input {
   padding: 0.4rem;
-  border: 1px solid #d0d0da;
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
 }
 
 .port-form button {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
-  background-color: #1e1e2f;
-  color: #fff;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
 }
