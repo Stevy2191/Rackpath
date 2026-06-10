@@ -167,8 +167,11 @@ log "Creating default admin user"
 # Done
 # ---------------------------------------------------------------------------
 
-frontend_port=$(grep -E '^FRONTEND_PORT=' .env | cut -d= -f2)
-host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+# These are best-effort lookups for the summary message below - if either
+# command is unavailable or returns nothing, fall back to defaults rather
+# than letting `set -e`/`pipefail` abort the script before it can print.
+frontend_port=$(grep -E '^FRONTEND_PORT=' .env | cut -d= -f2) || true
+host_ip=$(hostname -I 2>/dev/null | awk '{print $1}') || true
 
 echo ""
 echo "=========================================="
