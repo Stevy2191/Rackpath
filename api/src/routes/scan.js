@@ -4,7 +4,7 @@ const pool = require('../db/pool');
 
 const router = express.Router();
 
-const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:8000';
+const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:5001';
 const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://rackpath-api:${process.env.API_PORT || 3000}`;
 
 // GET /api/scans - list scan jobs

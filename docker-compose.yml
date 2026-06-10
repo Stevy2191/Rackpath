@@ -55,7 +55,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     environment:
-      SCANNER_PORT: ${SCANNER_PORT:-8000}
+      SCANNER_PORT: ${SCANNER_PORT:-5001}
       SNMP_COMMUNITY: ${SNMP_COMMUNITY}
       SCAN_INTERFACE: ${SCAN_INTERFACE}
 

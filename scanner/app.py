@@ -116,5 +116,5 @@ def _post_callback(callback_url, payload):
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('SCANNER_PORT', 8000))
+    port = int(os.environ.get('SCANNER_PORT', 5001))
     app.run(host='0.0.0.0', port=port)

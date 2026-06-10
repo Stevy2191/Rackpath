@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV SCANNER_PORT=8000
-EXPOSE 8000
+ENV SCANNER_PORT=5001
+EXPOSE 5001
 
 CMD ["python", "app.py"]
