@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import './Navbar.css';
 
 const links = [
@@ -10,6 +11,8 @@ const links = [
 ];
 
 export default function Navbar() {
+  const { user, logout } = useAuth();
+
   return (
     <nav className="navbar">
       <div className="navbar-brand">Rackpath</div>
@@ -23,6 +26,12 @@ export default function Navbar() {
             {link.label}
           </NavLink>
         ))}
+      </div>
+      <div className="navbar-user">
+        {user && <span className="navbar-username">{user.username}</span>}
+        <button className="navbar-logout" onClick={logout}>
+          Logout
+        </button>
       </div>
     </nav>
   );

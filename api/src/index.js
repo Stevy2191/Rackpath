@@ -4,12 +4,14 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 
+const authRouter = require('./routes/auth');
 const devicesRouter = require('./routes/devices');
 const portsRouter = require('./routes/ports');
 const racksRouter = require('./routes/racks');
 const rackSlotsRouter = require('./routes/rackSlots');
 const topologyRouter = require('./routes/topology');
 const scanRouter = require('./routes/scan');
+const { requireAuth } = require('./auth/middleware');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -22,6 +24,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.use(requireAuth);
+
+app.use('/api/auth', authRouter);
 app.use('/api/devices', devicesRouter);
 app.use('/api/ports', portsRouter);
 app.use('/api/racks', racksRouter);

@@ -34,3 +34,29 @@
   color: #fff;
   background-color: #383852;
 }
+
+.navbar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.navbar-username {
+  color: #c9c9d8;
+  font-size: 0.9rem;
+}
+
+.navbar-logout {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #4a4a68;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #c9c9d8;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.navbar-logout:hover {
+  color: #fff;
+  border-color: #fff;
+}

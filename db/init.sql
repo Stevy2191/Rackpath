@@ -8,6 +8,19 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ---------------------------------------------------------------------------
+-- users
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+    id                      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username                VARCHAR(64)         NOT NULL,
+    password_hash           VARCHAR(255)        NOT NULL,
+    must_change_password    TINYINT(1)          NOT NULL DEFAULT 1,
+    created_at              TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_users_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------------
 -- devices
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS devices (
