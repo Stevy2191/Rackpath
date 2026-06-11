@@ -171,11 +171,8 @@ fi
 # Done
 # ---------------------------------------------------------------------------
 
-# These are best-effort lookups for the summary message below - if either
-# command is unavailable or returns nothing, fall back to defaults rather
-# than aborting before the success message can print.
-frontend_port=$(grep -E '^FRONTEND_PORT=' .env | cut -d= -f2) || true
-host_ip=$(hostname -I 2>/dev/null | awk '{print $1}') || true
+frontend_port=8080
+host_ip=$(hostname -I 2>/dev/null | awk '{print $1}') || host_ip="localhost"
 
 echo "==> Deployment complete"
 echo ""
