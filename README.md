@@ -166,7 +166,8 @@ Slitheris-style enhanced discovery runs in parallel per host:
 
 - Multi-method liveness: ICMP ping, TCP probe (80/443/22), and a UDP probe — a
   host is marked **up** if any method responds
-- Nmap SYN scan (`-sS`) with OS detection and the top 100 ports (`-F`)
+- Nmap SYN scan (`-sS`) with OS detection and a configurable port set
+  (top 1000 by default)
 - NetBIOS/SMB query (`nmblookup`, impacket fallback) for the Windows machine
   name and workgroup/domain
 - mDNS/Bonjour browse (zeroconf) for `.local` hostnames and Apple/printer/IoT
@@ -183,8 +184,8 @@ IPs (one per line or comma separated), and an expandable **Scan Options** panel
 offers profiles that toggle which steps run:
 
 - **Quick** — ping sweep only (fast, no port scan)
-- **Standard** (default) — ping + top 100 ports + OS detection + NetBIOS + SNMP
-- **Deep** — ping + all ports + OS + service-version detection + NetBIOS + SNMP + mDNS
+- **Standard** (default) — ping + top 1000 ports + OS detection + NetBIOS + SNMP
+- **Deep** — ping + all 65535 ports + OS + service-version detection + NetBIOS + SNMP + mDNS
 - **Port Scan Only** — port scan up hosts, skip the other discovery steps
 - **Custom** — individually toggle ICMP/TCP ping, port scan (with a port-range
   field), OS detection, service-version detection, SNMP walk (with a community

@@ -14,23 +14,25 @@ def _sanitize_port_range(port_range):
     return cleaned.strip(',')
 
 
-def build_arguments(port_scan=True, port_range='top100', os_detection=True,
+def build_arguments(port_scan=True, port_range='top1000', os_detection=True,
                     service_detection=False):
     """Assemble the nmap argument string for the requested scan options."""
     args = ['-sS', '-T4']
 
     if port_scan:
-        if port_range == 'top100':
+        if port_range == 'top1000':
+            args.append('--top-ports 1000')
+        elif port_range == 'top100':
             args.append('-F')
         elif port_range == 'all':
-            args.append('-p-')
+            args.append('-p 1-65535')
         else:
             cleaned = _sanitize_port_range(port_range)
-            args.append(f'-p {cleaned}' if cleaned else '-F')
+            args.append(f'-p {cleaned}' if cleaned else '--top-ports 1000')
     elif os_detection or service_detection:
         # OS / version detection needs some open|closed ports to work against,
-        # so fall back to the fast top-100 set even when no port scan was asked.
-        args.append('-F')
+        # so fall back to the top-1000 set even when no port scan was asked.
+        args.append('--top-ports 1000')
 
     if os_detection:
         args.extend(['-O', '--osscan-guess'])
@@ -40,7 +42,7 @@ def build_arguments(port_scan=True, port_range='top100', os_detection=True,
     return ' '.join(args)
 
 
-def scan_host(ip, arguments=None, port_scan=True, port_range='top100',
+def scan_host(ip, arguments=None, port_scan=True, port_range='top1000',
               os_detection=True, service_detection=False):
     """Run an nmap scan against `ip` using the given options.
 

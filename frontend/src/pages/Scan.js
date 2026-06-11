@@ -21,7 +21,7 @@ const COLUMNS = [
 
 const ACTIVE_STATUSES = ['pending', 'running'];
 
-const DEFAULT_PORT_RANGE = '1-1024';
+const DEFAULT_PORT_RANGE = '1-1000';
 
 // Scan profile presets. Each resolves to the concrete flags the scanner reads.
 // port_range may be 'top100', 'all', or an explicit range string.
@@ -32,7 +32,7 @@ const PROFILE_PRESETS = {
     netbios: false, mdns: false, mac_vendor: true,
   },
   standard: {
-    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'top100',
+    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'top1000',
     os_detection: true, service_detection: false, snmp: true,
     netbios: true, mdns: false, mac_vendor: true,
   },
@@ -42,7 +42,7 @@ const PROFILE_PRESETS = {
     netbios: true, mdns: true, mac_vendor: true,
   },
   ports: {
-    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'top100',
+    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'top1000',
     os_detection: false, service_detection: false, snmp: false,
     netbios: false, mdns: false, mac_vendor: true,
   },
@@ -50,9 +50,9 @@ const PROFILE_PRESETS = {
 
 const PROFILE_LABELS = [
   { value: 'quick', label: 'Quick Scan — ping sweep only' },
-  { value: 'standard', label: 'Standard Scan — ping + top 100 ports + OS + NetBIOS + SNMP' },
-  { value: 'deep', label: 'Deep Scan — all ports + OS + version + NetBIOS + SNMP + mDNS' },
-  { value: 'ports', label: 'Port Scan Only — ports on up hosts, skip discovery' },
+  { value: 'standard', label: 'Standard Scan — ping + top 1000 ports + OS + NetBIOS + SNMP' },
+  { value: 'deep', label: 'Deep Scan — all 65535 ports + OS + version + NetBIOS + SNMP + mDNS' },
+  { value: 'ports', label: 'Port Scan Only — top 1000 ports on up hosts, skip discovery' },
   { value: 'custom', label: 'Custom — choose individual options' },
 ];
 

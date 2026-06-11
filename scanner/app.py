@@ -61,7 +61,7 @@ def _resolve_options(options):
         'tcp_ping': flag('tcp_ping', True),
         'udp_ping': flag('udp_ping', False),
         'port_scan': flag('port_scan', True),
-        'port_range': o.get('port_range') or 'top100',
+        'port_range': o.get('port_range') or 'top1000',
         'os_detection': flag('os_detection', True),
         'service_detection': flag('service_detection', False),
         'snmp': flag('snmp', True),
