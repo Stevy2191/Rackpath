@@ -54,6 +54,19 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// DELETE /api/topology/all - clear the canvas (all placed nodes, edges, and zones)
+router.delete('/all', async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM topology_edges');
+    await pool.query('DELETE FROM topology_zones');
+    await pool.query('DELETE FROM topology_layout');
+    res.status(204).send();
+  } catch (err) {
+    if (isTableMissing(err)) return res.status(204).send();
+    next(err);
+  }
+});
+
 // PATCH /api/topology/layout - bulk upsert canvas positions
 router.patch('/layout', async (req, res, next) => {
   try {

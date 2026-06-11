@@ -8,11 +8,15 @@ import ReactFlow, {
   BackgroundVariant,
   ConnectionMode,
   Controls,
+  getNodesBounds,
+  getViewportForBounds,
   ReactFlowProvider,
   useReactFlow,
   useUpdateNodeInternals,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { toPng, toSvg } from 'html-to-image';
+import jsPDF from 'jspdf';
 import client from '../api/client';
 import DeviceNode from '../components/DeviceNode';
 import ZoneNode from '../components/topology/ZoneNode';
@@ -120,6 +124,9 @@ function TopologyCanvas() {
   const [editingEdge, setEditingEdge] = useState(null);
   const [pendingManualDrop, setPendingManualDrop] = useState(null);
   const [showZoneModal, setShowZoneModal] = useState(false);
+  const [showSavedToast, setShowSavedToast] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const handleDeviceResizeEnd = useCallback(
     (nodeId, params) => {
@@ -399,7 +406,10 @@ function TopologyCanvas() {
     [navigate]
   );
 
-  const onPaneClick = useCallback(() => setSelectedNode(null), []);
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null);
+    setShowExportMenu(false);
+  }, []);
 
   const handleRemoveSelected = useCallback(() => {
     if (!selectedNode) return;
@@ -428,6 +438,124 @@ function TopologyCanvas() {
   const handleFitView = useCallback(() => {
     reactFlowInstance.fitView({ padding: 0.2 });
   }, [reactFlowInstance]);
+
+  const handleClearCanvas = useCallback(async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to clear the canvas? This will delete all nodes, edges, and zones. This cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    try {
+      await client.delete('/topology/all');
+      setUnplacedDevices((devs) => [
+        ...devs,
+        ...nodes
+          .filter((n) => n.type === 'device')
+          .map((n) => {
+            const { onResizeEnd, ...deviceData } = n.data;
+            return deviceData;
+          }),
+      ]);
+      setNodes([]);
+      setEdges([]);
+      setSelectedNode(null);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [nodes]);
+
+  const handleSaveAll = useCallback(async () => {
+    try {
+      const deviceNodes = nodes.filter((n) => n.type === 'device');
+      const zoneNodes = nodes.filter((n) => n.type === 'zone');
+
+      if (deviceNodes.length > 0) {
+        await client.patch('/topology/layout', {
+          positions: deviceNodes.map((n) => ({
+            device_id: deviceIdFromNodeId(n.id),
+            x: n.position.x,
+            y: n.position.y,
+            width: n.style?.width,
+            height: n.style?.height,
+          })),
+        });
+      }
+
+      await Promise.all(
+        zoneNodes.map((n) =>
+          client.patch(`/topology/zones/${zoneIdFromNodeId(n.id)}`, {
+            x: n.position.x,
+            y: n.position.y,
+            width: n.style?.width,
+            height: n.style?.height,
+          })
+        )
+      );
+
+      setShowSavedToast(true);
+      setTimeout(() => setShowSavedToast(false), 2000);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [nodes]);
+
+  const handleExport = useCallback(
+    async (format) => {
+      setShowExportMenu(false);
+      if (!reactFlowWrapper.current) return;
+
+      const viewportEl = reactFlowWrapper.current.querySelector('.react-flow__viewport');
+      if (!viewportEl) return;
+
+      setExporting(true);
+      try {
+        const bounds = getNodesBounds(reactFlowInstance.getNodes());
+        const paddingRatio = 0.1;
+        const imageWidth = Math.max(Math.ceil(bounds.width * (1 + paddingRatio * 2)), 800);
+        const imageHeight = Math.max(Math.ceil(bounds.height * (1 + paddingRatio * 2)), 600);
+        const { x, y, zoom } = getViewportForBounds(bounds, imageWidth, imageHeight, 0.5, 2, paddingRatio);
+
+        const captureOptions = {
+          backgroundColor:
+            getComputedStyle(document.documentElement).getPropertyValue('--color-bg').trim() || '#ffffff',
+          width: imageWidth,
+          height: imageHeight,
+          style: {
+            width: `${imageWidth}px`,
+            height: `${imageHeight}px`,
+            transform: `translate(${x}px, ${y}px) scale(${zoom})`,
+          },
+        };
+
+        const downloadDataUrl = (dataUrl, filename) => {
+          const link = document.createElement('a');
+          link.download = filename;
+          link.href = dataUrl;
+          link.click();
+        };
+
+        if (format === 'svg') {
+          const dataUrl = await toSvg(viewportEl, captureOptions);
+          downloadDataUrl(dataUrl, 'rackpath-topology.svg');
+        } else {
+          const dataUrl = await toPng(viewportEl, captureOptions);
+          if (format === 'pdf') {
+            const orientation = imageWidth >= imageHeight ? 'landscape' : 'portrait';
+            const pdf = new jsPDF({ orientation, unit: 'px', format: [imageWidth, imageHeight] });
+            pdf.addImage(dataUrl, 'PNG', 0, 0, imageWidth, imageHeight);
+            pdf.save('rackpath-topology.pdf');
+          } else {
+            downloadDataUrl(dataUrl, 'rackpath-topology.png');
+          }
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setExporting(false);
+      }
+    },
+    [reactFlowInstance]
+  );
 
   const handleAddZone = useCallback(
     async ({ name, border_style, color }) => {
@@ -541,6 +669,30 @@ function TopologyCanvas() {
         <button type="button" onClick={handleFitView}>
           Fit View
         </button>
+        <button type="button" onClick={handleSaveAll}>
+          Save
+        </button>
+        <div className="topology-export">
+          <button type="button" onClick={() => setShowExportMenu((prev) => !prev)} disabled={exporting}>
+            {exporting ? 'Exporting...' : 'Export ▾'}
+          </button>
+          {showExportMenu && (
+            <div className="topology-export-menu">
+              <button type="button" onClick={() => handleExport('png')}>
+                Export as PNG
+              </button>
+              <button type="button" onClick={() => handleExport('svg')}>
+                Export as SVG
+              </button>
+              <button type="button" onClick={() => handleExport('pdf')}>
+                Export as PDF
+              </button>
+            </div>
+          )}
+        </div>
+        <button type="button" className="topology-danger-button" onClick={handleClearCanvas}>
+          Clear Canvas
+        </button>
         <label className="topology-toggle">
           <input type="checkbox" checked={showEdgeLabels} onChange={toggleEdgeLabels} />
           Show edge labels
@@ -575,6 +727,8 @@ function TopologyCanvas() {
           </ReactFlow>
 
           <QuickInfoPanel node={selectedNode} onClose={() => setSelectedNode(null)} onRemove={handleRemoveSelected} />
+
+          {showSavedToast && <div className="topology-toast">Saved!</div>}
         </div>
       </div>
 
