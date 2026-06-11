@@ -151,15 +151,25 @@ router.get('/edges', async (req, res, next) => {
 // POST /api/topology/edges
 router.post('/edges', async (req, res, next) => {
   try {
-    const { source_device_id, target_device_id, label, speed, cable_type, vlan } = req.body;
+    const { source_device_id, target_device_id, source_handle, target_handle, label, speed, cable_type, vlan } =
+      req.body;
     if (!source_device_id || !target_device_id) {
       return res.status(400).json({ error: 'source_device_id and target_device_id are required' });
     }
 
     const [result] = await pool.query(
-      `INSERT INTO topology_edges (source_device_id, target_device_id, label, speed, cable_type, vlan)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [source_device_id, target_device_id, label || null, speed || null, cable_type || null, vlan || null]
+      `INSERT INTO topology_edges (source_device_id, target_device_id, source_handle, target_handle, label, speed, cable_type, vlan)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        source_device_id,
+        target_device_id,
+        source_handle || null,
+        target_handle || null,
+        label || null,
+        speed || null,
+        cable_type || null,
+        vlan || null,
+      ]
     );
 
     const [rows] = await pool.query('SELECT * FROM topology_edges WHERE id = ?', [result.insertId]);
@@ -172,7 +182,16 @@ router.post('/edges', async (req, res, next) => {
 // PATCH /api/topology/edges/:id - update connection metadata or reconnect endpoints
 router.patch('/edges/:id', async (req, res, next) => {
   try {
-    const allowedFields = ['source_device_id', 'target_device_id', 'label', 'speed', 'cable_type', 'vlan'];
+    const allowedFields = [
+      'source_device_id',
+      'target_device_id',
+      'source_handle',
+      'target_handle',
+      'label',
+      'speed',
+      'cable_type',
+      'vlan',
+    ];
     const updates = [];
     const values = [];
 

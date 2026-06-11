@@ -8,6 +8,8 @@ const STATEMENTS = [
       id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
       source_device_id    INT UNSIGNED        NOT NULL,
       target_device_id    INT UNSIGNED        NOT NULL,
+      source_handle       VARCHAR(16)         NULL,
+      target_handle       VARCHAR(16)         NULL,
       label               VARCHAR(128)        NULL,
       speed               VARCHAR(32)         NULL,
       cable_type          VARCHAR(64)         NULL,
@@ -42,6 +44,9 @@ const STATEMENTS = [
 
   `ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS width DOUBLE NOT NULL DEFAULT 120 AFTER y`,
   `ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS height DOUBLE NOT NULL DEFAULT 80 AFTER width`,
+
+  `ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS source_handle VARCHAR(16) NULL AFTER target_device_id`,
+  `ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS target_handle VARCHAR(16) NULL AFTER source_handle`,
 ];
 
 async function migrate() {

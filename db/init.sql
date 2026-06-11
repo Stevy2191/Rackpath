@@ -145,6 +145,8 @@ CREATE TABLE IF NOT EXISTS topology_edges (
     id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     source_device_id    INT UNSIGNED        NOT NULL,
     target_device_id    INT UNSIGNED        NOT NULL,
+    source_handle       VARCHAR(16)         NULL,
+    target_handle       VARCHAR(16)         NULL,
     label               VARCHAR(128)        NULL,
     speed               VARCHAR(32)         NULL,
     cable_type          VARCHAR(64)         NULL,
@@ -157,6 +159,13 @@ CREATE TABLE IF NOT EXISTS topology_edges (
     KEY idx_topology_edges_source (source_device_id),
     KEY idx_topology_edges_target (target_device_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Upgrade path for existing deployments: add handle-tracking columns to a
+-- topology_edges table created before they existed, so new connections can
+-- attach to a specific node handle instead of always defaulting to the
+-- first one.
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS source_handle VARCHAR(16) NULL AFTER target_device_id;
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS target_handle VARCHAR(16) NULL AFTER source_handle;
 
 -- ---------------------------------------------------------------------------
 -- topology_zones

@@ -10,6 +10,7 @@ import ReactFlow, {
   Controls,
   ReactFlowProvider,
   useReactFlow,
+  useUpdateNodeInternals,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import client from '../api/client';
@@ -82,6 +83,8 @@ function buildEdge(edge, showLabels, callbacks) {
     id: `edge-${edge.id}`,
     source: `device-${edge.source_device_id}`,
     target: `device-${edge.target_device_id}`,
+    sourceHandle: edge.source_handle || null,
+    targetHandle: edge.target_handle || null,
     type: 'connection',
     label: showLabels ? edgeLabelText(edge) : undefined,
     data: {
@@ -103,6 +106,7 @@ function zoneIdFromNodeId(nodeId) {
 function TopologyCanvas() {
   const navigate = useNavigate();
   const reactFlowInstance = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const reactFlowWrapper = useRef(null);
 
   const [nodes, setNodes] = useState([]);
@@ -117,27 +121,34 @@ function TopologyCanvas() {
   const [pendingManualDrop, setPendingManualDrop] = useState(null);
   const [showZoneModal, setShowZoneModal] = useState(false);
 
-  const handleDeviceResizeEnd = useCallback((nodeId, params) => {
-    const deviceId = deviceIdFromNodeId(nodeId);
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === nodeId
-          ? {
-              ...n,
-              position: { x: params.x, y: params.y },
-              style: { ...n.style, width: params.width, height: params.height },
-            }
-          : n
-      )
-    );
-    client
-      .patch('/topology/layout', {
-        positions: [
-          { device_id: deviceId, x: params.x, y: params.y, width: params.width, height: params.height },
-        ],
-      })
-      .catch((err) => setError(err.message));
-  }, []);
+  const handleDeviceResizeEnd = useCallback(
+    (nodeId, params) => {
+      const deviceId = deviceIdFromNodeId(nodeId);
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                position: { x: params.x, y: params.y },
+                style: { ...n.style, width: params.width, height: params.height },
+              }
+            : n
+        )
+      );
+      // Resizing moves the node's handles, so React Flow's cached handle
+      // bounds need to be recalculated or edges will keep rendering at the
+      // pre-resize positions.
+      updateNodeInternals(nodeId);
+      client
+        .patch('/topology/layout', {
+          positions: [
+            { device_id: deviceId, x: params.x, y: params.y, width: params.width, height: params.height },
+          ],
+        })
+        .catch((err) => setError(err.message));
+    },
+    [updateNodeInternals]
+  );
 
   const handleEdgeEdit = useCallback(
     (edgeId) => {
@@ -247,20 +258,40 @@ function TopologyCanvas() {
     [nodes]
   );
 
-  const onEdgesChange = useCallback((changes) => {
-    changes.forEach((change) => {
-      if (change.type === 'remove') {
-        const edgeId = Number(change.id.replace('edge-', ''));
-        client.delete(`/topology/edges/${edgeId}`).catch((err) => setError(err.message));
-      }
-    });
+  const onEdgesChange = useCallback(
+    (changes) => {
+      changes.forEach((change) => {
+        if (change.type === 'remove') {
+          const edgeId = Number(change.id.replace('edge-', ''));
+          client.delete(`/topology/edges/${edgeId}`).catch((err) => setError(err.message));
 
-    setEdges((eds) => applyEdgeChanges(changes, eds));
-  }, []);
+          // Reset the cached handle bounds on both endpoints so a fresh
+          // connection started from the same handle isn't influenced by the
+          // deleted edge's stale state.
+          const removed = reactFlowInstance.getEdge(change.id);
+          if (removed) {
+            updateNodeInternals(removed.source);
+            updateNodeInternals(removed.target);
+          }
+        }
+      });
+
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    [reactFlowInstance, updateNodeInternals]
+  );
 
   const onConnect = useCallback((params) => {
     if (!params.source || !params.target || params.source === params.target) return;
-    setPendingConnection(params);
+    // Build a fresh object from the connection params rather than holding on
+    // to React Flow's internal params reference, so a new connection never
+    // reuses a stale handle from a previously deleted edge.
+    setPendingConnection({
+      source: params.source,
+      sourceHandle: params.sourceHandle ?? null,
+      target: params.target,
+      targetHandle: params.targetHandle ?? null,
+    });
   }, []);
 
   const handleConnectionSubmit = useCallback(
@@ -270,6 +301,8 @@ function TopologyCanvas() {
         const res = await client.post('/topology/edges', {
           source_device_id: deviceIdFromNodeId(pendingConnection.source),
           target_device_id: deviceIdFromNodeId(pendingConnection.target),
+          source_handle: pendingConnection.sourceHandle,
+          target_handle: pendingConnection.targetHandle,
           ...formValues,
         });
         setEdges((eds) =>
@@ -316,6 +349,8 @@ function TopologyCanvas() {
         .patch(`/topology/edges/${edgeDbId}`, {
           source_device_id: deviceIdFromNodeId(newConnection.source),
           target_device_id: deviceIdFromNodeId(newConnection.target),
+          source_handle: newConnection.sourceHandle ?? null,
+          target_handle: newConnection.targetHandle ?? null,
         })
         .then((res) => {
           setEdges((eds) =>

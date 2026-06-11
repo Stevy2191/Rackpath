@@ -20,8 +20,8 @@ function DeviceNode({ id, data, selected }) {
       <NodeResizer
         color={info.color}
         isVisible={selected}
-        minWidth={80}
-        minHeight={60}
+        minWidth={40}
+        minHeight={40}
         onResizeEnd={(_event, params) => data.onResizeEnd?.(id, params)}
       />
       {HANDLES.map((handle) => (
