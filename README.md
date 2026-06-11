@@ -6,7 +6,7 @@ Self-hosted network topology and rack management web app.
 
 - **Frontend**: React + React Flow (topology diagram) + custom rack builder UI, served via nginx
 - **API**: Node.js + Express + MariaDB (`mysql2` driver), JWT-based authentication
-- **Scanner**: Python service using `nmap`, `puresnmp`, and `scapy` for network discovery (LLDP/CDP via SNMP OIDs)
+- **Scanner**: Python service using `nmap`, `puresnmp`, `scapy`, `zeroconf` (mDNS), `manuf` (MAC OUI), and `impacket` (NetBIOS) for enhanced network discovery, streaming per-host results back to the API
 - **Database**: MariaDB
 
 ## Project layout
@@ -153,21 +153,40 @@ changing it invalidates all existing sessions.
 - `/topology` — React Flow canvas of discovered devices and links
 - `/racks` — Rack builder: create racks and place devices into U slots
 - `/devices` — Device list with an editable detail form and per-port editor (cabling/connections)
-- `/scan` — Trigger discovery scans, watch live progress, and review/import discovered devices
+- `/scan` — Default landing page. Configure and start subnet scans, watch
+  results stream in live, sort/export them, and select hosts to import into
+  inventory; a sidebar lists past scans by name and date
 
 A light/dark theme toggle is available in the navbar; the choice is remembered
 per-browser.
 
 ## Scanner capabilities
 
-- Ping sweep over a CIDR subnet
-- Nmap SYN scan (`-sS`) with OS detection
-- SNMP v2c walk for interfaces, ARP table, and system info
-- LLDP/CDP neighbor discovery via SNMP OIDs
-- ARP table read (IP → MAC mapping)
+Slitheris-style enhanced discovery runs in parallel per host:
 
-While a scan runs, the scanner reports per-host progress back to the API so
-the `/scan` page can show a live progress bar.
+- Multi-method liveness: ICMP ping, TCP probe (80/443/22), and a UDP probe — a
+  host is marked **up** if any method responds
+- Nmap SYN scan (`-sS`) with OS detection and the top 100 ports (`-F`)
+- NetBIOS/SMB query (`nmblookup`, impacket fallback) for the Windows machine
+  name and workgroup/domain
+- mDNS/Bonjour browse (zeroconf) for `.local` hostnames and Apple/printer/IoT
+  service advertisements
+- SNMP v2c walk for `sysName`/`sysDescr`/`sysContact`/`sysLocation`, the
+  interface table, and ARP table
+- LLDP/CDP neighbor discovery via SNMP OIDs
+- MAC OUI → vendor lookup via the bundled Wireshark database (`manuf`)
+- Device-type inference (Router, Switch, Firewall, Server, Windows PC, Mac,
+  Linux, Printer, AP, IP Camera, IoT, NAS, Unknown) from the combined signals
+
+As each host is fully enriched the scanner POSTs it to the API immediately, and
+the API streams it to the browser over **Server-Sent Events**
+(`GET /api/scans/:id/stream`) so the results table populates row by row in real
+time. A progress bar tracks hosts scanned vs. total hosts in the subnet, and
+live counters show found / up / down.
+
+Past scans are listed by name and date (`GET /api/scans`); selecting one
+reloads its stored results (`GET /api/scans/:id/results`). Results can be
+exported to PDF or CSV from the `/scan` page.
 
 Results are returned as structured JSON and stored on the scan job, but
 devices found during a scan are **not** added to your inventory

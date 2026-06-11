@@ -5,10 +5,10 @@ import { useTheme } from '../theme/ThemeContext';
 import './Navbar.css';
 
 const links = [
+  { to: '/scan', label: 'Scan' },
   { to: '/topology', label: 'Topology' },
   { to: '/racks', label: 'Racks' },
   { to: '/devices', label: 'Devices' },
-  { to: '/scan', label: 'Scan' },
 ];
 
 export default function Navbar() {

@@ -34,7 +34,7 @@ function AppShell() {
               </RequireAuth>
             }
           />
-          <Route path="/" element={<Navigate to="/topology" replace />} />
+          <Route path="/" element={<Navigate to="/scan" replace />} />
           <Route
             path="/topology"
             element={

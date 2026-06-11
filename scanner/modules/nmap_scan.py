@@ -3,8 +3,8 @@
 import nmap
 
 
-def scan_host(ip, arguments='-sS -O --osscan-guess -T4'):
-    """Run an nmap SYN scan with OS detection against `ip`.
+def scan_host(ip, arguments='-sS -O --osscan-guess -F -T4'):
+    """Run an nmap SYN scan with OS detection and the top 100 ports (-F) against `ip`.
 
     Requires the container to run with NET_RAW/NET_ADMIN capabilities
     (or as root) for -sS / -O to work.

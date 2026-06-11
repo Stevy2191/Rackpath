@@ -119,6 +119,7 @@ ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS height DOUBLE NOT NULL DEFA
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS scan_jobs (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name            VARCHAR(255)        NULL,
     target_subnet   VARCHAR(64)         NOT NULL,
     status          ENUM('pending', 'running', 'completed', 'failed')
                         NOT NULL DEFAULT 'pending',
@@ -132,11 +133,37 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
     KEY idx_scan_jobs_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ---------------------------------------------------------------------------
+-- scan_results - one row per host discovered during a scan. Populated
+-- incrementally by the scanner as each host is fully enriched, which lets the
+-- API stream rows to the frontend over SSE and reload them for past scans.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scan_results (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    scan_job_id     INT UNSIGNED        NOT NULL,
+    status          ENUM('up', 'down')  NOT NULL DEFAULT 'up',
+    ip              VARCHAR(45)         NULL,
+    hostname        VARCHAR(255)        NULL,
+    mac             VARCHAR(17)         NULL,
+    mac_vendor      VARCHAR(255)        NULL,
+    device_type     VARCHAR(64)         NULL,
+    os              VARCHAR(255)        NULL,
+    open_ports      JSON                NULL,
+    netbios_name    VARCHAR(255)        NULL,
+    last_seen       TIMESTAMP           NULL,
+    raw             JSON                NULL,
+    created_at      TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_scan_results_job
+        FOREIGN KEY (scan_job_id) REFERENCES scan_jobs(id) ON DELETE CASCADE,
+    KEY idx_scan_results_job (scan_job_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Upgrade path for existing deployments: db/init.sql is safe to re-run, and
 -- these add the progress columns to a scan_jobs table created before they
 -- existed (no-op if the table was just created above with them already).
 ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS progress_current INT UNSIGNED NULL AFTER status;
 ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS progress_total INT UNSIGNED NULL AFTER progress_current;
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS name VARCHAR(255) NULL AFTER id;
 
 -- ---------------------------------------------------------------------------
 -- topology_edges

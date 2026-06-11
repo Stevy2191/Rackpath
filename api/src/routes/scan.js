@@ -1,19 +1,42 @@
 const express = require('express');
 const axios = require('axios');
 const pool = require('../db/pool');
+const sse = require('../sse/hub');
 
 const router = express.Router();
 
 const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:5001';
 const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://rackpath-api:${process.env.API_PORT || 3000}`;
 
-// GET /api/scans - list scan jobs
+// Map a stored scan_results row to the shape the frontend table consumes.
+function mapResultRow(row) {
+  return {
+    id: row.id,
+    status: row.status,
+    ip: row.ip,
+    hostname: row.hostname,
+    mac: row.mac,
+    mac_vendor: row.mac_vendor,
+    device_type: row.device_type,
+    os: row.os,
+    open_ports: row.open_ports || [],
+    netbios_name: row.netbios_name,
+    last_seen: row.last_seen,
+    raw: row.raw || null,
+  };
+}
+
+// GET /api/scans - list scan jobs with discovered host counts
 router.get('/', async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT id, target_subnet, status, progress_current, progress_total,
-              started_at, completed_at, created_at, updated_at
-       FROM scan_jobs ORDER BY id DESC`
+      `SELECT j.id, j.name, j.target_subnet, j.status, j.progress_current, j.progress_total,
+              j.started_at, j.completed_at, j.created_at, j.updated_at,
+              COUNT(r.id) AS host_count
+       FROM scan_jobs j
+       LEFT JOIN scan_results r ON r.scan_job_id = j.id
+       GROUP BY j.id
+       ORDER BY j.id DESC`
     );
     res.json(rows);
   } catch (err) {
@@ -21,7 +44,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /api/scans/:id - job status + results
+// GET /api/scans/:id - job status (without per-host rows)
 router.get('/:id', async (req, res, next) => {
   try {
     const [rows] = await pool.query('SELECT * FROM scan_jobs WHERE id = ?', [req.params.id]);
@@ -32,27 +55,103 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
+// GET /api/scans/:id/results - all discovered host rows for a scan
+router.get('/:id/results', async (req, res, next) => {
+  try {
+    const [jobRows] = await pool.query('SELECT id FROM scan_jobs WHERE id = ?', [req.params.id]);
+    if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+
+    const [rows] = await pool.query(
+      'SELECT * FROM scan_results WHERE scan_job_id = ? ORDER BY id ASC',
+      [req.params.id]
+    );
+    res.json(rows.map(mapResultRow));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/scans/:id/stream - Server-Sent Events stream of host results and
+// progress for a scan. Authenticated via ?token= (see auth middleware).
+router.get('/:id/stream', async (req, res, next) => {
+  try {
+    const jobId = req.params.id;
+    const [jobRows] = await pool.query('SELECT * FROM scan_jobs WHERE id = ?', [jobId]);
+    if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+
+    sse.subscribe(jobId, res);
+
+    // Replay any rows already discovered so a client connecting mid-scan (or
+    // after completion) immediately sees the full table.
+    const [existing] = await pool.query(
+      'SELECT * FROM scan_results WHERE scan_job_id = ? ORDER BY id ASC',
+      [jobId]
+    );
+    const job = jobRows[0];
+    res.write(
+      `event: init\ndata: ${JSON.stringify({
+        progress_current: job.progress_current,
+        progress_total: job.progress_total,
+        status: job.status,
+        hosts: existing.map(mapResultRow),
+      })}\n\n`
+    );
+
+    // If the scan already finished, tell the client right away.
+    if (job.status === 'completed' || job.status === 'failed') {
+      res.write(`event: scan_complete\ndata: ${JSON.stringify({ status: job.status })}\n\n`);
+    }
+
+    // Heartbeat to keep proxies from closing the idle connection.
+    const heartbeat = setInterval(() => {
+      res.write(': ping\n\n');
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      sse.unsubscribe(jobId, res);
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/scans - start a new scan job for a subnet
 router.post('/', async (req, res, next) => {
   try {
-    const { target_subnet, snmp_community } = req.body;
+    const { target_subnet, name, snmp_community } = req.body;
     if (!target_subnet) return res.status(400).json({ error: 'target_subnet is required' });
 
+    const scanName =
+      (name && name.trim()) ||
+      `${target_subnet} - ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`;
+
     const [result] = await pool.query(
-      `INSERT INTO scan_jobs (target_subnet, status, started_at)
-       VALUES (?, 'pending', NOW())`,
-      [target_subnet]
+      `INSERT INTO scan_jobs (name, target_subnet, status, started_at)
+       VALUES (?, ?, 'pending', NOW())`,
+      [scanName, target_subnet]
     );
     const jobId = result.insertId;
 
     // Kick off the scan on the scanner service. The scanner runs
-    // asynchronously and reports results back via the callback URL.
+    // asynchronously and streams per-host results back to the host callback,
+    // reports progress, and posts a final completion to the results callback.
     try {
       await axios.post(`${SCANNER_URL}/scan`, {
         job_id: jobId,
         target_subnet,
         snmp_community: snmp_community || process.env.SNMP_COMMUNITY || 'public',
         callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/results`,
+        host_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/host`,
+        progress_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/progress`,
       });
 
       await pool.query("UPDATE scan_jobs SET status = 'running' WHERE id = ?", [jobId]);
@@ -70,10 +169,51 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// POST /api/scans/:id/results - callback used by the scanner service to
-// report completed scan results. Discovered devices are stored alongside
-// the job (in `results`) but are NOT written to the devices/ports tables -
-// the user reviews them and chooses which to import via /:id/import.
+// POST /api/scans/:id/host - callback used by the scanner to report a single
+// fully-enriched host as soon as it is discovered. Stored in scan_results and
+// pushed to any connected SSE clients.
+router.post('/:id/host', async (req, res, next) => {
+  try {
+    const jobId = req.params.id;
+    const host = req.body || {};
+
+    const [jobRows] = await pool.query('SELECT id FROM scan_jobs WHERE id = ?', [jobId]);
+    if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+
+    const openPorts = host.open_ports != null ? JSON.stringify(host.open_ports) : null;
+    const raw = host.raw != null ? JSON.stringify(host.raw) : null;
+
+    const [result] = await pool.query(
+      `INSERT INTO scan_results
+        (scan_job_id, status, ip, hostname, mac, mac_vendor, device_type, os,
+         open_ports, netbios_name, last_seen, raw)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)`,
+      [
+        jobId,
+        host.status === 'down' ? 'down' : 'up',
+        host.ip || null,
+        host.hostname || null,
+        host.mac || null,
+        host.mac_vendor || null,
+        host.device_type || null,
+        host.os || null,
+        openPorts,
+        host.netbios_name || null,
+        raw,
+      ]
+    );
+
+    const [rows] = await pool.query('SELECT * FROM scan_results WHERE id = ?', [result.insertId]);
+    sse.publish(jobId, 'host', mapResultRow(rows[0]));
+
+    res.json({ ok: true, id: result.insertId });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/scans/:id/results - final completion callback from the scanner.
+// Marks the job done and emits a scan_complete event to SSE clients.
 router.post('/:id/results', async (req, res, next) => {
   try {
     const jobId = req.params.id;
@@ -83,16 +223,15 @@ router.post('/:id/results', async (req, res, next) => {
     if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
 
     const finalStatus = status === 'failed' ? 'failed' : 'completed';
-    const total = results && Array.isArray(results.live_hosts) ? results.live_hosts.length : null;
 
     await pool.query(
       `UPDATE scan_jobs
-       SET status = ?, completed_at = NOW(), results = ?,
-           progress_total = COALESCE(?, progress_total),
-           progress_current = COALESCE(?, progress_current)
+       SET status = ?, completed_at = NOW(), results = ?
        WHERE id = ?`,
-      [finalStatus, JSON.stringify(results || req.body), total, total, jobId]
+      [finalStatus, JSON.stringify(results || req.body), jobId]
     );
+
+    sse.publish(jobId, 'scan_complete', { status: finalStatus });
 
     res.json({ ok: true });
   } catch (err) {
@@ -100,8 +239,7 @@ router.post('/:id/results', async (req, res, next) => {
   }
 });
 
-// POST /api/scans/:id/progress - callback used by the scanner service to
-// report incremental scan progress while a job is running.
+// POST /api/scans/:id/progress - incremental progress callback from the scanner.
 router.post('/:id/progress', async (req, res, next) => {
   try {
     const jobId = req.params.id;
@@ -113,14 +251,20 @@ router.post('/:id/progress', async (req, res, next) => {
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Scan job not found' });
 
+    sse.publish(jobId, 'progress', {
+      progress_current: progress_current ?? null,
+      progress_total: progress_total ?? null,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/scans/:id/import - import a user-selected subset of devices
-// discovered by a scan job into the devices/ports tables.
+// POST /api/scans/:id/import - import a user-selected subset of discovered
+// hosts into the devices/ports tables. Duplicates (by IP) are updated rather
+// than inserted, and reported back so the UI can show what was skipped.
 router.post('/:id/import', async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
@@ -128,69 +272,64 @@ router.post('/:id/import', async (req, res, next) => {
     const { devices } = req.body;
 
     const [jobRows] = await conn.query('SELECT id FROM scan_jobs WHERE id = ?', [jobId]);
-    if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+    if (jobRows.length === 0) {
+      conn.release();
+      return res.status(404).json({ error: 'Scan job not found' });
+    }
 
     if (!Array.isArray(devices) || devices.length === 0) {
+      conn.release();
       return res.status(400).json({ error: 'devices must be a non-empty array' });
     }
 
     await conn.beginTransaction();
 
-    const importedIds = [];
+    const added = [];
+    const skipped = [];
     for (const device of devices) {
-      const { ip, mac, hostname, type, snmp_community, ports } = device;
+      const { ip, mac, hostname, type, device_type, snmp_community, ports } = device;
+      const deviceType = type || device_type || null;
 
       const [existing] = await conn.query(
         'SELECT id FROM devices WHERE (ip IS NOT NULL AND ip = ?) OR (mac IS NOT NULL AND mac = ?) LIMIT 1',
         [ip || null, mac || null]
       );
 
-      let deviceId;
       if (existing.length > 0) {
-        deviceId = existing[0].id;
-        await conn.query(
-          `UPDATE devices SET hostname = COALESCE(?, hostname), ip = COALESCE(?, ip),
-                               mac = COALESCE(?, mac), type = COALESCE(?, type),
-                               snmp_community = COALESCE(?, snmp_community)
-           WHERE id = ?`,
-          [hostname || null, ip || null, mac || null, type || null, snmp_community || null, deviceId]
-        );
-      } else {
-        const [insertResult] = await conn.query(
-          `INSERT INTO devices (hostname, ip, mac, type, snmp_community)
-           VALUES (?, ?, ?, ?, ?)`,
-          [hostname || null, ip || null, mac || null, type || null, snmp_community || null]
-        );
-        deviceId = insertResult.insertId;
+        // Duplicate by IP/MAC - skip it and report so the UI can tell the user
+        // it already existed in the inventory.
+        skipped.push({ id: existing[0].id, ip: ip || null, hostname: hostname || null });
+        continue;
       }
+
+      const [insertResult] = await conn.query(
+        `INSERT INTO devices (hostname, ip, mac, type, snmp_community)
+         VALUES (?, ?, ?, ?, ?)`,
+        [hostname || null, ip || null, mac || null, deviceType, snmp_community || null]
+      );
+      const deviceId = insertResult.insertId;
 
       if (Array.isArray(ports)) {
         for (const port of ports) {
           const { port_name, port_number, speed } = port;
-          const [existingPort] = await conn.query(
-            'SELECT id FROM ports WHERE device_id = ? AND port_name = ? LIMIT 1',
-            [deviceId, port_name || null]
+          await conn.query(
+            `INSERT INTO ports (device_id, port_name, port_number, speed)
+             VALUES (?, ?, ?, ?)`,
+            [deviceId, port_name || null, port_number || null, speed || null]
           );
-          if (existingPort.length > 0) {
-            await conn.query(
-              'UPDATE ports SET port_number = ?, speed = ? WHERE id = ?',
-              [port_number || null, speed || null, existingPort[0].id]
-            );
-          } else {
-            await conn.query(
-              `INSERT INTO ports (device_id, port_name, port_number, speed)
-               VALUES (?, ?, ?, ?)`,
-              [deviceId, port_name || null, port_number || null, speed || null]
-            );
-          }
         }
       }
 
-      importedIds.push(deviceId);
+      added.push({ id: deviceId, ip: ip || null, hostname: hostname || null });
     }
 
     await conn.commit();
-    res.json({ ok: true, device_ids: importedIds });
+    res.json({
+      ok: true,
+      added,
+      skipped,
+      device_ids: added.map((d) => d.id),
+    });
   } catch (err) {
     await conn.rollback();
     next(err);
