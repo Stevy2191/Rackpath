@@ -19,6 +19,12 @@
   line-height: 1;
 }
 
+.device-node-custom-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  object-fit: contain;
+}
+
 .device-node-body {
   display: flex;
   flex-direction: column;

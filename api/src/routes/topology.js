@@ -1,10 +1,43 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const pool = require('../db/pool');
 
 const router = express.Router();
 
 const NODE_FIELDS = `d.id, d.hostname, d.ip, d.mac, d.type, d.snmp_community, d.notes,
               d.updated_at, tl.x, tl.y`;
+
+// Returns true if the error is MariaDB/MySQL's "table doesn't exist" error.
+// Lets older deployments (whose DB volume predates these tables) fall back
+// to empty results instead of a 500 while migrate() catches up.
+function isTableMissing(err) {
+  return err && err.code === 'ER_NO_SUCH_TABLE';
+}
+
+const ICON_UPLOAD_DIR = path.join('/uploads', 'topology-icons');
+fs.mkdirSync(ICON_UPLOAD_DIR, { recursive: true });
+
+const iconStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, ICON_UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+  },
+});
+
+const iconUpload = multer({
+  storage: iconStorage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'image/png' || file.mimetype === 'image/svg+xml') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PNG and SVG files are allowed'));
+    }
+  },
+});
 
 // GET /api/topology - devices that have been placed on the canvas, with position
 router.get('/', async (req, res, next) => {
@@ -101,6 +134,7 @@ router.get('/edges', async (req, res, next) => {
     const [rows] = await pool.query('SELECT * FROM topology_edges');
     res.json(rows);
   } catch (err) {
+    if (isTableMissing(err)) return res.json([]);
     next(err);
   }
 });
@@ -144,6 +178,7 @@ router.get('/zones', async (req, res, next) => {
     const [rows] = await pool.query('SELECT * FROM topology_zones');
     res.json(rows);
   } catch (err) {
+    if (isTableMissing(err)) return res.json([]);
     next(err);
   }
 });
@@ -209,6 +244,66 @@ router.delete('/zones/:id', async (req, res, next) => {
   try {
     const [result] = await pool.query('DELETE FROM topology_zones WHERE id = ?', [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Zone not found' });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/topology/icons - list custom icons
+router.get('/icons', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM topology_icons ORDER BY name');
+    res.json(rows);
+  } catch (err) {
+    if (isTableMissing(err)) return res.json([]);
+    next(err);
+  }
+});
+
+// POST /api/topology/icons - upload a custom icon (multipart/form-data, field "icon")
+router.post('/icons', (req, res, next) => {
+  iconUpload.single('icon')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
+    next();
+  });
+}, async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'icon file is required' });
+
+    const name = (req.body.name || req.file.originalname || 'Custom Icon').trim();
+
+    const [result] = await pool.query(
+      'INSERT INTO topology_icons (name, filename) VALUES (?, ?)',
+      [name, req.file.filename]
+    );
+
+    const [rows] = await pool.query('SELECT * FROM topology_icons WHERE id = ?', [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/topology/icons/file/:filename - serve a custom icon's image data.
+// Left unauthenticated (see auth middleware) since <img> tags can't send a
+// Bearer token.
+router.get('/icons/file/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename);
+  res.sendFile(path.join(ICON_UPLOAD_DIR, filename), (err) => {
+    if (err) res.status(404).end();
+  });
+});
+
+// DELETE /api/topology/icons/:id
+router.delete('/icons/:id', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM topology_icons WHERE id = ?', [req.params.id]);
+    if (rows[0]) {
+      fs.unlink(path.join(ICON_UPLOAD_DIR, rows[0].filename), () => {});
+    }
+
+    await pool.query('DELETE FROM topology_icons WHERE id = ?', [req.params.id]);
     res.status(204).send();
   } catch (err) {
     next(err);

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DEVICE_TYPES, classifyDevice } from './deviceTypes';
+import { DEVICE_TYPES, classifyDevice, isCustomType, customIconFilename, customIconUrl } from './deviceTypes';
 import './QuickInfoPanel.css';
 
 export default function QuickInfoPanel({ node, onClose, onRemove }) {
@@ -19,7 +19,11 @@ export default function QuickInfoPanel({ node, onClose, onRemove }) {
 
       <div className="quick-info-header">
         <span className="quick-info-icon" style={{ color: info.color }}>
-          {info.icon}
+          {isCustomType(data.type) ? (
+            <img className="quick-info-custom-icon" src={customIconUrl(customIconFilename(data.type))} alt="" />
+          ) : (
+            info.icon
+          )}
         </span>
         <div>
           <h3>{data.hostname || data.ip || `Device ${data.id}`}</h3>

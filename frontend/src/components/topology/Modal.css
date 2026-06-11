@@ -27,6 +27,13 @@
   margin-top: 0;
 }
 
+.modal-title-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
 .modal-form {
   display: flex;
   flex-direction: column;

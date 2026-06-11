@@ -166,4 +166,14 @@ CREATE TABLE IF NOT EXISTS topology_zones (
     created_at      TIMESTAMP               NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ---------------------------------------------------------------------------
+-- topology_icons
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS topology_icons (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name            VARCHAR(255)            NOT NULL,
+    filename        VARCHAR(255)            NOT NULL,
+    created_at      TIMESTAMP               NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 1;

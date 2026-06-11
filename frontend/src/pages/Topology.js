@@ -350,11 +350,11 @@ function TopologyCanvas() {
         y: event.clientY - bounds.top,
       });
 
-      const manualType = event.dataTransfer.getData(MANUAL_DRAG_TYPE);
+      const manualData = event.dataTransfer.getData(MANUAL_DRAG_TYPE);
       const discoveredId = event.dataTransfer.getData(DISCOVERED_DRAG_TYPE);
 
-      if (manualType) {
-        setPendingManualDrop({ deviceType: manualType, position });
+      if (manualData) {
+        setPendingManualDrop({ deviceInfo: JSON.parse(manualData), position });
       } else if (discoveredId) {
         const deviceId = Number(discoveredId);
         const device = unplacedDevices.find((d) => d.id === deviceId);
@@ -381,7 +381,7 @@ function TopologyCanvas() {
         const res = await client.post('/topology/nodes', {
           hostname,
           ip,
-          type: pendingManualDrop.deviceType,
+          type: pendingManualDrop.deviceInfo.type,
           x: pendingManualDrop.position.x,
           y: pendingManualDrop.position.y,
         });
@@ -454,7 +454,7 @@ function TopologyCanvas() {
 
       {pendingManualDrop && (
         <AddDeviceModal
-          deviceType={pendingManualDrop.deviceType}
+          deviceInfo={pendingManualDrop.deviceInfo}
           onSubmit={handleManualDeviceSubmit}
           onCancel={() => setPendingManualDrop(null)}
         />

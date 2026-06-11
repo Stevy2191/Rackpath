@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import { DEVICE_TYPES } from './deviceTypes';
 import './Modal.css';
 
-export default function AddDeviceModal({ deviceType, onSubmit, onCancel }) {
+export default function AddDeviceModal({ deviceInfo, onSubmit, onCancel }) {
   const [hostname, setHostname] = useState('');
   const [ip, setIp] = useState('');
-
-  const info = DEVICE_TYPES[deviceType] || DEVICE_TYPES.unknown;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -17,7 +14,12 @@ export default function AddDeviceModal({ deviceType, onSubmit, onCancel }) {
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal modal-small" onClick={(e) => e.stopPropagation()}>
         <h2>
-          {info.icon} Add {info.label}
+          {deviceInfo.isCustom ? (
+            <img className="modal-title-icon" src={deviceInfo.icon} alt="" />
+          ) : (
+            deviceInfo.icon
+          )}{' '}
+          Add {deviceInfo.label}
         </h2>
         <form className="modal-form" onSubmit={handleSubmit}>
           <label>

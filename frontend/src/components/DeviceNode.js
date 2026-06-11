@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
-import { DEVICE_TYPES, classifyDevice } from './topology/deviceTypes';
+import { DEVICE_TYPES, classifyDevice, isCustomType, customIconFilename, customIconUrl } from './topology/deviceTypes';
 import './DeviceNode.css';
 
 const HANDLES = [
@@ -26,7 +26,11 @@ function DeviceNode({ data }) {
         />
       ))}
       <div className="device-node-icon" style={{ color: info.color }} aria-hidden="true">
-        {info.icon}
+        {isCustomType(data.type) ? (
+          <img className="device-node-custom-icon" src={customIconUrl(customIconFilename(data.type))} alt="" />
+        ) : (
+          info.icon
+        )}
       </div>
       <div className="device-node-body">
         <div className="device-node-label">{data.hostname || data.ip || `Device ${data.id}`}</div>

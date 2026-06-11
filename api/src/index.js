@@ -12,6 +12,7 @@ const rackSlotsRouter = require('./routes/rackSlots');
 const topologyRouter = require('./routes/topology');
 const scanRouter = require('./routes/scan');
 const { requireAuth } = require('./auth/middleware');
+const { migrate } = require('./db/migrate');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -40,6 +41,10 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Rackpath API listening on port ${PORT}`);
-});
+migrate()
+  .catch((err) => console.error('Migration failed:', err))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`Rackpath API listening on port ${PORT}`);
+    });
+  });

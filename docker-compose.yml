@@ -42,6 +42,8 @@ services:
       RACKPATH_JWT_SECRET: ${RACKPATH_JWT_SECRET}
     ports:
       - "${API_PORT:-3010}:${API_PORT:-3010}"
+    volumes:
+      - rackpath-uploads:/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -73,3 +75,4 @@ services:
 
 volumes:
   rackpath-db-data:
+  rackpath-uploads:
