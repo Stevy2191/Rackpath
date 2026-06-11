@@ -131,4 +131,39 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
 ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS progress_current INT UNSIGNED NULL AFTER status;
 ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS progress_total INT UNSIGNED NULL AFTER progress_current;
 
+-- ---------------------------------------------------------------------------
+-- topology_edges
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS topology_edges (
+    id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    source_device_id    INT UNSIGNED        NOT NULL,
+    target_device_id    INT UNSIGNED        NOT NULL,
+    label               VARCHAR(128)        NULL,
+    speed               VARCHAR(32)         NULL,
+    cable_type          VARCHAR(64)         NULL,
+    vlan                VARCHAR(32)         NULL,
+    created_at          TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_topology_edges_source
+        FOREIGN KEY (source_device_id) REFERENCES devices(id) ON DELETE CASCADE,
+    CONSTRAINT fk_topology_edges_target
+        FOREIGN KEY (target_device_id) REFERENCES devices(id) ON DELETE CASCADE,
+    KEY idx_topology_edges_source (source_device_id),
+    KEY idx_topology_edges_target (target_device_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------------
+-- topology_zones
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS topology_zones (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name            VARCHAR(255)            NOT NULL,
+    border_style    ENUM('solid', 'dotted') NOT NULL DEFAULT 'solid',
+    color           VARCHAR(32)             NOT NULL DEFAULT 'blue',
+    x               DOUBLE                  NOT NULL DEFAULT 0,
+    y               DOUBLE                  NOT NULL DEFAULT 0,
+    width           DOUBLE                  NOT NULL DEFAULT 300,
+    height          DOUBLE                  NOT NULL DEFAULT 200,
+    created_at      TIMESTAMP               NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 1;

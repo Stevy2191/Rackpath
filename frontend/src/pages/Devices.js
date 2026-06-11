@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import './Devices.css';
 
@@ -6,8 +7,9 @@ const emptyDevice = { hostname: '', ip: '', mac: '', type: '', snmp_community: '
 const emptyPort = { port_name: '', port_number: '', cable_type: '', speed: '' };
 
 export default function DevicesPage() {
+  const { id } = useParams();
   const [devices, setDevices] = useState([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState(id ? Number(id) : null);
   const [ports, setPorts] = useState([]);
   const [newDevice, setNewDevice] = useState(emptyDevice);
   const [newPort, setNewPort] = useState(emptyPort);
@@ -34,6 +36,10 @@ export default function DevicesPage() {
   useEffect(() => {
     loadDevices();
   }, []);
+
+  useEffect(() => {
+    if (id) setSelectedDeviceId(Number(id));
+  }, [id]);
 
   useEffect(() => {
     loadPorts(selectedDeviceId);

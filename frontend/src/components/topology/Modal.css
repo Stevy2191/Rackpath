@@ -1,0 +1,99 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  position: relative;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  border-radius: 6px;
+  padding: 1.5rem;
+  width: min(900px, 90vw);
+  max-height: 85vh;
+  overflow: auto;
+}
+
+.modal-small {
+  width: min(360px, 90vw);
+}
+
+.modal h2 {
+  margin-top: 0;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.modal-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.modal-form input,
+.modal-form select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.modal-actions button {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.modal-actions button[type='submit'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.zone-color-picker {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.zone-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.zone-color-swatch.selected {
+  border-color: var(--color-text);
+}
+
+.zone-color-blue { background: #2563eb; }
+.zone-color-green { background: #16a34a; }
+.zone-color-red { background: #dc2626; }
+.zone-color-orange { background: #d97706; }
+.zone-color-purple { background: #7c3aed; }
+.zone-color-gray { background: #6b7280; }

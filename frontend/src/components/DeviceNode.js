@@ -1,36 +1,37 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
+import { DEVICE_TYPES, classifyDevice } from './topology/deviceTypes';
 import './DeviceNode.css';
 
-const ICONS = {
-  router: '🌐',
-  switch: '🔀',
-  server: '🖥️',
-  unknown: '❔',
-};
-
-export function classifyDevice(type) {
-  const t = (type || '').toLowerCase();
-  if (t.includes('router') || t.includes('gateway') || t.includes('firewall')) return 'router';
-  if (t.includes('switch')) return 'switch';
-  if (t.includes('server') || t.includes('linux') || t.includes('windows') || t.includes('unix')) return 'server';
-  return 'unknown';
-}
+const HANDLES = [
+  { id: 'top', position: Position.Top },
+  { id: 'right', position: Position.Right },
+  { id: 'bottom', position: Position.Bottom },
+  { id: 'left', position: Position.Left },
+];
 
 function DeviceNode({ data }) {
   const kind = classifyDevice(data.type);
+  const info = DEVICE_TYPES[kind];
 
   return (
-    <div className={`device-node device-node-${kind}`}>
-      <Handle type="target" position={Position.Top} />
-      <Handle type="target" position={Position.Left} id="left" />
-      <div className="device-node-icon" aria-hidden="true">{ICONS[kind]}</div>
+    <div className="device-node" style={{ borderColor: info.color }}>
+      {HANDLES.map((handle) => (
+        <Handle
+          key={handle.id}
+          id={handle.id}
+          type="source"
+          position={handle.position}
+          className="device-node-handle"
+        />
+      ))}
+      <div className="device-node-icon" style={{ color: info.color }} aria-hidden="true">
+        {info.icon}
+      </div>
       <div className="device-node-body">
-        <div className="device-node-label">{data.label}</div>
+        <div className="device-node-label">{data.hostname || data.ip || `Device ${data.id}`}</div>
         {data.ip && <div className="device-node-ip">{data.ip}</div>}
       </div>
-      <Handle type="source" position={Position.Bottom} />
-      <Handle type="source" position={Position.Right} id="right" />
     </div>
   );
 }

@@ -4,9 +4,15 @@ const pool = require('../db/pool');
 const router = express.Router();
 
 // GET /api/devices - list all devices
+// GET /api/devices?unplaced=true - only devices with no topology canvas position
 router.get('/', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM devices ORDER BY hostname, ip');
+    let query = 'SELECT d.* FROM devices d';
+    if (req.query.unplaced === 'true') {
+      query += ' LEFT JOIN topology_layout tl ON tl.device_id = d.id WHERE tl.id IS NULL';
+    }
+    query += ' ORDER BY d.hostname, d.ip';
+    const [rows] = await pool.query(query);
     res.json(rows);
   } catch (err) {
     next(err);

@@ -1,0 +1,73 @@
+.device-picker {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-elevated);
+  border-right: 1px solid var(--color-border);
+}
+
+.device-picker-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.device-picker-tabs button {
+  flex: 1;
+  padding: 0.6rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.device-picker-tabs button.active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+}
+
+.device-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.device-picker-card {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-subtle);
+  cursor: grab;
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+.device-picker-card:active {
+  cursor: grabbing;
+}
+
+.device-picker-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.device-picker-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-picker-empty {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  padding: 0.5rem;
+}
