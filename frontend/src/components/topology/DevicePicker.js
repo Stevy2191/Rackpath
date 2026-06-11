@@ -111,6 +111,7 @@ export default function DevicePicker({ unplacedDevices }) {
                   <div className="device-picker-category-items">
                     {category.types.map((key) => {
                       const info = DEVICE_TYPES[key];
+                      const Icon = info.icon;
                       return (
                         <div
                           key={key}
@@ -120,14 +121,12 @@ export default function DevicePicker({ unplacedDevices }) {
                             handleManualDragStart(e, {
                               type: key,
                               label: info.label,
-                              icon: info.icon,
-                              color: info.color,
                               isCustom: false,
                             })
                           }
                         >
                           <span className="device-picker-icon" style={{ color: info.color }}>
-                            {info.icon}
+                            <Icon size={18} strokeWidth={2} />
                           </span>
                           <span className="device-picker-label">{info.label}</span>
                         </div>
@@ -160,8 +159,6 @@ export default function DevicePicker({ unplacedDevices }) {
                           handleManualDragStart(e, {
                             type: customType(icon.filename),
                             label: icon.name,
-                            icon: url,
-                            color: DEVICE_TYPES.custom.color,
                             isCustom: true,
                           })
                         }
@@ -203,6 +200,7 @@ export default function DevicePicker({ unplacedDevices }) {
           ) : (
             unplacedDevices.map((device) => {
               const info = DEVICE_TYPES[classifyDevice(device.type)];
+              const Icon = info.icon;
               return (
                 <div
                   key={device.id}
@@ -211,7 +209,7 @@ export default function DevicePicker({ unplacedDevices }) {
                   onDragStart={(e) => handleDiscoveredDragStart(e, device.id)}
                 >
                   <span className="device-picker-icon" style={{ color: info.color }}>
-                    {info.icon}
+                    <Icon size={18} strokeWidth={2} />
                   </span>
                   <span className="device-picker-label">
                     {device.hostname || device.ip || `Device ${device.id}`}

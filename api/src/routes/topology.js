@@ -7,7 +7,7 @@ const pool = require('../db/pool');
 const router = express.Router();
 
 const NODE_FIELDS = `d.id, d.hostname, d.ip, d.mac, d.type, d.snmp_community, d.notes,
-              d.updated_at, tl.x, tl.y`;
+              d.updated_at, tl.x, tl.y, tl.width, tl.height`;
 
 // Returns true if the error is MariaDB/MySQL's "table doesn't exist" error.
 // Lets older deployments (whose DB volume predates these tables) fall back
@@ -63,15 +63,24 @@ router.patch('/layout', async (req, res, next) => {
     }
 
     for (const pos of positions) {
-      const { device_id, x, y } = pos || {};
+      const { device_id, x, y, width, height } = pos || {};
       if (device_id === undefined || x === undefined || y === undefined) continue;
 
-      await pool.query(
-        `INSERT INTO topology_layout (device_id, x, y)
-         VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y)`,
-        [device_id, x, y]
-      );
+      if (width !== undefined && height !== undefined) {
+        await pool.query(
+          `INSERT INTO topology_layout (device_id, x, y, width, height)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y), width = VALUES(width), height = VALUES(height)`,
+          [device_id, x, y, width, height]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO topology_layout (device_id, x, y)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y)`,
+          [device_id, x, y]
+        );
+      }
     }
 
     res.json({ updated: positions.length });
@@ -155,6 +164,35 @@ router.post('/edges', async (req, res, next) => {
 
     const [rows] = await pool.query('SELECT * FROM topology_edges WHERE id = ?', [result.insertId]);
     res.status(201).json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/topology/edges/:id - update connection metadata or reconnect endpoints
+router.patch('/edges/:id', async (req, res, next) => {
+  try {
+    const allowedFields = ['source_device_id', 'target_device_id', 'label', 'speed', 'cable_type', 'vlan'];
+    const updates = [];
+    const values = [];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(req.body[field]);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(req.params.id);
+    const [result] = await pool.query(`UPDATE topology_edges SET ${updates.join(', ')} WHERE id = ?`, values);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Edge not found' });
+
+    const [rows] = await pool.query('SELECT * FROM topology_edges WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
   } catch (err) {
     next(err);
   }

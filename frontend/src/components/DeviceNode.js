@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, NodeResizer, Position } from 'reactflow';
 import { DEVICE_TYPES, classifyDevice, isCustomType, customIconFilename, customIconUrl } from './topology/deviceTypes';
 import './DeviceNode.css';
 
@@ -10,12 +10,20 @@ const HANDLES = [
   { id: 'left', position: Position.Left },
 ];
 
-function DeviceNode({ data }) {
+function DeviceNode({ id, data, selected }) {
   const kind = classifyDevice(data.type);
   const info = DEVICE_TYPES[kind];
+  const Icon = info.icon;
 
   return (
     <div className="device-node" style={{ borderColor: info.color }}>
+      <NodeResizer
+        color={info.color}
+        isVisible={selected}
+        minWidth={80}
+        minHeight={60}
+        onResizeEnd={(_event, params) => data.onResizeEnd?.(id, params)}
+      />
       {HANDLES.map((handle) => (
         <Handle
           key={handle.id}
@@ -29,7 +37,7 @@ function DeviceNode({ data }) {
         {isCustomType(data.type) ? (
           <img className="device-node-custom-icon" src={customIconUrl(customIconFilename(data.type))} alt="" />
         ) : (
-          info.icon
+          <Icon size={22} strokeWidth={2} />
         )}
       </div>
       <div className="device-node-body">

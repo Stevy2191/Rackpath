@@ -15,6 +15,7 @@ import 'reactflow/dist/style.css';
 import client from '../api/client';
 import DeviceNode from '../components/DeviceNode';
 import ZoneNode from '../components/topology/ZoneNode';
+import ConnectionEdge from '../components/topology/ConnectionEdge';
 import DevicePicker, {
   MANUAL_DRAG_TYPE,
   DISCOVERED_DRAG_TYPE,
@@ -27,12 +28,14 @@ import { getLayoutedElements } from '../utils/layout';
 import './Topology.css';
 
 const nodeTypes = { device: DeviceNode, zone: ZoneNode };
+const edgeTypes = { connection: ConnectionEdge };
 
-function buildDeviceNode(device) {
+function buildDeviceNode(device, callbacks) {
   return {
     id: `device-${device.id}`,
     type: 'device',
     position: { x: device.x || 0, y: device.y || 0 },
+    style: { width: device.width || 120, height: device.height || 80 },
     data: {
       id: device.id,
       hostname: device.hostname,
@@ -42,6 +45,7 @@ function buildDeviceNode(device) {
       snmp_community: device.snmp_community,
       notes: device.notes,
       updated_at: device.updated_at,
+      onResizeEnd: callbacks?.onDeviceResizeEnd,
     },
   };
 }
@@ -73,13 +77,18 @@ function edgeLabelText(edge) {
   return parts.join(' · ') || undefined;
 }
 
-function buildEdge(edge, showLabels) {
+function buildEdge(edge, showLabels, callbacks) {
   return {
     id: `edge-${edge.id}`,
     source: `device-${edge.source_device_id}`,
     target: `device-${edge.target_device_id}`,
+    type: 'connection',
     label: showLabels ? edgeLabelText(edge) : undefined,
-    data: edge,
+    data: {
+      ...edge,
+      onEdit: callbacks?.onEdgeEdit,
+      onDelete: callbacks?.onEdgeDelete,
+    },
   };
 }
 
@@ -104,8 +113,46 @@ function TopologyCanvas() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [showEdgeLabels, setShowEdgeLabels] = useState(true);
   const [pendingConnection, setPendingConnection] = useState(null);
+  const [editingEdge, setEditingEdge] = useState(null);
   const [pendingManualDrop, setPendingManualDrop] = useState(null);
   const [showZoneModal, setShowZoneModal] = useState(false);
+
+  const handleDeviceResizeEnd = useCallback((nodeId, params) => {
+    const deviceId = deviceIdFromNodeId(nodeId);
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === nodeId
+          ? {
+              ...n,
+              position: { x: params.x, y: params.y },
+              style: { ...n.style, width: params.width, height: params.height },
+            }
+          : n
+      )
+    );
+    client
+      .patch('/topology/layout', {
+        positions: [
+          { device_id: deviceId, x: params.x, y: params.y, width: params.width, height: params.height },
+        ],
+      })
+      .catch((err) => setError(err.message));
+  }, []);
+
+  const handleEdgeEdit = useCallback(
+    (edgeId) => {
+      const edge = reactFlowInstance.getEdge(edgeId);
+      if (edge) setEditingEdge(edge);
+    },
+    [reactFlowInstance]
+  );
+
+  const handleEdgeDelete = useCallback(
+    (edgeId) => {
+      reactFlowInstance.deleteElements({ edges: [{ id: edgeId }] });
+    },
+    [reactFlowInstance]
+  );
 
   const handleZoneResizeEnd = useCallback((nodeId, params) => {
     const zoneId = zoneIdFromNodeId(nodeId);
@@ -150,13 +197,19 @@ function TopologyCanvas() {
         ]);
         if (cancelled) return;
 
-        const deviceNodes = (topoRes.data.nodes || []).map(buildDeviceNode);
+        const deviceNodes = (topoRes.data.nodes || []).map((device) =>
+          buildDeviceNode(device, { onDeviceResizeEnd: handleDeviceResizeEnd })
+        );
         const zoneNodes = (zonesRes.data || []).map((zone) =>
           buildZoneNode(zone, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete })
         );
 
         setNodes([...zoneNodes, ...deviceNodes]);
-        setEdges((edgesRes.data || []).map((edge) => buildEdge(edge, true)));
+        setEdges(
+          (edgesRes.data || []).map((edge) =>
+            buildEdge(edge, true, { onEdgeEdit: handleEdgeEdit, onEdgeDelete: handleEdgeDelete })
+          )
+        );
         setUnplacedDevices(unplacedRes.data || []);
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -169,7 +222,7 @@ function TopologyCanvas() {
     return () => {
       cancelled = true;
     };
-  }, [handleZoneResizeEnd, handleZoneDelete]);
+  }, [handleZoneResizeEnd, handleZoneDelete, handleDeviceResizeEnd, handleEdgeEdit, handleEdgeDelete]);
 
   const onNodesChange = useCallback(
     (changes) => {
@@ -221,12 +274,7 @@ function TopologyCanvas() {
         });
         setEdges((eds) =>
           addEdge(
-            {
-              ...pendingConnection,
-              id: `edge-${res.data.id}`,
-              label: showEdgeLabels ? edgeLabelText(res.data) : undefined,
-              data: res.data,
-            },
+            buildEdge(res.data, showEdgeLabels, { onEdgeEdit: handleEdgeEdit, onEdgeDelete: handleEdgeDelete }),
             eds
           )
         );
@@ -236,7 +284,51 @@ function TopologyCanvas() {
         setPendingConnection(null);
       }
     },
-    [pendingConnection, showEdgeLabels]
+    [pendingConnection, showEdgeLabels, handleEdgeEdit, handleEdgeDelete]
+  );
+
+  const handleEditConnectionSubmit = useCallback(
+    async (formValues) => {
+      if (!editingEdge) return;
+      const edgeDbId = Number(editingEdge.id.replace('edge-', ''));
+      try {
+        const res = await client.patch(`/topology/edges/${edgeDbId}`, formValues);
+        setEdges((eds) =>
+          eds.map((e) =>
+            e.id === editingEdge.id
+              ? buildEdge(res.data, showEdgeLabels, { onEdgeEdit: handleEdgeEdit, onEdgeDelete: handleEdgeDelete })
+              : e
+          )
+        );
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setEditingEdge(null);
+      }
+    },
+    [editingEdge, showEdgeLabels, handleEdgeEdit, handleEdgeDelete]
+  );
+
+  const onEdgeUpdate = useCallback(
+    (oldEdge, newConnection) => {
+      const edgeDbId = Number(oldEdge.id.replace('edge-', ''));
+      client
+        .patch(`/topology/edges/${edgeDbId}`, {
+          source_device_id: deviceIdFromNodeId(newConnection.source),
+          target_device_id: deviceIdFromNodeId(newConnection.target),
+        })
+        .then((res) => {
+          setEdges((eds) =>
+            eds.map((e) =>
+              e.id === oldEdge.id
+                ? buildEdge(res.data, showEdgeLabels, { onEdgeEdit: handleEdgeEdit, onEdgeDelete: handleEdgeDelete })
+                : e
+            )
+          );
+        })
+        .catch((err) => setError(err.message));
+    },
+    [showEdgeLabels, handleEdgeEdit, handleEdgeDelete]
   );
 
   const toggleEdgeLabels = useCallback(() => {
@@ -364,14 +456,17 @@ function TopologyCanvas() {
           await client.patch('/topology/layout', {
             positions: [{ device_id: deviceId, x: position.x, y: position.y }],
           });
-          setNodes((nds) => [...nds, buildDeviceNode({ ...device, x: position.x, y: position.y })]);
+          setNodes((nds) => [
+            ...nds,
+            buildDeviceNode({ ...device, x: position.x, y: position.y }, { onDeviceResizeEnd: handleDeviceResizeEnd }),
+          ]);
           setUnplacedDevices((devs) => devs.filter((d) => d.id !== deviceId));
         } catch (err) {
           setError(err.message);
         }
       }
     },
-    [reactFlowInstance, unplacedDevices]
+    [reactFlowInstance, unplacedDevices, handleDeviceResizeEnd]
   );
 
   const handleManualDeviceSubmit = useCallback(
@@ -385,14 +480,14 @@ function TopologyCanvas() {
           x: pendingManualDrop.position.x,
           y: pendingManualDrop.position.y,
         });
-        setNodes((nds) => [...nds, buildDeviceNode(res.data)]);
+        setNodes((nds) => [...nds, buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd })]);
       } catch (err) {
         setError(err.message);
       } finally {
         setPendingManualDrop(null);
       }
     },
-    [pendingManualDrop]
+    [pendingManualDrop, handleDeviceResizeEnd]
   );
 
   if (loading) return <div className="page-status">Loading topology...</div>;
@@ -425,10 +520,12 @@ function TopologyCanvas() {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onEdgeUpdate={onEdgeUpdate}
             onNodeDragStop={onNodeDragStop}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
@@ -448,6 +545,14 @@ function TopologyCanvas() {
 
       {pendingConnection && (
         <ConnectionModal onSubmit={handleConnectionSubmit} onCancel={() => setPendingConnection(null)} />
+      )}
+
+      {editingEdge && (
+        <ConnectionModal
+          initialValues={editingEdge.data}
+          onSubmit={handleEditConnectionSubmit}
+          onCancel={() => setEditingEdge(null)}
+        />
       )}
 
       {showZoneModal && <ZoneFormModal onSubmit={handleAddZone} onCancel={() => setShowZoneModal(false)} />}

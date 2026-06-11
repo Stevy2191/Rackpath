@@ -10,6 +10,7 @@ export default function QuickInfoPanel({ node, onClose, onRemove }) {
 
   const { data } = node;
   const info = DEVICE_TYPES[classifyDevice(data.type)];
+  const Icon = info.icon;
 
   return (
     <aside className="quick-info-panel">
@@ -22,7 +23,7 @@ export default function QuickInfoPanel({ node, onClose, onRemove }) {
           {isCustomType(data.type) ? (
             <img className="quick-info-custom-icon" src={customIconUrl(customIconFilename(data.type))} alt="" />
           ) : (
-            info.icon
+            <Icon size={28} strokeWidth={2} />
           )}
         </span>
         <div>

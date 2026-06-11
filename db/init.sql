@@ -100,12 +100,19 @@ CREATE TABLE IF NOT EXISTS topology_layout (
     device_id   INT UNSIGNED        NOT NULL,
     x           DOUBLE              NOT NULL DEFAULT 0,
     y           DOUBLE              NOT NULL DEFAULT 0,
+    width       DOUBLE              NOT NULL DEFAULT 120,
+    height      DOUBLE              NOT NULL DEFAULT 80,
     created_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_topology_layout_device
         FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
     UNIQUE KEY uq_topology_layout_device (device_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Upgrade path for existing deployments: add resizable-node columns to a
+-- topology_layout table created before they existed.
+ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS width DOUBLE NOT NULL DEFAULT 120 AFTER y;
+ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS height DOUBLE NOT NULL DEFAULT 80 AFTER width;
 
 -- ---------------------------------------------------------------------------
 -- scan_jobs

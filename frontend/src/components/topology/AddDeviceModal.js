@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { DEVICE_TYPES, customIconFilename, customIconUrl } from './deviceTypes';
 import './Modal.css';
 
 export default function AddDeviceModal({ deviceInfo, onSubmit, onCancel }) {
@@ -10,14 +11,16 @@ export default function AddDeviceModal({ deviceInfo, onSubmit, onCancel }) {
     onSubmit({ hostname: hostname.trim() || null, ip: ip.trim() || null });
   };
 
+  const Icon = !deviceInfo.isCustom ? DEVICE_TYPES[deviceInfo.type]?.icon : null;
+
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal modal-small" onClick={(e) => e.stopPropagation()}>
         <h2>
           {deviceInfo.isCustom ? (
-            <img className="modal-title-icon" src={deviceInfo.icon} alt="" />
+            <img className="modal-title-icon" src={customIconUrl(customIconFilename(deviceInfo.type))} alt="" />
           ) : (
-            deviceInfo.icon
+            Icon && <Icon size={20} strokeWidth={2} className="modal-title-icon-svg" />
           )}{' '}
           Add {deviceInfo.label}
         </h2>

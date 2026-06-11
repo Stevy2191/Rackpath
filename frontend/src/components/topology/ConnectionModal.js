@@ -4,11 +4,12 @@ import './Modal.css';
 const SPEEDS = ['100Mbps', '1Gbps', '10Gbps', '25Gbps', '40Gbps', '100Gbps'];
 const CABLE_TYPES = ['Cat5e', 'Cat6', 'Cat6a', 'Fiber', 'DAC'];
 
-export default function ConnectionModal({ onSubmit, onCancel }) {
-  const [label, setLabel] = useState('');
-  const [vlan, setVlan] = useState('');
-  const [speed, setSpeed] = useState('');
-  const [cableType, setCableType] = useState('');
+export default function ConnectionModal({ initialValues, onSubmit, onCancel }) {
+  const isEdit = !!initialValues;
+  const [label, setLabel] = useState(initialValues?.label || '');
+  const [vlan, setVlan] = useState(initialValues?.vlan || '');
+  const [speed, setSpeed] = useState(initialValues?.speed || '');
+  const [cableType, setCableType] = useState(initialValues?.cable_type || '');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -23,7 +24,7 @@ export default function ConnectionModal({ onSubmit, onCancel }) {
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal modal-small" onClick={(e) => e.stopPropagation()}>
-        <h2>New Connection</h2>
+        <h2>{isEdit ? 'Edit Connection' : 'New Connection'}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
           <label>
             Label
@@ -64,7 +65,7 @@ export default function ConnectionModal({ onSubmit, onCancel }) {
             <button type="button" onClick={onCancel}>
               Cancel
             </button>
-            <button type="submit">Add Connection</button>
+            <button type="submit">{isEdit ? 'Save Changes' : 'Add Connection'}</button>
           </div>
         </form>
       </div>

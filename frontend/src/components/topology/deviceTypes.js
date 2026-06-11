@@ -1,24 +1,44 @@
+import {
+  Router as RouterIcon,
+  GitBranch,
+  Shield,
+  Shuffle,
+  Wifi,
+  Radio,
+  Server as ServerIcon,
+  Database,
+  HardDrive,
+  Monitor,
+  Laptop,
+  Printer,
+  Phone,
+  HelpCircle,
+  Cloud,
+  Globe,
+  Puzzle,
+} from 'lucide-react';
+
 // Preset device types shown in the Manual picker tab, and used to classify
 // devices (manual or discovered) for icons/accent colors throughout the
-// topology canvas.
+// topology canvas. `icon` is a lucide-react component.
 export const DEVICE_TYPES = {
-  router: { label: 'Router', icon: '🌐', color: '#2563eb' },
-  switch: { label: 'Switch', icon: '🔀', color: '#d97706' },
-  firewall: { label: 'Firewall', icon: '🛡️', color: '#dc2626' },
-  loadbalancer: { label: 'Load Balancer', icon: '⚖️', color: '#9333ea' },
-  ap: { label: 'Access Point', icon: '📡', color: '#7c3aed' },
-  wireless_controller: { label: 'Wireless Controller', icon: '📶', color: '#0ea5e9' },
-  server: { label: 'Server', icon: '🖥️', color: '#16a34a' },
-  nas: { label: 'NAS', icon: '💾', color: '#65a30d' },
-  san: { label: 'SAN', icon: '🗄️', color: '#0d9488' },
-  endpoint: { label: 'Endpoint / PC', icon: '🖱️', color: '#0891b2' },
-  laptop: { label: 'Laptop', icon: '💻', color: '#0284c7' },
-  printer: { label: 'Printer', icon: '🖨️', color: '#db2777' },
-  ip_phone: { label: 'IP Phone', icon: '☎️', color: '#ea580c' },
-  unknown: { label: 'Unknown', icon: '❔', color: '#6b7280' },
-  cloud: { label: 'Cloud', icon: '☁️', color: '#64748b' },
-  internet: { label: 'Internet', icon: '🌍', color: '#0369a1' },
-  custom: { label: 'Custom', icon: '🧩', color: '#6b7280' },
+  router: { label: 'Router', icon: RouterIcon, color: '#2563eb' },
+  switch: { label: 'Switch', icon: GitBranch, color: '#d97706' },
+  firewall: { label: 'Firewall', icon: Shield, color: '#dc2626' },
+  loadbalancer: { label: 'Load Balancer', icon: Shuffle, color: '#9333ea' },
+  ap: { label: 'Access Point', icon: Wifi, color: '#7c3aed' },
+  wireless_controller: { label: 'Wireless Controller', icon: Radio, color: '#0ea5e9' },
+  server: { label: 'Server', icon: ServerIcon, color: '#16a34a' },
+  nas: { label: 'NAS', icon: Database, color: '#65a30d' },
+  san: { label: 'SAN', icon: HardDrive, color: '#0d9488' },
+  endpoint: { label: 'Endpoint / PC', icon: Monitor, color: '#0891b2' },
+  laptop: { label: 'Laptop', icon: Laptop, color: '#0284c7' },
+  printer: { label: 'Printer', icon: Printer, color: '#db2777' },
+  ip_phone: { label: 'IP Phone', icon: Phone, color: '#ea580c' },
+  unknown: { label: 'Unknown', icon: HelpCircle, color: '#6b7280' },
+  cloud: { label: 'Cloud', icon: Cloud, color: '#64748b' },
+  internet: { label: 'Internet', icon: Globe, color: '#0369a1' },
+  custom: { label: 'Custom', icon: Puzzle, color: '#6b7280' },
 };
 
 // Visio-style grouping for the device picker. Order here drives the order

@@ -39,6 +39,9 @@ const STATEMENTS = [
       filename        VARCHAR(255)            NOT NULL,
       created_at      TIMESTAMP               NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+
+  `ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS width DOUBLE NOT NULL DEFAULT 120 AFTER y`,
+  `ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS height DOUBLE NOT NULL DEFAULT 80 AFTER width`,
 ];
 
 async function migrate() {
