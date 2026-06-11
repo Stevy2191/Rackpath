@@ -163,7 +163,7 @@ if ! "${COMPOSE[@]}" exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_RO
 fi
 
 log "Creating default admin user"
-if ! "${COMPOSE[@]}" exec -T rackpath-api npm run seed; then
+if ! "${COMPOSE[@]}" exec -T rackpath-api npm run seed < /dev/null; then
   warn "Seeding the default admin user failed. You can re-run it manually with: cd $(pwd) && ${COMPOSE[*]} exec -T rackpath-api npm run seed"
 fi
 
