@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 
 const authRouter = require('./routes/auth');
+const projectsRouter = require('./routes/projects');
 const devicesRouter = require('./routes/devices');
 const portsRouter = require('./routes/ports');
 const racksRouter = require('./routes/racks');
@@ -13,6 +14,7 @@ const rackSlotsRouter = require('./routes/rackSlots');
 const topologyRouter = require('./routes/topology');
 const scanRouter = require('./routes/scan');
 const { requireAuth } = require('./auth/middleware');
+const { projectScope } = require('./middleware/projectScope');
 const { migrate } = require('./db/migrate');
 
 const app = express();
@@ -32,8 +34,10 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use(requireAuth);
+app.use(projectScope);
 
 app.use('/api/auth', authRouter);
+app.use('/api/projects', projectsRouter);
 app.use('/api/devices', devicesRouter);
 app.use('/api/ports', portsRouter);
 app.use('/api/racks', racksRouter);

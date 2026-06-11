@@ -160,6 +160,25 @@ changing it invalidates all existing sessions.
 A light/dark theme toggle is available in the navbar; the choice is remembered
 per-browser.
 
+## Projects
+
+Rackpath data is organized into **projects** — each project has its own
+isolated set of devices, ports, racks, topology, and scans. A project switcher
+in the nav bar (next to the logo) shows the current project and lets you switch
+between projects, create new ones, and rename or delete existing ones.
+
+- The **Default Project** (id 1) is created automatically and cannot be deleted.
+- The selected project is remembered in `localStorage`, so it survives a refresh;
+  if the stored project no longer exists, the app falls back to the first one.
+- Every API request carries the current project via the `X-Project-ID` header
+  (defaulting to the Default Project when absent), and switching projects
+  immediately re-fetches the current page's data for the new project.
+- Deleting a project permanently removes all of its devices, scans, topology,
+  and racks (`DELETE /api/projects/:id`, cascaded).
+
+Project CRUD lives at `GET/POST /api/projects` and `PATCH/DELETE
+/api/projects/:id`, all behind the same JWT auth as the rest of the API.
+
 ## Scanner capabilities
 
 Slitheris-style enhanced discovery runs in parallel per host:

@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import ProjectSwitcher from '../project/ProjectSwitcher';
 import './Navbar.css';
 
 const links = [
@@ -17,7 +18,10 @@ export default function Navbar() {
 
   return (
     <nav className="navbar">
-      <div className="navbar-brand">Rackpath</div>
+      <div className="navbar-left">
+        <div className="navbar-brand">Rackpath</div>
+        <ProjectSwitcher />
+      </div>
       <div className="navbar-links">
         {links.map((link) => (
           <NavLink

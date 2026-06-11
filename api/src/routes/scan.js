@@ -53,8 +53,10 @@ router.get('/', async (req, res, next) => {
               COUNT(r.id) AS host_count
        FROM scan_jobs j
        LEFT JOIN scan_results r ON r.scan_job_id = j.id
+       WHERE j.project_id = ?
        GROUP BY j.id
-       ORDER BY j.id DESC`
+       ORDER BY j.id DESC`,
+      [req.projectId]
     );
     res.json(rows);
   } catch (err) {
@@ -65,7 +67,10 @@ router.get('/', async (req, res, next) => {
 // GET /api/scans/:id - job status (without per-host rows)
 router.get('/:id', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM scan_jobs WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.query('SELECT * FROM scan_jobs WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     if (rows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
     res.json(rows[0]);
   } catch (err) {
@@ -76,7 +81,10 @@ router.get('/:id', async (req, res, next) => {
 // GET /api/scans/:id/results - all discovered host rows for a scan
 router.get('/:id/results', async (req, res, next) => {
   try {
-    const [jobRows] = await pool.query('SELECT id FROM scan_jobs WHERE id = ?', [req.params.id]);
+    const [jobRows] = await pool.query('SELECT id FROM scan_jobs WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
 
     const [rows] = await pool.query(
@@ -146,10 +154,15 @@ router.get('/:id/stream', async (req, res, next) => {
 // Defined before the /:id routes so "history" isn't captured as an id.
 router.delete('/history', async (req, res, next) => {
   try {
-    // scan_results has ON DELETE CASCADE, but delete it explicitly first so
-    // the operation is clear and robust regardless of FK settings.
-    await pool.query('DELETE FROM scan_results');
-    const [result] = await pool.query('DELETE FROM scan_jobs');
+    // Only clear the current project's scans. scan_results rows are removed via
+    // their scan_job_id (joined to scoped jobs) before the jobs themselves.
+    await pool.query(
+      `DELETE r FROM scan_results r
+       JOIN scan_jobs j ON j.id = r.scan_job_id
+       WHERE j.project_id = ?`,
+      [req.projectId]
+    );
+    const [result] = await pool.query('DELETE FROM scan_jobs WHERE project_id = ?', [req.projectId]);
     res.json({ ok: true, deleted: result.affectedRows });
   } catch (err) {
     next(err);
@@ -170,9 +183,9 @@ router.post('/', async (req, res, next) => {
       `${target_subnet} - ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`;
 
     const [result] = await pool.query(
-      `INSERT INTO scan_jobs (name, target_subnet, target_type, scan_profile, status, started_at)
-       VALUES (?, ?, ?, ?, 'pending', NOW())`,
-      [scanName, target_subnet, targetType, scanProfile]
+      `INSERT INTO scan_jobs (project_id, name, target_subnet, target_type, scan_profile, status, started_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
+      [req.projectId, scanName, target_subnet, targetType, scanProfile]
     );
     const jobId = result.insertId;
 
@@ -307,7 +320,10 @@ router.post('/:id/import', async (req, res, next) => {
     const jobId = req.params.id;
     const { devices } = req.body;
 
-    const [jobRows] = await conn.query('SELECT id FROM scan_jobs WHERE id = ?', [jobId]);
+    const [jobRows] = await conn.query('SELECT id FROM scan_jobs WHERE id = ? AND project_id = ?', [
+      jobId,
+      req.projectId,
+    ]);
     if (jobRows.length === 0) {
       conn.release();
       return res.status(404).json({ error: 'Scan job not found' });
@@ -326,9 +342,12 @@ router.post('/:id/import', async (req, res, next) => {
       const { ip, mac, hostname, type, device_type, snmp_community, ports } = device;
       const deviceType = type || device_type || null;
 
+      // Duplicate detection is scoped to the current project so the same IP
+      // can be imported into different projects.
       const [existing] = await conn.query(
-        'SELECT id FROM devices WHERE (ip IS NOT NULL AND ip = ?) OR (mac IS NOT NULL AND mac = ?) LIMIT 1',
-        [ip || null, mac || null]
+        `SELECT id FROM devices
+         WHERE project_id = ? AND ((ip IS NOT NULL AND ip = ?) OR (mac IS NOT NULL AND mac = ?)) LIMIT 1`,
+        [req.projectId, ip || null, mac || null]
       );
 
       if (existing.length > 0) {
@@ -339,9 +358,9 @@ router.post('/:id/import', async (req, res, next) => {
       }
 
       const [insertResult] = await conn.query(
-        `INSERT INTO devices (hostname, ip, mac, type, snmp_community)
-         VALUES (?, ?, ?, ?, ?)`,
-        [hostname || null, ip || null, mac || null, deviceType, snmp_community || null]
+        `INSERT INTO devices (project_id, hostname, ip, mac, type, snmp_community)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [req.projectId, hostname || null, ip || null, mac || null, deviceType, snmp_community || null]
       );
       const deviceId = insertResult.insertId;
 
@@ -349,9 +368,9 @@ router.post('/:id/import', async (req, res, next) => {
         for (const port of ports) {
           const { port_name, port_number, speed } = port;
           await conn.query(
-            `INSERT INTO ports (device_id, port_name, port_number, speed)
-             VALUES (?, ?, ?, ?)`,
-            [deviceId, port_name || null, port_number || null, speed || null]
+            `INSERT INTO ports (project_id, device_id, port_name, port_number, speed)
+             VALUES (?, ?, ?, ?, ?)`,
+            [req.projectId, deviceId, port_name || null, port_number || null, speed || null]
           );
         }
       }

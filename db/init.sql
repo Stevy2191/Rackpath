@@ -21,10 +21,28 @@ CREATE TABLE IF NOT EXISTS users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
+-- projects - top-level container. Every device/rack/scan/topology row belongs
+-- to exactly one project, and the data of different projects is isolated.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS projects (
+    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(255)        NOT NULL,
+    description TEXT                NULL,
+    created_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Seed a default project (id 1) that always exists and cannot be deleted.
+INSERT INTO projects (id, name, description)
+VALUES (1, 'Default Project', 'Default project')
+ON DUPLICATE KEY UPDATE id = id;
+
+-- ---------------------------------------------------------------------------
 -- devices
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS devices (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id      INT UNSIGNED        NOT NULL DEFAULT 1,
     hostname        VARCHAR(255)        NULL,
     ip              VARCHAR(45)         NULL,
     mac             VARCHAR(17)         NULL,
@@ -33,8 +51,12 @@ CREATE TABLE IF NOT EXISTS devices (
     notes           TEXT                NULL,
     created_at      TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_devices_ip (ip),
-    UNIQUE KEY uq_devices_mac (mac)
+    -- IP/MAC are unique per project so the same address can exist in two projects.
+    UNIQUE KEY uq_devices_project_ip (project_id, ip),
+    UNIQUE KEY uq_devices_project_mac (project_id, mac),
+    KEY idx_devices_project (project_id),
+    CONSTRAINT fk_devices_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
@@ -42,6 +64,7 @@ CREATE TABLE IF NOT EXISTS devices (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ports (
     id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id          INT UNSIGNED        NOT NULL DEFAULT 1,
     device_id           INT UNSIGNED        NOT NULL,
     port_name           VARCHAR(128)        NULL,
     port_number         INT                 NULL,
@@ -57,7 +80,10 @@ CREATE TABLE IF NOT EXISTS ports (
         FOREIGN KEY (connected_device_id) REFERENCES devices(id) ON DELETE SET NULL,
     CONSTRAINT fk_ports_connected_port
         FOREIGN KEY (connected_port_id) REFERENCES ports(id) ON DELETE SET NULL,
-    KEY idx_ports_device_id (device_id)
+    CONSTRAINT fk_ports_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    KEY idx_ports_device_id (device_id),
+    KEY idx_ports_project (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
@@ -65,12 +91,16 @@ CREATE TABLE IF NOT EXISTS ports (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS racks (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id  INT UNSIGNED        NOT NULL DEFAULT 1,
     name        VARCHAR(255)        NOT NULL,
     location    VARCHAR(255)        NULL,
     u_height    INT UNSIGNED        NOT NULL DEFAULT 42,
     notes       TEXT                NULL,
     created_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_racks_project (project_id),
+    CONSTRAINT fk_racks_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
@@ -78,6 +108,7 @@ CREATE TABLE IF NOT EXISTS racks (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS rack_slots (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id  INT UNSIGNED        NOT NULL DEFAULT 1,
     rack_id     INT UNSIGNED        NOT NULL,
     device_id   INT UNSIGNED        NULL,
     u_position  INT UNSIGNED        NOT NULL,
@@ -88,8 +119,11 @@ CREATE TABLE IF NOT EXISTS rack_slots (
         FOREIGN KEY (rack_id) REFERENCES racks(id) ON DELETE CASCADE,
     CONSTRAINT fk_rack_slots_device
         FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rack_slots_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     KEY idx_rack_slots_rack_id (rack_id),
-    KEY idx_rack_slots_device_id (device_id)
+    KEY idx_rack_slots_device_id (device_id),
+    KEY idx_rack_slots_project (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
@@ -97,6 +131,7 @@ CREATE TABLE IF NOT EXISTS rack_slots (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS topology_layout (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id  INT UNSIGNED        NOT NULL DEFAULT 1,
     device_id   INT UNSIGNED        NOT NULL,
     x           DOUBLE              NOT NULL DEFAULT 0,
     y           DOUBLE              NOT NULL DEFAULT 0,
@@ -106,7 +141,10 @@ CREATE TABLE IF NOT EXISTS topology_layout (
     updated_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_topology_layout_device
         FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
-    UNIQUE KEY uq_topology_layout_device (device_id)
+    CONSTRAINT fk_topology_layout_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_topology_layout_device (device_id),
+    KEY idx_topology_layout_project (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Upgrade path for existing deployments: add resizable-node columns to a
@@ -119,6 +157,7 @@ ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS height DOUBLE NOT NULL DEFA
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS scan_jobs (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id      INT UNSIGNED        NOT NULL DEFAULT 1,
     name            VARCHAR(255)        NULL,
     target_subnet   VARCHAR(255)        NOT NULL,
     target_type     VARCHAR(16)         NULL,
@@ -132,7 +171,10 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
     results         JSON                NULL,
     created_at      TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    KEY idx_scan_jobs_status (status)
+    KEY idx_scan_jobs_status (status),
+    KEY idx_scan_jobs_project (project_id),
+    CONSTRAINT fk_scan_jobs_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
@@ -176,6 +218,7 @@ ALTER TABLE scan_jobs MODIFY COLUMN target_subnet VARCHAR(255) NOT NULL;
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS topology_edges (
     id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id          INT UNSIGNED        NOT NULL DEFAULT 1,
     source_device_id    INT UNSIGNED        NOT NULL,
     target_device_id    INT UNSIGNED        NOT NULL,
     source_handle       VARCHAR(16)         NULL,
@@ -189,8 +232,11 @@ CREATE TABLE IF NOT EXISTS topology_edges (
         FOREIGN KEY (source_device_id) REFERENCES devices(id) ON DELETE CASCADE,
     CONSTRAINT fk_topology_edges_target
         FOREIGN KEY (target_device_id) REFERENCES devices(id) ON DELETE CASCADE,
+    CONSTRAINT fk_topology_edges_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     KEY idx_topology_edges_source (source_device_id),
-    KEY idx_topology_edges_target (target_device_id)
+    KEY idx_topology_edges_target (target_device_id),
+    KEY idx_topology_edges_project (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Upgrade path for existing deployments: add handle-tracking columns to a
@@ -205,6 +251,7 @@ ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS target_handle VARCHAR(16) NU
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS topology_zones (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id      INT UNSIGNED            NOT NULL DEFAULT 1,
     name            VARCHAR(255)            NOT NULL,
     border_style    ENUM('solid', 'dotted') NOT NULL DEFAULT 'solid',
     color           VARCHAR(32)             NOT NULL DEFAULT 'blue',
@@ -212,7 +259,10 @@ CREATE TABLE IF NOT EXISTS topology_zones (
     y               DOUBLE                  NOT NULL DEFAULT 0,
     width           DOUBLE                  NOT NULL DEFAULT 300,
     height          DOUBLE                  NOT NULL DEFAULT 200,
-    created_at      TIMESTAMP               NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at      TIMESTAMP               NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_topology_zones_project (project_id),
+    CONSTRAINT fk_topology_zones_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------

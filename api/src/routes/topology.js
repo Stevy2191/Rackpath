@@ -45,7 +45,9 @@ router.get('/', async (req, res, next) => {
     const [nodes] = await pool.query(
       `SELECT ${NODE_FIELDS}
        FROM devices d
-       INNER JOIN topology_layout tl ON tl.device_id = d.id`
+       INNER JOIN topology_layout tl ON tl.device_id = d.id
+       WHERE tl.project_id = ?`,
+      [req.projectId]
     );
 
     res.json({ nodes });
@@ -57,9 +59,9 @@ router.get('/', async (req, res, next) => {
 // DELETE /api/topology/all - clear the canvas (all placed nodes, edges, and zones)
 router.delete('/all', async (req, res, next) => {
   try {
-    await pool.query('DELETE FROM topology_edges');
-    await pool.query('DELETE FROM topology_zones');
-    await pool.query('DELETE FROM topology_layout');
+    await pool.query('DELETE FROM topology_edges WHERE project_id = ?', [req.projectId]);
+    await pool.query('DELETE FROM topology_zones WHERE project_id = ?', [req.projectId]);
+    await pool.query('DELETE FROM topology_layout WHERE project_id = ?', [req.projectId]);
     res.status(204).send();
   } catch (err) {
     if (isTableMissing(err)) return res.status(204).send();
@@ -81,17 +83,17 @@ router.patch('/layout', async (req, res, next) => {
 
       if (width !== undefined && height !== undefined) {
         await pool.query(
-          `INSERT INTO topology_layout (device_id, x, y, width, height)
-           VALUES (?, ?, ?, ?, ?)
+          `INSERT INTO topology_layout (project_id, device_id, x, y, width, height)
+           VALUES (?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y), width = VALUES(width), height = VALUES(height)`,
-          [device_id, x, y, width, height]
+          [req.projectId, device_id, x, y, width, height]
         );
       } else {
         await pool.query(
-          `INSERT INTO topology_layout (device_id, x, y)
-           VALUES (?, ?, ?)
+          `INSERT INTO topology_layout (project_id, device_id, x, y)
+           VALUES (?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y)`,
-          [device_id, x, y]
+          [req.projectId, device_id, x, y]
         );
       }
     }
@@ -108,14 +110,14 @@ router.post('/nodes', async (req, res, next) => {
     const { hostname, ip, type, x, y } = req.body;
 
     const [result] = await pool.query(
-      `INSERT INTO devices (hostname, ip, type) VALUES (?, ?, ?)`,
-      [hostname || null, ip || null, type || null]
+      `INSERT INTO devices (project_id, hostname, ip, type) VALUES (?, ?, ?, ?)`,
+      [req.projectId, hostname || null, ip || null, type || null]
     );
     const deviceId = result.insertId;
 
     await pool.query(
-      `INSERT INTO topology_layout (device_id, x, y) VALUES (?, ?, ?)`,
-      [deviceId, x || 0, y || 0]
+      `INSERT INTO topology_layout (project_id, device_id, x, y) VALUES (?, ?, ?, ?)`,
+      [req.projectId, deviceId, x || 0, y || 0]
     );
 
     const [rows] = await pool.query(
@@ -138,11 +140,14 @@ router.delete('/nodes/:id', async (req, res, next) => {
     const deviceId = req.params.id;
 
     await pool.query(
-      'DELETE FROM topology_edges WHERE source_device_id = ? OR target_device_id = ?',
-      [deviceId, deviceId]
+      'DELETE FROM topology_edges WHERE (source_device_id = ? OR target_device_id = ?) AND project_id = ?',
+      [deviceId, deviceId, req.projectId]
     );
 
-    await pool.query('DELETE FROM topology_layout WHERE device_id = ?', [deviceId]);
+    await pool.query('DELETE FROM topology_layout WHERE device_id = ? AND project_id = ?', [
+      deviceId,
+      req.projectId,
+    ]);
 
     res.status(204).send();
   } catch (err) {
@@ -153,7 +158,7 @@ router.delete('/nodes/:id', async (req, res, next) => {
 // GET /api/topology/edges
 router.get('/edges', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM topology_edges');
+    const [rows] = await pool.query('SELECT * FROM topology_edges WHERE project_id = ?', [req.projectId]);
     res.json(rows);
   } catch (err) {
     if (isTableMissing(err)) return res.json([]);
@@ -171,9 +176,10 @@ router.post('/edges', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO topology_edges (source_device_id, target_device_id, source_handle, target_handle, label, speed, cable_type, vlan)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO topology_edges (project_id, source_device_id, target_device_id, source_handle, target_handle, label, speed, cable_type, vlan)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        req.projectId,
         source_device_id,
         target_device_id,
         source_handle || null,
@@ -219,8 +225,11 @@ router.patch('/edges/:id', async (req, res, next) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    values.push(req.params.id);
-    const [result] = await pool.query(`UPDATE topology_edges SET ${updates.join(', ')} WHERE id = ?`, values);
+    values.push(req.params.id, req.projectId);
+    const [result] = await pool.query(
+      `UPDATE topology_edges SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`,
+      values
+    );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Edge not found' });
 
     const [rows] = await pool.query('SELECT * FROM topology_edges WHERE id = ?', [req.params.id]);
@@ -235,7 +244,10 @@ router.delete('/edges/:id', async (req, res, next) => {
   try {
     // Idempotent: an edge may already have been removed by a cascading
     // node deletion, in which case this is a no-op rather than an error.
-    await pool.query('DELETE FROM topology_edges WHERE id = ?', [req.params.id]);
+    await pool.query('DELETE FROM topology_edges WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -245,7 +257,7 @@ router.delete('/edges/:id', async (req, res, next) => {
 // GET /api/topology/zones
 router.get('/zones', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM topology_zones');
+    const [rows] = await pool.query('SELECT * FROM topology_zones WHERE project_id = ?', [req.projectId]);
     res.json(rows);
   } catch (err) {
     if (isTableMissing(err)) return res.json([]);
@@ -260,9 +272,10 @@ router.post('/zones', async (req, res, next) => {
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const [result] = await pool.query(
-      `INSERT INTO topology_zones (name, border_style, color, x, y, width, height)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO topology_zones (project_id, name, border_style, color, x, y, width, height)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        req.projectId,
         name,
         border_style === 'dotted' ? 'dotted' : 'solid',
         color || 'blue',
@@ -298,8 +311,11 @@ router.patch('/zones/:id', async (req, res, next) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    values.push(req.params.id);
-    const [result] = await pool.query(`UPDATE topology_zones SET ${updates.join(', ')} WHERE id = ?`, values);
+    values.push(req.params.id, req.projectId);
+    const [result] = await pool.query(
+      `UPDATE topology_zones SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`,
+      values
+    );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Zone not found' });
 
     const [rows] = await pool.query('SELECT * FROM topology_zones WHERE id = ?', [req.params.id]);
@@ -312,7 +328,10 @@ router.patch('/zones/:id', async (req, res, next) => {
 // DELETE /api/topology/zones/:id
 router.delete('/zones/:id', async (req, res, next) => {
   try {
-    const [result] = await pool.query('DELETE FROM topology_zones WHERE id = ?', [req.params.id]);
+    const [result] = await pool.query('DELETE FROM topology_zones WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Zone not found' });
     res.status(204).send();
   } catch (err) {

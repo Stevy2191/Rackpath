@@ -3,14 +3,15 @@ const pool = require('../db/pool');
 
 const router = express.Router();
 
-// GET /api/ports?device_id=123 - list ports, optionally filtered by device
+// GET /api/ports?device_id=123 - list ports in the current project, optionally
+// filtered by device
 router.get('/', async (req, res, next) => {
   try {
     const { device_id } = req.query;
-    let query = 'SELECT * FROM ports';
-    const params = [];
+    let query = 'SELECT * FROM ports WHERE project_id = ?';
+    const params = [req.projectId];
     if (device_id) {
-      query += ' WHERE device_id = ?';
+      query += ' AND device_id = ?';
       params.push(device_id);
     }
     query += ' ORDER BY port_number, port_name';
@@ -24,7 +25,10 @@ router.get('/', async (req, res, next) => {
 // GET /api/ports/:id
 router.get('/:id', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM ports WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.query('SELECT * FROM ports WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     if (rows.length === 0) return res.status(404).json({ error: 'Port not found' });
     res.json(rows[0]);
   } catch (err) {
@@ -44,9 +48,9 @@ router.post('/', async (req, res, next) => {
 
     const [result] = await pool.query(
       `INSERT INTO ports
-        (device_id, port_name, port_number, cable_type, connected_device_id, connected_port_id, speed)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [device_id, port_name || null, port_number || null, cable_type || null,
+        (project_id, device_id, port_name, port_number, cable_type, connected_device_id, connected_port_id, speed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.projectId, device_id, port_name || null, port_number || null, cable_type || null,
         connected_device_id || null, connected_port_id || null, speed || null]
     );
     const [rows] = await pool.query('SELECT * FROM ports WHERE id = ?', [result.insertId]);
@@ -68,9 +72,9 @@ router.put('/:id', async (req, res, next) => {
       `UPDATE ports
        SET port_name = ?, port_number = ?, cable_type = ?,
            connected_device_id = ?, connected_port_id = ?, speed = ?
-       WHERE id = ?`,
+       WHERE id = ? AND project_id = ?`,
       [port_name || null, port_number || null, cable_type || null,
-        connected_device_id || null, connected_port_id || null, speed || null, req.params.id]
+        connected_device_id || null, connected_port_id || null, speed || null, req.params.id, req.projectId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Port not found' });
     const [rows] = await pool.query('SELECT * FROM ports WHERE id = ?', [req.params.id]);
@@ -83,7 +87,10 @@ router.put('/:id', async (req, res, next) => {
 // DELETE /api/ports/:id
 router.delete('/:id', async (req, res, next) => {
   try {
-    const [result] = await pool.query('DELETE FROM ports WHERE id = ?', [req.params.id]);
+    const [result] = await pool.query('DELETE FROM ports WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Port not found' });
     res.status(204).send();
   } catch (err) {

@@ -9,6 +9,7 @@ import ScanPage from './pages/Scan';
 import LoginPage from './pages/Login';
 import ChangePasswordPage from './pages/ChangePassword';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { ProjectProvider, useProject } from './project/ProjectContext';
 import RequireAuth from './auth/RequireAuth';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -16,6 +17,7 @@ import './App.css';
 
 function AppShell() {
   const { user, loading } = useAuth();
+  const { currentProjectId } = useProject();
 
   if (loading) {
     return <div className="page-status">Loading...</div>;
@@ -25,7 +27,9 @@ function AppShell() {
     <div className="app">
       {user && <Navbar />}
       <main className="app-content">
-        <Routes>
+        {/* Re-mount the routed pages when the project changes so every page
+            re-fetches its data for the newly selected project. */}
+        <Routes key={currentProjectId ?? 'none'}>
           <Route path="/login" element={<LoginPage />} />
           <Route
             path="/change-password"
@@ -89,7 +93,9 @@ export default function App() {
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-          <AppShell />
+          <ProjectProvider>
+            <AppShell />
+          </ProjectProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

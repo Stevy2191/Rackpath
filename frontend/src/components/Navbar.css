@@ -7,6 +7,12 @@
   color: #fff;
 }
 
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .navbar-brand {
   font-weight: 700;
   font-size: 1.25rem;

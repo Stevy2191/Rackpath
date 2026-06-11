@@ -1,0 +1,213 @@
+.project-switcher {
+  position: relative;
+  margin-left: 0.5rem;
+}
+
+.project-switcher-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  max-width: 220px;
+}
+
+.project-switcher-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-switcher-chevron {
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+}
+
+.project-switcher-chevron.open {
+  transform: rotate(180deg);
+}
+
+.project-switcher-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  min-width: 240px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.project-switcher-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+
+.project-switcher-item {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.project-switcher-item.active {
+  background: var(--color-bg-subtle);
+}
+
+.project-switcher-item-name {
+  flex: 1;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-switcher-item.active .project-switcher-item-name {
+  font-weight: 600;
+}
+
+.project-switcher-item-settings {
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+}
+
+.project-switcher-item-settings:hover {
+  color: var(--color-text);
+  background: var(--color-border);
+}
+
+.project-switcher-empty {
+  padding: 0.5rem 0.6rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.project-switcher-new {
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border: none;
+  border-top: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-accent);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.project-switcher-new:hover {
+  background: var(--color-bg-subtle);
+}
+
+/* --- Modal -------------------------------------------------------------- */
+.project-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.project-modal {
+  width: 420px;
+  max-width: calc(100vw - 2rem);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+}
+
+.project-modal h3 {
+  margin: 0 0 1rem;
+}
+
+.project-modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.85rem;
+}
+
+.project-modal input,
+.project-modal textarea {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.project-modal-error {
+  color: #b91c1c;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.project-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.project-modal-actions-right {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.project-modal-actions button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.project-modal-save {
+  background: var(--color-accent) !important;
+  color: var(--color-accent-text) !important;
+  border-color: var(--color-accent) !important;
+}
+
+.project-modal-delete {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border-color: #fca5a5 !important;
+}
+
+.project-modal-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
