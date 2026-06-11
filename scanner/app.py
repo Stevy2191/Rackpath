@@ -44,6 +44,32 @@ def health():
     return jsonify({"status": "ok"})
 
 
+def _resolve_options(options):
+    """Normalize the scan options payload into a dict of concrete flags.
+
+    Missing options default to a Standard-style scan so older callers that
+    don't send an options object keep their previous behaviour."""
+    o = options or {}
+
+    def flag(key, default):
+        value = o.get(key)
+        return default if value is None else bool(value)
+
+    return {
+        'icmp_ping': flag('icmp_ping', True),
+        'tcp_ping': flag('tcp_ping', True),
+        'udp_ping': flag('udp_ping', False),
+        'port_scan': flag('port_scan', True),
+        'port_range': o.get('port_range') or 'top100',
+        'os_detection': flag('os_detection', True),
+        'service_detection': flag('service_detection', False),
+        'snmp': flag('snmp', True),
+        'netbios': flag('netbios', True),
+        'mdns': flag('mdns', True),
+        'mac_vendor': flag('mac_vendor', True),
+    }
+
+
 @app.route('/scan', methods=['POST'])
 def start_scan():
     data = request.get_json(force=True, silent=True) or {}
@@ -54,6 +80,7 @@ def start_scan():
     callback_url = data.get('callback_url')
     host_callback_url = data.get('host_callback_url')
     progress_callback_url = data.get('progress_callback_url')
+    options = _resolve_options(data.get('options'))
 
     if not target_subnet:
         return jsonify({"error": "target_subnet is required"}), 400
@@ -63,7 +90,7 @@ def start_scan():
     thread = threading.Thread(
         target=_run_scan,
         args=(job_id, target_subnet, snmp_community, callback_url,
-              host_callback_url, progress_callback_url),
+              host_callback_url, progress_callback_url, options),
         daemon=True,
     )
     thread.start()
@@ -90,10 +117,21 @@ def _derive_callbacks(callback_url, host_callback_url, progress_callback_url):
     return host_callback_url, progress_callback_url
 
 
-def _enrich_host(ip, snmp_community, local_arp, mdns_map):
-    """Run the full enrichment pipeline for a single live host and return the
-    flattened result row plus the extra detail used for inventory import."""
-    nmap_result = nmap_scan.scan_host(ip)
+def _enrich_host(ip, snmp_community, local_arp, mdns_map, opts):
+    """Run the enrichment pipeline for a single live host, honouring `opts` so
+    disabled steps are skipped. Returns the flattened result row plus the extra
+    detail used for inventory import."""
+    need_nmap = opts['port_scan'] or opts['os_detection'] or opts['service_detection']
+    if need_nmap:
+        nmap_result = nmap_scan.scan_host(
+            ip,
+            port_scan=opts['port_scan'],
+            port_range=opts['port_range'],
+            os_detection=opts['os_detection'],
+            service_detection=opts['service_detection'],
+        )
+    else:
+        nmap_result = {"ports": [], "hostname": None, "os_guess": None}
 
     # MAC: prefer the kernel ARP cache, fall back to an active ARP probe.
     mac = local_arp.get(ip)
@@ -103,22 +141,29 @@ def _enrich_host(ip, snmp_community, local_arp, mdns_map):
             mac = probed.get(ip)
         except Exception:
             mac = None
-    mac_vendor = oui_lookup.lookup(mac)
+    mac_vendor = oui_lookup.lookup(mac) if opts['mac_vendor'] else None
 
-    nb = netbios.query(ip)
-    mdns_entry = mdns_map.get(ip, {})
+    nb = netbios.query(ip) if opts['netbios'] else {"netbios_name": None, "workgroup": None}
+
+    mdns_entry = mdns_map.get(ip, {}) if opts['mdns'] else {}
     mdns_services = mdns_entry.get("services", [])
 
-    snmp_info = snmp_discovery.get_system_info(ip, snmp_community)
-    interfaces = snmp_discovery.get_interfaces(ip, snmp_community) if snmp_info else []
-    neighbors = lldp_discovery.get_neighbors(ip, snmp_community) if snmp_info else []
-    snmp_arp = snmp_discovery.get_arp_table(ip, snmp_community) if snmp_info else {}
+    if opts['snmp']:
+        snmp_info = snmp_discovery.get_system_info(ip, snmp_community)
+        interfaces = snmp_discovery.get_interfaces(ip, snmp_community) if snmp_info else []
+        neighbors = lldp_discovery.get_neighbors(ip, snmp_community) if snmp_info else []
+        snmp_arp = snmp_discovery.get_arp_table(ip, snmp_community) if snmp_info else {}
+    else:
+        snmp_info = {}
+        interfaces = []
+        neighbors = []
+        snmp_arp = {}
 
     open_ports = sorted(
         p["port_number"]
         for p in nmap_result.get("ports", [])
         if p.get("state") == "open" and p.get("protocol") == "tcp"
-    )
+    ) if opts['port_scan'] else []
 
     hostname = (
         (snmp_info.get("sysName") if snmp_info else None)
@@ -168,27 +213,38 @@ def _enrich_host(ip, snmp_community, local_arp, mdns_map):
     return host_row
 
 
+def _expand_targets(target_subnet):
+    """Return the list of host IPs to scan. A bare address (no CIDR) is treated
+    as a single host; anything with a prefix is expanded to its hosts."""
+    target = target_subnet.strip()
+    if '/' not in target:
+        return [target]
+    network = ipaddress.ip_network(target, strict=False)
+    return [str(ip) for ip in network.hosts()]
+
+
 def _run_scan(job_id, target_subnet, snmp_community, callback_url,
-              host_callback_url, progress_callback_url):
+              host_callback_url, progress_callback_url, opts=None):
     host_callback_url, progress_callback_url = _derive_callbacks(
         callback_url, host_callback_url, progress_callback_url
     )
+    opts = opts or _resolve_options(None)
 
     try:
-        network = ipaddress.ip_network(target_subnet, strict=False)
-        all_hosts = [str(ip) for ip in network.hosts()]
+        all_hosts = _expand_targets(target_subnet)
         total = len(all_hosts)
 
-        # Kick off a one-shot mDNS browse for the whole link in the background;
-        # results are collected by the time enrichment needs them.
+        # Kick off a one-shot mDNS browse for the whole link in the background
+        # (only when enabled); results are collected before enrichment reads it.
         mdns_map = {}
         mdns_holder = {}
+        mdns_thread = None
+        if opts['mdns']:
+            def _mdns_worker():
+                mdns_holder["map"] = mdns_discovery.discover(timeout=4.0)
 
-        def _mdns_worker():
-            mdns_holder["map"] = mdns_discovery.discover(timeout=4.0)
-
-        mdns_thread = threading.Thread(target=_mdns_worker, daemon=True)
-        mdns_thread.start()
+            mdns_thread = threading.Thread(target=_mdns_worker, daemon=True)
+            mdns_thread.start()
 
         jobs[job_id] = {
             "status": "running", "target_subnet": target_subnet,
@@ -197,29 +253,43 @@ def _run_scan(job_id, target_subnet, snmp_community, callback_url,
         _post_callback(progress_callback_url, {"progress_current": 0, "progress_total": total})
 
         # --- Phase 1: multi-method liveness sweep over the whole subnet ------
-        live_hosts = []
-        scanned = 0
-        with concurrent.futures.ThreadPoolExecutor(max_workers=PING_WORKERS) as executor:
-            future_to_ip = {executor.submit(multi_ping.is_up, ip): ip for ip in all_hosts}
-            for future in concurrent.futures.as_completed(future_to_ip):
-                ip = future_to_ip[future]
-                scanned += 1
-                try:
-                    if future.result():
-                        live_hosts.append(ip)
-                except Exception:
-                    pass
-                jobs[job_id]["progress_current"] = scanned
-                # Throttle progress posts a little so we don't flood the API.
-                if scanned % 8 == 0 or scanned == total:
-                    _post_callback(progress_callback_url,
-                                   {"progress_current": scanned, "progress_total": total})
+        use_ping = opts['icmp_ping'] or opts['tcp_ping'] or opts['udp_ping']
+        if not use_ping:
+            # No liveness method enabled - treat every target as a host to scan.
+            live_hosts = list(all_hosts)
+            _post_callback(progress_callback_url,
+                           {"progress_current": total, "progress_total": total})
+        else:
+            live_hosts = []
+            scanned = 0
+            with concurrent.futures.ThreadPoolExecutor(max_workers=PING_WORKERS) as executor:
+                future_to_ip = {
+                    executor.submit(
+                        multi_ping.is_up, ip,
+                        icmp=opts['icmp_ping'], tcp=opts['tcp_ping'], udp=opts['udp_ping'],
+                    ): ip
+                    for ip in all_hosts
+                }
+                for future in concurrent.futures.as_completed(future_to_ip):
+                    ip = future_to_ip[future]
+                    scanned += 1
+                    try:
+                        if future.result():
+                            live_hosts.append(ip)
+                    except Exception:
+                        pass
+                    jobs[job_id]["progress_current"] = scanned
+                    # Throttle progress posts a little so we don't flood the API.
+                    if scanned % 8 == 0 or scanned == total:
+                        _post_callback(progress_callback_url,
+                                       {"progress_current": scanned, "progress_total": total})
 
         live_hosts.sort(key=lambda ip: tuple(int(p) for p in ip.split('.')))
 
         # Make sure the mDNS browse has finished before enrichment reads it.
-        mdns_thread.join(timeout=6.0)
-        mdns_map = mdns_holder.get("map", {})
+        if mdns_thread is not None:
+            mdns_thread.join(timeout=6.0)
+            mdns_map = mdns_holder.get("map", {})
 
         local_arp = arp_table.read_arp_table()
 
@@ -227,7 +297,7 @@ def _run_scan(job_id, target_subnet, snmp_community, callback_url,
         devices = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as executor:
             future_to_ip = {
-                executor.submit(_enrich_host, ip, snmp_community, local_arp, mdns_map): ip
+                executor.submit(_enrich_host, ip, snmp_community, local_arp, mdns_map, opts): ip
                 for ip in live_hosts
             }
             for future in concurrent.futures.as_completed(future_to_ip):

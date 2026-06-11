@@ -178,6 +178,20 @@ Slitheris-style enhanced discovery runs in parallel per host:
 - Device-type inference (Router, Switch, Firewall, Server, Windows PC, Mac,
   Linux, Printer, AP, IP Camera, IoT, NAS, Unknown) from the combined signals
 
+Each scan can target a whole subnet (CIDR) or a single IP, and an expandable
+**Scan Options** panel offers profiles that toggle which steps run:
+
+- **Quick** — ping sweep only (fast, no port scan)
+- **Standard** (default) — ping + top 100 ports + OS detection + NetBIOS + SNMP
+- **Deep** — ping + all ports + OS + service-version detection + NetBIOS + SNMP + mDNS
+- **Port Scan Only** — port scan up hosts, skip the other discovery steps
+- **Custom** — individually toggle ICMP/TCP ping, port scan (with a port-range
+  field), OS detection, service-version detection, SNMP walk (with a community
+  string), NetBIOS/SMB, mDNS, and MAC vendor lookup
+
+The selected options are sent with the scan job and the scanner skips any step
+that isn't enabled.
+
 As each host is fully enriched the scanner POSTs it to the API immediately, and
 the API streams it to the browser over **Server-Sent Events**
 (`GET /api/scans/:id/stream`) so the results table populates row by row in real
@@ -185,8 +199,9 @@ time. A progress bar tracks hosts scanned vs. total hosts in the subnet, and
 live counters show found / up / down.
 
 Past scans are listed by name and date (`GET /api/scans`); selecting one
-reloads its stored results (`GET /api/scans/:id/results`). Results can be
-exported to PDF or CSV from the `/scan` page.
+reloads its stored results (`GET /api/scans/:id/results`), and **Clear History**
+(`DELETE /api/scans/history`) removes all scan jobs and their results. Results
+can be exported to PDF or CSV from the `/scan` page.
 
 Results are returned as structured JSON and stored on the scan job, but
 devices found during a scan are **not** added to your inventory

@@ -21,6 +21,77 @@ const COLUMNS = [
 
 const ACTIVE_STATUSES = ['pending', 'running'];
 
+const DEFAULT_PORT_RANGE = '1-1024';
+
+// Scan profile presets. Each resolves to the concrete flags the scanner reads.
+// port_range may be 'top100', 'all', or an explicit range string.
+const PROFILE_PRESETS = {
+  quick: {
+    icmp_ping: true, tcp_ping: true, port_scan: false, port_range: null,
+    os_detection: false, service_detection: false, snmp: false,
+    netbios: false, mdns: false, mac_vendor: true,
+  },
+  standard: {
+    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'top100',
+    os_detection: true, service_detection: false, snmp: true,
+    netbios: true, mdns: false, mac_vendor: true,
+  },
+  deep: {
+    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'all',
+    os_detection: true, service_detection: true, snmp: true,
+    netbios: true, mdns: true, mac_vendor: true,
+  },
+  ports: {
+    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'top100',
+    os_detection: false, service_detection: false, snmp: false,
+    netbios: false, mdns: false, mac_vendor: true,
+  },
+};
+
+const PROFILE_LABELS = [
+  { value: 'quick', label: 'Quick Scan — ping sweep only' },
+  { value: 'standard', label: 'Standard Scan — ping + top 100 ports + OS + NetBIOS + SNMP' },
+  { value: 'deep', label: 'Deep Scan — all ports + OS + version + NetBIOS + SNMP + mDNS' },
+  { value: 'ports', label: 'Port Scan Only — ports on up hosts, skip discovery' },
+  { value: 'custom', label: 'Custom — choose individual options' },
+];
+
+const DEFAULT_CUSTOM = {
+  icmp_ping: true,
+  tcp_ping: true,
+  port_scan: true,
+  port_range: DEFAULT_PORT_RANGE,
+  os_detection: true,
+  service_detection: false,
+  snmp: true,
+  snmp_community: '',
+  netbios: true,
+  mdns: false,
+  mac_vendor: true,
+};
+
+// Browser download helper: append the anchor to the DOM (required by Firefox),
+// click it, then clean up. Revoking the object URL is deferred so the download
+// isn't cancelled before it starts.
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
+// Build a safe filename slug from a scan name.
+function scanSlug(name) {
+  return (name || 'scan').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'scan';
+}
+
 function ipToNum(ip) {
   if (!ip) return -1;
   return ip.split('.').reduce((acc, part) => acc * 256 + (parseInt(part, 10) || 0), 0);
@@ -93,7 +164,39 @@ export default function ScanPage() {
   const [sort, setSort] = useState({ key: 'ip', dir: 'asc' });
   const [exportOpen, setExportOpen] = useState(false);
 
+  // Scan options
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [targetType, setTargetType] = useState('subnet');
+  const [profile, setProfile] = useState('standard');
+  const [custom, setCustom] = useState(DEFAULT_CUSTOM);
+  const [clearing, setClearing] = useState(false);
+
   const esRef = useRef(null);
+
+  const setCustomField = (field, value) =>
+    setCustom((prev) => ({ ...prev, [field]: value }));
+
+  // Resolve the current profile + target type into the options payload the
+  // scanner consumes.
+  const buildOptions = () => {
+    if (profile === 'custom') {
+      return {
+        profile: 'custom',
+        target_type: targetType,
+        icmp_ping: custom.icmp_ping,
+        tcp_ping: custom.tcp_ping,
+        port_scan: custom.port_scan,
+        port_range: custom.port_scan ? custom.port_range || DEFAULT_PORT_RANGE : null,
+        os_detection: custom.os_detection,
+        service_detection: custom.service_detection,
+        snmp: custom.snmp,
+        netbios: custom.netbios,
+        mdns: custom.mdns,
+        mac_vendor: custom.mac_vendor,
+      };
+    }
+    return { profile, target_type: targetType, ...PROFILE_PRESETS[profile] };
+  };
 
   const loadJobs = useCallback(() => {
     client.get('/scans').then((res) => setJobs(res.data)).catch((err) => setError(err.message));
@@ -188,9 +291,18 @@ export default function ScanPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const options = buildOptions();
+      // Custom profile with SNMP enabled may carry a community string override.
+      const snmpCommunity =
+        profile === 'custom' && custom.snmp && custom.snmp_community.trim()
+          ? custom.snmp_community.trim()
+          : undefined;
+
       const res = await client.post('/scans', {
-        target_subnet: subnet,
+        target_subnet: subnet.trim(),
         name: scanName.trim() || undefined,
+        snmp_community: snmpCommunity,
+        options,
       });
       setActiveJob(res.data);
       setStatus(res.data.status);
@@ -202,6 +314,28 @@ export default function ScanPage() {
       setError(err.response?.data?.error || err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Delete all scan history? This cannot be undone.')) return;
+    setClearing(true);
+    setError(null);
+    try {
+      await client.delete('/scans/history');
+      closeStream();
+      setJobs([]);
+      setActiveJob(null);
+      setRows([]);
+      setStatus(null);
+      setProgress({ current: 0, total: 0 });
+      setSelected(new Set());
+      setImportMessage(null);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -299,41 +433,47 @@ export default function ScanPage() {
 
   const handleExportCsv = () => {
     setExportOpen(false);
+    if (sortedRows.length === 0) return;
     const header = COLUMNS.map((c) => c.label);
     const lines = [header, ...exportRows()]
       .map((cols) => cols.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const blob = new Blob([lines], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${(activeJob?.name || 'scan').replace(/[^\w.-]+/g, '_')}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+      .join('\r\n');
+    // Prepend a BOM so Excel reads UTF-8 correctly.
+    const blob = new Blob(['﻿', lines], { type: 'text/csv;charset=utf-8;' });
+    downloadBlob(blob, `rackpath-scan-${scanSlug(activeJob?.name)}.csv`);
   };
 
   const handleExportPdf = () => {
     setExportOpen(false);
-    const doc = new jsPDF({ orientation: 'landscape' });
-    doc.setFontSize(16);
-    doc.text('Rackpath Scan Report', 14, 16);
-    doc.setFontSize(10);
-    const meta = [
-      `Name: ${activeJob?.name || '-'}`,
-      `Subnet: ${activeJob?.target_subnet || subnet}`,
-      `Date: ${formatDate(activeJob?.completed_at || activeJob?.started_at || Date.now())}`,
-      `Hosts found: ${sortedRows.length}`,
-    ];
-    meta.forEach((line, i) => doc.text(line, 14, 24 + i * 5));
+    if (sortedRows.length === 0) return;
+    try {
+      const doc = new jsPDF({ orientation: 'landscape' });
+      doc.setFontSize(16);
+      doc.text('Rackpath Scan Report', 14, 16);
+      doc.setFontSize(10);
+      const meta = [
+        `Name: ${activeJob?.name || '-'}`,
+        `Subnet: ${activeJob?.target_subnet || subnet}`,
+        `Date: ${formatDate(activeJob?.completed_at || activeJob?.started_at || Date.now())}`,
+        `Hosts found: ${sortedRows.length}`,
+      ];
+      meta.forEach((line, i) => doc.text(line, 14, 24 + i * 5));
 
-    autoTable(doc, {
-      head: [COLUMNS.map((c) => c.label)],
-      body: exportRows(),
-      startY: 24 + meta.length * 5 + 4,
-      styles: { fontSize: 7, cellPadding: 1.5 },
-      headStyles: { fillColor: [37, 99, 235] },
-    });
+      autoTable(doc, {
+        head: [COLUMNS.map((c) => c.label)],
+        body: exportRows(),
+        startY: 24 + meta.length * 5 + 4,
+        styles: { fontSize: 7, cellPadding: 1.5 },
+        headStyles: { fillColor: [37, 99, 235] },
+      });
 
-    doc.save(`${(activeJob?.name || 'scan').replace(/[^\w.-]+/g, '_')}.pdf`);
+      // Generate a blob and use the shared downloader for reliable downloads
+      // across browsers (more robust than jsPDF's internal save()).
+      const blob = doc.output('blob');
+      downloadBlob(blob, `rackpath-scan-${scanSlug(activeJob?.name)}.pdf`);
+    } catch (err) {
+      setError(`PDF export failed: ${err.message}`);
+    }
   };
 
   return (
@@ -343,7 +483,7 @@ export default function ScanPage() {
       <div className="scan-layout">
         <aside className="scan-history">
           <h3>Scan History</h3>
-          <ul>
+          <ul className="scan-history-list">
             {jobs.map((job) => (
               <li key={job.id}>
                 <button
@@ -360,6 +500,14 @@ export default function ScanPage() {
             ))}
             {jobs.length === 0 && <li className="scan-history-empty">No scans yet.</li>}
           </ul>
+          <button
+            type="button"
+            className="scan-clear-history"
+            onClick={handleClearHistory}
+            disabled={clearing || jobs.length === 0}
+          >
+            {clearing ? 'Clearing...' : 'Clear History'}
+          </button>
         </aside>
 
         <section className="scan-main">
@@ -367,11 +515,11 @@ export default function ScanPage() {
             <h2>Scan Configuration</h2>
             <div className="scan-config-fields">
               <label>
-                Subnet
+                {targetType === 'single' ? 'IP Address' : 'Subnet'}
                 <input
                   value={subnet}
                   onChange={(e) => setSubnet(e.target.value)}
-                  placeholder="e.g. 10.1.20.0/24"
+                  placeholder={targetType === 'single' ? 'e.g. 10.1.20.5' : 'e.g. 10.1.20.0/24'}
                   required
                 />
               </label>
@@ -387,6 +535,149 @@ export default function ScanPage() {
                 {submitting ? 'Starting...' : 'Start Scan'}
               </button>
             </div>
+
+            <button
+              type="button"
+              className="scan-options-toggle"
+              aria-expanded={optionsOpen}
+              onClick={() => setOptionsOpen((v) => !v)}
+            >
+              {optionsOpen ? '▾' : '▸'} Scan Options
+            </button>
+
+            {optionsOpen && (
+              <div className="scan-options">
+                <div className="scan-options-row">
+                  <span className="scan-options-heading">Target type</span>
+                  <label className="scan-radio">
+                    <input
+                      type="radio"
+                      name="target_type"
+                      checked={targetType === 'subnet'}
+                      onChange={() => setTargetType('subnet')}
+                    />
+                    Subnet
+                  </label>
+                  <label className="scan-radio">
+                    <input
+                      type="radio"
+                      name="target_type"
+                      checked={targetType === 'single'}
+                      onChange={() => setTargetType('single')}
+                    />
+                    Single IP
+                  </label>
+                </div>
+
+                <div className="scan-options-row">
+                  <label className="scan-options-field">
+                    <span className="scan-options-heading">Scan profile</span>
+                    <select value={profile} onChange={(e) => setProfile(e.target.value)}>
+                      {PROFILE_LABELS.map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {profile === 'custom' && (
+                  <div className="scan-custom-options">
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.icmp_ping}
+                        onChange={(e) => setCustomField('icmp_ping', e.target.checked)}
+                      />
+                      ICMP Ping
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.tcp_ping}
+                        onChange={(e) => setCustomField('tcp_ping', e.target.checked)}
+                      />
+                      TCP Ping (ports 22, 80, 443)
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.port_scan}
+                        onChange={(e) => setCustomField('port_scan', e.target.checked)}
+                      />
+                      Port Scan
+                      <input
+                        type="text"
+                        className="scan-inline-input"
+                        value={custom.port_range}
+                        onChange={(e) => setCustomField('port_range', e.target.value)}
+                        disabled={!custom.port_scan}
+                        placeholder={DEFAULT_PORT_RANGE}
+                        aria-label="Port range"
+                      />
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.os_detection}
+                        onChange={(e) => setCustomField('os_detection', e.target.checked)}
+                      />
+                      OS Detection
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.service_detection}
+                        onChange={(e) => setCustomField('service_detection', e.target.checked)}
+                      />
+                      Service Version Detection
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.snmp}
+                        onChange={(e) => setCustomField('snmp', e.target.checked)}
+                      />
+                      SNMP Walk
+                      <input
+                        type="text"
+                        className="scan-inline-input"
+                        value={custom.snmp_community}
+                        onChange={(e) => setCustomField('snmp_community', e.target.value)}
+                        disabled={!custom.snmp}
+                        placeholder="community (server default)"
+                        aria-label="SNMP community string"
+                      />
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.netbios}
+                        onChange={(e) => setCustomField('netbios', e.target.checked)}
+                      />
+                      NetBIOS/SMB
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.mdns}
+                        onChange={(e) => setCustomField('mdns', e.target.checked)}
+                      />
+                      mDNS/Bonjour
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.mac_vendor}
+                        onChange={(e) => setCustomField('mac_vendor', e.target.checked)}
+                      />
+                      MAC Vendor Lookup
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
           </form>
 
           {activeJob ? (

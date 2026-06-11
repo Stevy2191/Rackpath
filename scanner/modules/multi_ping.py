@@ -67,12 +67,12 @@ def udp_ping(ip, port=UDP_PROBE_PORT, timeout=1):
         return False
 
 
-def is_up(ip):
-    """Return True if the host responds to any probe method."""
-    if icmp_ping(ip):
+def is_up(ip, icmp=True, tcp=True, udp=True):
+    """Return True if the host responds to any of the enabled probe methods."""
+    if icmp and icmp_ping(ip):
         return True
-    if tcp_ping(ip):
+    if tcp and tcp_ping(ip):
         return True
-    if udp_ping(ip):
+    if udp and udp_ping(ip):
         return True
     return False

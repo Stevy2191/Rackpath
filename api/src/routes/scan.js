@@ -141,10 +141,24 @@ router.get('/:id/stream', async (req, res, next) => {
   }
 });
 
+// DELETE /api/scans/history - delete all scan jobs and their results.
+// Defined before the /:id routes so "history" isn't captured as an id.
+router.delete('/history', async (req, res, next) => {
+  try {
+    // scan_results has ON DELETE CASCADE, but delete it explicitly first so
+    // the operation is clear and robust regardless of FK settings.
+    await pool.query('DELETE FROM scan_results');
+    const [result] = await pool.query('DELETE FROM scan_jobs');
+    res.json({ ok: true, deleted: result.affectedRows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/scans - start a new scan job for a subnet
 router.post('/', async (req, res, next) => {
   try {
-    const { target_subnet, name, snmp_community } = req.body;
+    const { target_subnet, name, snmp_community, options } = req.body;
     if (!target_subnet) return res.status(400).json({ error: 'target_subnet is required' });
 
     const scanName =
@@ -166,6 +180,7 @@ router.post('/', async (req, res, next) => {
         job_id: jobId,
         target_subnet,
         snmp_community: snmp_community || process.env.SNMP_COMMUNITY || 'public',
+        options: options || undefined,
         callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/results`,
         host_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/host`,
         progress_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/progress`,
