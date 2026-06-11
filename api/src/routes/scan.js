@@ -8,8 +8,25 @@ const router = express.Router();
 const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:5001';
 const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://rackpath-api:${process.env.API_PORT || 3000}`;
 
+// MariaDB stores JSON columns as LONGTEXT, so the mysql2 driver hands them
+// back as raw strings rather than parsed values. Parse defensively so callers
+// always receive real arrays/objects (the frontend table expects open_ports to
+// be an array and raw to be an object).
+function parseJsonField(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      return fallback;
+    }
+  }
+  return value;
+}
+
 // Map a stored scan_results row to the shape the frontend table consumes.
 function mapResultRow(row) {
+  const openPorts = parseJsonField(row.open_ports, []);
   return {
     id: row.id,
     status: row.status,
@@ -19,10 +36,10 @@ function mapResultRow(row) {
     mac_vendor: row.mac_vendor,
     device_type: row.device_type,
     os: row.os,
-    open_ports: row.open_ports || [],
+    open_ports: Array.isArray(openPorts) ? openPorts : [],
     netbios_name: row.netbios_name,
     last_seen: row.last_seen,
-    raw: row.raw || null,
+    raw: parseJsonField(row.raw, null),
   };
 }
 

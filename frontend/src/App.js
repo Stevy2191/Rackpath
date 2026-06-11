@@ -10,6 +10,7 @@ import LoginPage from './pages/Login';
 import ChangePasswordPage from './pages/ChangePassword';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import RequireAuth from './auth/RequireAuth';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ThemeProvider } from './theme/ThemeContext';
 import './App.css';
 
@@ -71,7 +72,9 @@ function AppShell() {
             path="/scan"
             element={
               <RequireAuth>
-                <ScanPage />
+                <ErrorBoundary label="The Scan page ran into an unexpected error.">
+                  <ScanPage />
+                </ErrorBoundary>
               </RequireAuth>
             }
           />

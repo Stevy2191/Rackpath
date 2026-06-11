@@ -26,22 +26,55 @@ function ipToNum(ip) {
   return ip.split('.').reduce((acc, part) => acc * 256 + (parseInt(part, 10) || 0), 0);
 }
 
+// Coerce whatever the API hands us for open_ports into an array. It should
+// always be an array, but defend against null/undefined/string/number so a
+// single odd row can never crash the whole table render.
+function toPortsArray(ports) {
+  if (Array.isArray(ports)) return ports;
+  if (ports == null || ports === '') return [];
+  if (typeof ports === 'string') {
+    try {
+      const parsed = JSON.parse(ports);
+      return Array.isArray(parsed) ? parsed : [ports];
+    } catch (err) {
+      return ports.split(',').map((p) => p.trim()).filter(Boolean);
+    }
+  }
+  return [ports];
+}
+
 function sortValue(row, key) {
+  if (!row) return '';
   if (key === 'ip') return ipToNum(row.ip);
-  if (key === 'open_ports') return (row.open_ports || []).length;
+  if (key === 'open_ports') return toPortsArray(row.open_ports).length;
   const v = row[key];
   return v == null ? '' : String(v).toLowerCase();
 }
 
 function formatPorts(ports) {
-  if (!ports || ports.length === 0) return '-';
-  return ports.join(', ');
+  const arr = toPortsArray(ports);
+  if (arr.length === 0) return '-';
+  return arr.join(', ');
 }
 
 function formatDate(value) {
   if (!value) return '-';
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+  try {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString();
+  } catch (err) {
+    return '-';
+  }
+}
+
+// Fallback helpers: most fields show a dash when empty; device type defaults
+// to "Unknown" so the column is never blank.
+function dash(value) {
+  return value == null || value === '' ? '-' : value;
+}
+
+function deviceType(value) {
+  return value == null || value === '' ? 'Unknown' : value;
 }
 
 export default function ScanPage() {
@@ -93,39 +126,52 @@ export default function ScanPage() {
       const es = new EventSource(url, { withCredentials: true });
       esRef.current = es;
 
+      const safeParse = (raw) => {
+        try {
+          return JSON.parse(raw);
+        } catch (err) {
+          return null;
+        }
+      };
+
       es.addEventListener('init', (e) => {
-        const data = JSON.parse(e.data);
-        setRows(data.hosts || []);
+        const data = safeParse(e.data);
+        if (!data) return;
+        setRows(Array.isArray(data.hosts) ? data.hosts : []);
         setProgress({ current: data.progress_current || 0, total: data.progress_total || 0 });
         setStatus(data.status);
       });
 
       es.addEventListener('host', (e) => {
-        const host = JSON.parse(e.data);
+        const host = safeParse(e.data);
+        if (!host) return;
         setRows((prev) => (prev.some((r) => r.id === host.id) ? prev : [...prev, host]));
       });
 
       es.addEventListener('progress', (e) => {
-        const data = JSON.parse(e.data);
+        const data = safeParse(e.data);
+        if (!data) return;
         setProgress({ current: data.progress_current || 0, total: data.progress_total || 0 });
       });
 
       es.addEventListener('scan_complete', (e) => {
-        const data = JSON.parse(e.data);
+        const data = safeParse(e.data) || {};
         setStatus(data.status || 'completed');
         closeStream();
         loadJobs();
       });
 
       es.onerror = () => {
-        // The browser auto-reconnects EventSource; if the scan is already done
-        // there's nothing to reconnect to, so just close quietly.
-        if (esRef.current === es && (status === 'completed' || status === 'failed')) {
+        // The browser auto-reconnects EventSource by default. Once the scan is
+        // finished the stream is intentionally closed server-side and there's
+        // nothing to reconnect to, so close it here to stop the retry loop.
+        const es = esRef.current;
+        if (es && es.readyState === EventSource.CLOSED) {
           closeStream();
         }
       };
     },
-    [closeStream, loadJobs, status]
+    [closeStream, loadJobs]
   );
 
   useEffect(() => closeStream, [closeStream]);
@@ -166,7 +212,7 @@ export default function ScanPage() {
   };
 
   const sortedRows = useMemo(() => {
-    const copy = [...rows];
+    const copy = (Array.isArray(rows) ? rows : []).filter((r) => r && typeof r === 'object');
     copy.sort((a, b) => {
       const av = sortValue(a, sort.key);
       const bv = sortValue(b, sort.key);
@@ -178,10 +224,10 @@ export default function ScanPage() {
   }, [rows, sort]);
 
   const counts = useMemo(() => {
-    const up = rows.filter((r) => r.status === 'up').length;
+    const up = sortedRows.filter((r) => r.status === 'up').length;
     const down = Math.max(0, (progress.current || 0) - up);
-    return { found: rows.length, up, down };
-  }, [rows, progress]);
+    return { found: sortedRows.length, up, down };
+  }, [sortedRows, progress]);
 
   const progressPercent =
     progress.total > 0 ? Math.min(100, Math.round((progress.current / progress.total) * 100)) : 0;
@@ -197,11 +243,15 @@ export default function ScanPage() {
   };
 
   const toggleSelectAll = () => {
-    setSelected((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((r) => r.id))));
+    setSelected((prev) =>
+      prev.size === sortedRows.length
+        ? new Set()
+        : new Set(sortedRows.map((r) => r.id).filter((id) => id != null))
+    );
   };
 
   const handleImportSelected = async () => {
-    const chosen = rows.filter((r) => selected.has(r.id));
+    const chosen = sortedRows.filter((r) => r.id != null && selected.has(r.id));
     if (chosen.length === 0 || !activeJob) return;
 
     const devices = chosen.map((r) => ({
@@ -210,7 +260,7 @@ export default function ScanPage() {
       hostname: r.hostname,
       device_type: r.device_type,
       snmp_community: r.raw?.snmp_community || undefined,
-      ports: r.raw?.ports || undefined,
+      ports: Array.isArray(r.raw?.ports) ? r.raw.ports : undefined,
     }));
 
     setImporting(true);
@@ -240,7 +290,7 @@ export default function ScanPage() {
       r.hostname || '',
       r.mac || '',
       r.mac_vendor || '',
-      r.device_type || '',
+      r.device_type || 'Unknown',
       r.os || '',
       formatPorts(r.open_ports),
       r.netbios_name || '',
@@ -271,7 +321,7 @@ export default function ScanPage() {
       `Name: ${activeJob?.name || '-'}`,
       `Subnet: ${activeJob?.target_subnet || subnet}`,
       `Date: ${formatDate(activeJob?.completed_at || activeJob?.started_at || Date.now())}`,
-      `Hosts found: ${rows.length}`,
+      `Hosts found: ${sortedRows.length}`,
     ];
     meta.forEach((line, i) => doc.text(line, 14, 24 + i * 5));
 
@@ -368,7 +418,7 @@ export default function ScanPage() {
                       <th className="scan-check-col">
                         <input
                           type="checkbox"
-                          checked={rows.length > 0 && selected.size === rows.length}
+                          checked={sortedRows.length > 0 && selected.size === sortedRows.length}
                           onChange={toggleSelectAll}
                           aria-label="Select all"
                         />
@@ -384,33 +434,33 @@ export default function ScanPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedRows.map((row) => (
-                      <tr key={row.id}>
+                    {sortedRows.map((row, index) => (
+                      <tr key={row?.id ?? `row-${index}`}>
                         <td className="scan-check-col">
                           <input
                             type="checkbox"
-                            checked={selected.has(row.id)}
-                            onChange={() => toggleRow(row.id)}
+                            checked={row?.id != null && selected.has(row.id)}
+                            onChange={() => row?.id != null && toggleRow(row.id)}
                           />
                         </td>
                         <td>
                           <span
-                            className={`status-dot ${row.status === 'up' ? 'up' : 'down'}`}
-                            title={row.status}
+                            className={`status-dot ${row?.status === 'up' ? 'up' : 'down'}`}
+                            title={row?.status || 'unknown'}
                           />
                         </td>
-                        <td>{row.ip || '-'}</td>
-                        <td>{row.hostname || '-'}</td>
-                        <td>{row.mac || '-'}</td>
-                        <td>{row.mac_vendor || '-'}</td>
-                        <td>{row.device_type || '-'}</td>
-                        <td>{row.os || '-'}</td>
-                        <td>{formatPorts(row.open_ports)}</td>
-                        <td>{row.netbios_name || '-'}</td>
-                        <td>{formatDate(row.last_seen)}</td>
+                        <td>{dash(row?.ip)}</td>
+                        <td>{dash(row?.hostname)}</td>
+                        <td>{dash(row?.mac)}</td>
+                        <td>{dash(row?.mac_vendor)}</td>
+                        <td>{deviceType(row?.device_type)}</td>
+                        <td>{dash(row?.os)}</td>
+                        <td>{formatPorts(row?.open_ports)}</td>
+                        <td>{dash(row?.netbios_name)}</td>
+                        <td>{formatDate(row?.last_seen)}</td>
                       </tr>
                     ))}
-                    {rows.length === 0 && (
+                    {sortedRows.length === 0 && (
                       <tr>
                         <td colSpan={COLUMNS.length + 1} className="scan-empty-row">
                           {isActive ? 'Waiting for hosts to be discovered...' : 'No hosts discovered.'}
@@ -423,7 +473,7 @@ export default function ScanPage() {
 
               <div className="scan-actions">
                 <div className="scan-export">
-                  <button type="button" onClick={() => setExportOpen((v) => !v)} disabled={rows.length === 0}>
+                  <button type="button" onClick={() => setExportOpen((v) => !v)} disabled={sortedRows.length === 0}>
                     Export ▾
                   </button>
                   {exportOpen && (
