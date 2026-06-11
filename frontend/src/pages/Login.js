@@ -4,12 +4,14 @@ import { useAuth } from '../auth/AuthContext';
 import './Login.css';
 
 export default function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, loading, login } = useAuth();
   const location = useLocation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  if (loading) return null;
 
   if (user) {
     const from = location.state?.from?.pathname || '/';

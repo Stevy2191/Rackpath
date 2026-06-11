@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 
 const authRouter = require('./routes/auth');
@@ -17,7 +18,12 @@ const { migrate } = require('./db/migrate');
 const app = express();
 const PORT = process.env.API_PORT || 3000;
 
-app.use(cors());
+// `origin: true` reflects the request's Origin header back, which (combined
+// with `credentials: true`) is required for browsers to send/receive the
+// httpOnly session cookie on cross-origin requests (e.g. local dev where the
+// frontend and API run on different ports).
+app.use(cors({ origin: true, credentials: true }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(morgan('combined'));
 

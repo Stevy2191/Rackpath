@@ -14,7 +14,11 @@ import { ThemeProvider } from './theme/ThemeContext';
 import './App.css';
 
 function AppShell() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="page-status">Loading...</div>;
+  }
 
   return (
     <div className="app">

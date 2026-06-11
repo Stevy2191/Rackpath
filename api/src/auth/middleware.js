@@ -1,4 +1,4 @@
-const { verifyToken } = require('./jwt');
+const { verifyToken, COOKIE_NAME } = require('./jwt');
 
 const PUBLIC_PATHS = new Set(['/api/health', '/api/auth/login']);
 
@@ -23,10 +23,9 @@ function isPublicPath(path) {
 function requireAuth(req, res, next) {
   if (isPublicPath(req.path)) return next();
 
-  const header = req.headers.authorization || '';
-  const [scheme, token] = header.split(' ');
+  const token = req.cookies && req.cookies[COOKIE_NAME];
 
-  if (scheme !== 'Bearer' || !token) {
+  if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 

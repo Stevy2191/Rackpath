@@ -1,9 +1,15 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../db/pool');
-const { signToken } = require('../auth/jwt');
+const { signToken, COOKIE_NAME, TOKEN_TTL_MS } = require('../auth/jwt');
 
 const router = express.Router();
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'strict',
+  path: '/',
+};
 
 // POST /api/auth/login - verify credentials and issue a JWT
 router.post('/login', async (req, res, next) => {
@@ -25,8 +31,8 @@ router.post('/login', async (req, res, next) => {
     }
 
     const token = signToken(user);
+    res.cookie(COOKIE_NAME, token, { ...COOKIE_OPTIONS, maxAge: TOKEN_TTL_MS });
     res.json({
-      token,
       user: {
         id: user.id,
         username: user.username,
@@ -38,8 +44,9 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-// POST /api/auth/logout - stateless; client discards its in-memory token
+// POST /api/auth/logout - clear the session cookie
 router.post('/logout', (req, res) => {
+  res.clearCookie(COOKIE_NAME, COOKIE_OPTIONS);
   res.status(204).send();
 });
 
