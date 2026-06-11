@@ -47,7 +47,8 @@ function mapResultRow(row) {
 router.get('/', async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT j.id, j.name, j.target_subnet, j.status, j.progress_current, j.progress_total,
+      `SELECT j.id, j.name, j.target_subnet, j.target_type, j.scan_profile, j.status,
+              j.progress_current, j.progress_total,
               j.started_at, j.completed_at, j.created_at, j.updated_at,
               COUNT(r.id) AS host_count
        FROM scan_jobs j
@@ -161,14 +162,17 @@ router.post('/', async (req, res, next) => {
     const { target_subnet, name, snmp_community, options } = req.body;
     if (!target_subnet) return res.status(400).json({ error: 'target_subnet is required' });
 
+    const targetType = (options && options.target_type) || null;
+    const scanProfile = (options && options.profile) || null;
+
     const scanName =
       (name && name.trim()) ||
       `${target_subnet} - ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`;
 
     const [result] = await pool.query(
-      `INSERT INTO scan_jobs (name, target_subnet, status, started_at)
-       VALUES (?, ?, 'pending', NOW())`,
-      [scanName, target_subnet]
+      `INSERT INTO scan_jobs (name, target_subnet, target_type, scan_profile, status, started_at)
+       VALUES (?, ?, ?, ?, 'pending', NOW())`,
+      [scanName, target_subnet, targetType, scanProfile]
     );
     const jobId = result.insertId;
 

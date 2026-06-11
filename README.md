@@ -178,8 +178,9 @@ Slitheris-style enhanced discovery runs in parallel per host:
 - Device-type inference (Router, Switch, Firewall, Server, Windows PC, Mac,
   Linux, Printer, AP, IP Camera, IoT, NAS, Unknown) from the combined signals
 
-Each scan can target a whole subnet (CIDR) or a single IP, and an expandable
-**Scan Options** panel offers profiles that toggle which steps run:
+Each scan can target a whole subnet (CIDR), a single IP, or a list of multiple
+IPs (one per line or comma separated), and an expandable **Scan Options** panel
+offers profiles that toggle which steps run:
 
 - **Quick** — ping sweep only (fast, no port scan)
 - **Standard** (default) — ping + top 100 ports + OS detection + NetBIOS + SNMP
@@ -201,7 +202,9 @@ live counters show found / up / down.
 Past scans are listed by name and date (`GET /api/scans`); selecting one
 reloads its stored results (`GET /api/scans/:id/results`), and **Clear History**
 (`DELETE /api/scans/history`) removes all scan jobs and their results. Results
-can be exported to PDF or CSV from the `/scan` page.
+can be exported to PDF or CSV from the `/scan` page; the export includes scan
+metadata (name, target, profile, duration, date, host count) drawn from the
+stored job fields (`target_type`, `scan_profile`, `started_at`, `completed_at`).
 
 Results are returned as structured JSON and stored on the scan job, but
 devices found during a scan are **not** added to your inventory

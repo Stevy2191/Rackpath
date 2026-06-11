@@ -142,6 +142,23 @@
   min-width: 220px;
 }
 
+.scan-multi-target {
+  flex: 1;
+  min-width: 320px;
+}
+
+.scan-multi-target textarea {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
 .scan-config-fields button {
   padding: 0.5rem 1.25rem;
   border: none;

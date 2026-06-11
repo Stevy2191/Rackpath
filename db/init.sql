@@ -120,7 +120,9 @@ ALTER TABLE topology_layout ADD COLUMN IF NOT EXISTS height DOUBLE NOT NULL DEFA
 CREATE TABLE IF NOT EXISTS scan_jobs (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name            VARCHAR(255)        NULL,
-    target_subnet   VARCHAR(64)         NOT NULL,
+    target_subnet   VARCHAR(255)        NOT NULL,
+    target_type     VARCHAR(16)         NULL,
+    scan_profile    VARCHAR(16)         NULL,
     status          ENUM('pending', 'running', 'completed', 'failed')
                         NOT NULL DEFAULT 'pending',
     progress_current INT UNSIGNED       NULL,
@@ -164,6 +166,10 @@ CREATE TABLE IF NOT EXISTS scan_results (
 ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS progress_current INT UNSIGNED NULL AFTER status;
 ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS progress_total INT UNSIGNED NULL AFTER progress_current;
 ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS name VARCHAR(255) NULL AFTER id;
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS target_type VARCHAR(16) NULL AFTER target_subnet;
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS scan_profile VARCHAR(16) NULL AFTER target_type;
+-- Widen target_subnet so a "Multiple IPs" target list fits.
+ALTER TABLE scan_jobs MODIFY COLUMN target_subnet VARCHAR(255) NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- topology_edges

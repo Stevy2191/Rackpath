@@ -12,6 +12,7 @@ frontend can stream rows over SSE in real time.
 import concurrent.futures
 import ipaddress
 import os
+import re
 import threading
 
 import requests
@@ -214,13 +215,30 @@ def _enrich_host(ip, snmp_community, local_arp, mdns_map, opts):
 
 
 def _expand_targets(target_subnet):
-    """Return the list of host IPs to scan. A bare address (no CIDR) is treated
-    as a single host; anything with a prefix is expanded to its hosts."""
-    target = target_subnet.strip()
-    if '/' not in target:
-        return [target]
-    network = ipaddress.ip_network(target, strict=False)
-    return [str(ip) for ip in network.hosts()]
+    """Return the list of host IPs to scan.
+
+    Accepts a single address, a CIDR, or a comma/whitespace/newline-separated
+    list of addresses and CIDRs (the "Multiple IPs" target type). Each CIDR is
+    expanded to its hosts; duplicates are removed while preserving order."""
+    tokens = re.split(r'[\s,]+', target_subnet.strip())
+    hosts = []
+    seen = set()
+    for token in tokens:
+        if not token:
+            continue
+        if '/' in token:
+            try:
+                network = ipaddress.ip_network(token, strict=False)
+                expanded = [str(ip) for ip in network.hosts()]
+            except ValueError:
+                expanded = []
+        else:
+            expanded = [token]
+        for ip in expanded:
+            if ip not in seen:
+                seen.add(ip)
+                hosts.append(ip)
+    return hosts
 
 
 def _run_scan(job_id, target_subnet, snmp_community, callback_url,
@@ -284,7 +302,15 @@ def _run_scan(job_id, target_subnet, snmp_community, callback_url,
                         _post_callback(progress_callback_url,
                                        {"progress_current": scanned, "progress_total": total})
 
-        live_hosts.sort(key=lambda ip: tuple(int(p) for p in ip.split('.')))
+        def _sort_key(ip):
+            # Sort by numeric IPv4 octets; fall back to string order for
+            # anything that isn't a plain dotted-quad (hostnames, IPv6, etc).
+            try:
+                return (0, tuple(int(p) for p in ip.split('.')))
+            except (ValueError, AttributeError):
+                return (1, ip)
+
+        live_hosts.sort(key=_sort_key)
 
         # Make sure the mDNS browse has finished before enrichment reads it.
         if mdns_thread is not None:

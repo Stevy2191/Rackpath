@@ -148,6 +148,50 @@ function deviceType(value) {
   return value == null || value === '' ? 'Unknown' : value;
 }
 
+const PROFILE_NAMES = {
+  quick: 'Quick',
+  standard: 'Standard',
+  deep: 'Deep',
+  ports: 'Port Scan Only',
+  custom: 'Custom',
+};
+
+function profileName(value) {
+  return PROFILE_NAMES[value] || (value ? String(value) : 'Standard');
+}
+
+// Format the elapsed time between two timestamps as e.g. "2m 34s" / "1h 5m 2s".
+function formatDuration(start, end) {
+  if (!start || !end) return '-';
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '-';
+  const totalSeconds = Math.round(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const parts = [];
+  if (h) parts.push(`${h}h`);
+  if (m || h) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(' ');
+}
+
+// Pick the right metadata label for the scanned target. Prefers the stored
+// target_type (so reloaded scans are accurate), falling back to inspecting the
+// target string for live scans started before the type was known.
+function targetMeta(job, targetString) {
+  const value = targetString || '';
+  let type = job?.target_type;
+  if (!type) {
+    if (value.includes('/')) type = 'subnet';
+    else if (/[,\s]/.test(value.trim())) type = 'multiple';
+    else type = 'single';
+  }
+  if (type === 'subnet') return { label: 'Subnet', value };
+  if (type === 'multiple') return { label: 'Targets', value };
+  return { label: 'IP Address', value };
+}
+
 export default function ScanPage() {
   const [subnet, setSubnet] = useState('10.1.20.0/24');
   const [scanName, setScanName] = useState('');
@@ -167,6 +211,7 @@ export default function ScanPage() {
   // Scan options
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [targetType, setTargetType] = useState('subnet');
+  const [multiTargets, setMultiTargets] = useState('');
   const [profile, setProfile] = useState('standard');
   const [custom, setCustom] = useState(DEFAULT_CUSTOM);
   const [clearing, setClearing] = useState(false);
@@ -196,6 +241,20 @@ export default function ScanPage() {
       };
     }
     return { profile, target_type: targetType, ...PROFILE_PRESETS[profile] };
+  };
+
+  // Normalize the chosen target into the string the API/scanner parse. For
+  // "Multiple IPs" the textarea (one per line or comma separated) becomes a
+  // single comma-separated list.
+  const buildTarget = () => {
+    if (targetType === 'multiple') {
+      return multiTargets
+        .split(/[\s,]+/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .join(', ');
+    }
+    return subnet.trim();
   };
 
   const loadJobs = useCallback(() => {
@@ -262,6 +321,12 @@ export default function ScanPage() {
         setStatus(data.status || 'completed');
         closeStream();
         loadJobs();
+        // Refresh the active job so export metadata (completed_at / duration)
+        // reflects the finished scan without needing to reselect it.
+        client
+          .get(`/scans/${jobId}`)
+          .then((res) => setActiveJob((prev) => (prev && prev.id === res.data.id ? res.data : prev)))
+          .catch(() => {});
       });
 
       es.onerror = () => {
@@ -291,6 +356,12 @@ export default function ScanPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const target = buildTarget();
+      if (!target) {
+        setError(targetType === 'multiple' ? 'Enter at least one IP address.' : 'Enter a target to scan.');
+        setSubmitting(false);
+        return;
+      }
       const options = buildOptions();
       // Custom profile with SNMP enabled may carry a community string override.
       const snmpCommunity =
@@ -299,7 +370,7 @@ export default function ScanPage() {
           : undefined;
 
       const res = await client.post('/scans', {
-        target_subnet: subnet.trim(),
+        target_subnet: target,
         name: scanName.trim() || undefined,
         snmp_community: snmpCommunity,
         options,
@@ -431,13 +502,29 @@ export default function ScanPage() {
       formatDate(r.last_seen),
     ]);
 
+  // Metadata rows shared by the PDF and CSV exports. Uses the active job's
+  // stored fields (target_type, scan_profile, started/completed_at) so a
+  // reloaded historical scan exports accurate metadata rather than a guess.
+  const exportMeta = () => {
+    const target = targetMeta(activeJob, activeJob?.target_subnet || subnet);
+    return [
+      ['Name', activeJob?.name || '-'],
+      [target.label, target.value || '-'],
+      ['Scan Profile', profileName(activeJob?.scan_profile)],
+      ['Scan Duration', formatDuration(activeJob?.started_at, activeJob?.completed_at)],
+      ['Date', formatDate(activeJob?.completed_at || activeJob?.started_at || Date.now())],
+      ['Hosts found', String(sortedRows.length)],
+    ];
+  };
+
   const handleExportCsv = () => {
     setExportOpen(false);
     if (sortedRows.length === 0) return;
-    const header = COLUMNS.map((c) => c.label);
-    const lines = [header, ...exportRows()]
-      .map((cols) => cols.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\r\n');
+    const q = (c) => `"${String(c).replace(/"/g, '""')}"`;
+    const metaLines = exportMeta().map(([k, v]) => `${q(k)},${q(v)}`);
+    const header = COLUMNS.map((c) => q(c.label)).join(',');
+    const bodyLines = exportRows().map((cols) => cols.map(q).join(','));
+    const lines = [...metaLines, '', header, ...bodyLines].join('\r\n');
     // Prepend a BOM so Excel reads UTF-8 correctly.
     const blob = new Blob(['﻿', lines], { type: 'text/csv;charset=utf-8;' });
     downloadBlob(blob, `rackpath-scan-${scanSlug(activeJob?.name)}.csv`);
@@ -451,13 +538,8 @@ export default function ScanPage() {
       doc.setFontSize(16);
       doc.text('Rackpath Scan Report', 14, 16);
       doc.setFontSize(10);
-      const meta = [
-        `Name: ${activeJob?.name || '-'}`,
-        `Subnet: ${activeJob?.target_subnet || subnet}`,
-        `Date: ${formatDate(activeJob?.completed_at || activeJob?.started_at || Date.now())}`,
-        `Hosts found: ${sortedRows.length}`,
-      ];
-      meta.forEach((line, i) => doc.text(line, 14, 24 + i * 5));
+      const meta = exportMeta();
+      meta.forEach(([k, v], i) => doc.text(`${k}: ${v}`, 14, 24 + i * 5));
 
       autoTable(doc, {
         head: [COLUMNS.map((c) => c.label)],
@@ -514,15 +596,27 @@ export default function ScanPage() {
           <form onSubmit={handleStartScan} className="scan-config">
             <h2>Scan Configuration</h2>
             <div className="scan-config-fields">
-              <label>
-                {targetType === 'single' ? 'IP Address' : 'Subnet'}
-                <input
-                  value={subnet}
-                  onChange={(e) => setSubnet(e.target.value)}
-                  placeholder={targetType === 'single' ? 'e.g. 10.1.20.5' : 'e.g. 10.1.20.0/24'}
-                  required
-                />
-              </label>
+              {targetType === 'multiple' ? (
+                <label className="scan-multi-target">
+                  Target IPs
+                  <textarea
+                    value={multiTargets}
+                    onChange={(e) => setMultiTargets(e.target.value)}
+                    placeholder={'One per line or comma separated\ne.g. 10.1.20.1, 10.1.20.5, 10.1.20.100'}
+                    rows={3}
+                  />
+                </label>
+              ) : (
+                <label>
+                  {targetType === 'single' ? 'IP Address' : 'Subnet'}
+                  <input
+                    value={subnet}
+                    onChange={(e) => setSubnet(e.target.value)}
+                    placeholder={targetType === 'single' ? 'e.g. 10.1.20.5' : 'e.g. 10.1.20.0/24'}
+                    required
+                  />
+                </label>
+              )}
               <label>
                 Scan Name (optional)
                 <input
@@ -566,6 +660,15 @@ export default function ScanPage() {
                       onChange={() => setTargetType('single')}
                     />
                     Single IP
+                  </label>
+                  <label className="scan-radio">
+                    <input
+                      type="radio"
+                      name="target_type"
+                      checked={targetType === 'multiple'}
+                      onChange={() => setTargetType('multiple')}
+                    />
+                    Multiple IPs
                   </label>
                 </div>
 
@@ -689,7 +792,9 @@ export default function ScanPage() {
                   </div>
                   <div className="scan-progress-label">
                     {progress.total > 0
-                      ? `Scanned ${progress.current} of ${progress.total} hosts (${progressPercent}%)`
+                      ? `Scanned ${progress.current} of ${progress.total} ${
+                          activeJob?.target_type === 'multiple' ? 'IPs' : 'hosts'
+                        } (${progressPercent}%)`
                       : isActive
                       ? 'Preparing scan...'
                       : 'Scan complete'}
