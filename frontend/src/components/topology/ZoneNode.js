@@ -11,6 +11,8 @@ export const ZONE_COLORS = {
   gray: { fill: 'rgba(107, 114, 128, 0.08)', border: 'rgba(107, 114, 128, 0.5)' },
 };
 
+const COLOR_KEYS = Object.keys(ZONE_COLORS);
+
 function ZoneNode({ id, data, selected }) {
   const palette = ZONE_COLORS[data.color] || ZONE_COLORS.blue;
   const borderStyle = data.border_style === 'dotted' ? 'dotted' : 'solid';
@@ -30,11 +32,19 @@ function ZoneNode({ id, data, selected }) {
     }
   }, [editing]);
 
-  const commit = () => {
-    setEditing(false);
-    const next = value.trim();
-    if (next !== (data.name || '')) data.onRename?.(id, next);
+  // Open the editor on double-click anywhere on the zone, in any toolbar mode.
+  // Stop propagation so React Flow's pane double-click (zoom) never fires.
+  const openEditor = (e) => {
+    e.stopPropagation();
+    setEditing(true);
   };
+
+  const commitName = () => {
+    const next = value.trim();
+    if (next !== (data.name || '')) data.onUpdate?.(id, { name: next });
+  };
+
+  const stop = (e) => e.stopPropagation();
 
   return (
     <div
@@ -43,6 +53,7 @@ function ZoneNode({ id, data, selected }) {
         background: palette.fill,
         border: `2px ${borderStyle} ${palette.border}`,
       }}
+      onDoubleClick={openEditor}
     >
       <NodeResizer
         color={palette.border}
@@ -51,33 +62,57 @@ function ZoneNode({ id, data, selected }) {
         minHeight={80}
         onResizeEnd={(_event, params) => data.onResizeEnd?.(id, params)}
       />
+
       {editing ? (
-        <input
-          ref={inputRef}
-          className="zone-label-input nodrag"
-          style={{ color: palette.border }}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.target.blur();
-            if (e.key === 'Escape') {
-              setValue(data.name || '');
-              setEditing(false);
-            }
-          }}
-          placeholder="Zone name"
-        />
+        <div className="zone-editor nodrag nopan" onMouseDown={stop} onClick={stop} onDoubleClick={stop}>
+          <input
+            ref={inputRef}
+            className="zone-editor-name"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.target.blur();
+              if (e.key === 'Escape') {
+                setValue(data.name || '');
+                setEditing(false);
+              }
+            }}
+            placeholder="Zone name"
+          />
+          <div className="zone-editor-colors">
+            {COLOR_KEYS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label={c}
+                title={c}
+                className={`zone-editor-swatch${data.color === c ? ' selected' : ''}`}
+                style={{ background: ZONE_COLORS[c].border }}
+                onClick={() => data.onUpdate?.(id, { color: c })}
+              />
+            ))}
+          </div>
+          <div className="zone-editor-actions">
+            <select
+              className="zone-editor-border"
+              value={borderStyle}
+              onChange={(e) => data.onUpdate?.(id, { border_style: e.target.value })}
+            >
+              <option value="solid">Solid</option>
+              <option value="dotted">Dotted</option>
+            </select>
+            <button type="button" className="zone-editor-done" onClick={() => setEditing(false)}>
+              Done
+            </button>
+          </div>
+        </div>
       ) : (
-        <div
-          className="zone-label"
-          style={{ color: palette.border }}
-          onDoubleClick={() => setEditing(true)}
-          title="Double-click to rename"
-        >
+        <div className="zone-label" style={{ color: palette.border }} title="Double-click to edit">
           {data.name || 'Zone'}
         </div>
       )}
+
       {selected && !editing && (
         <button className="zone-delete" onClick={() => data.onDelete?.(id)} aria-label="Delete zone">
           &times;

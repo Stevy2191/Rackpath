@@ -27,7 +27,10 @@ function TextLabelNode({ id, data, selected }) {
   return (
     <div
       className={`text-label-node${selected ? ' selected' : ''}`}
-      onDoubleClick={() => setEditing(true)}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        setEditing(true);
+      }}
       style={{ fontSize: `${data.font_size || 14}px`, color: data.color || 'var(--color-text)' }}
     >
       {editing ? (

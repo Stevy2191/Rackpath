@@ -72,7 +72,7 @@ function buildZoneNode(zone, callbacks) {
       color: zone.color,
       onResizeEnd: callbacks.onZoneResizeEnd,
       onDelete: callbacks.onZoneDelete,
-      onRename: callbacks.onZoneRename,
+      onUpdate: callbacks.onZoneUpdate,
     },
   };
 }
@@ -265,10 +265,10 @@ function TopologyCanvas() {
     [reactFlowInstance]
   );
 
-  const handleZoneRename = useCallback((nodeId, name) => {
+  const handleZoneUpdate = useCallback((nodeId, patch) => {
     const zoneId = zoneIdFromNodeId(nodeId);
-    setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, name } } : n)));
-    client.patch(`/topology/zones/${zoneId}`, { name }).catch((err) => setError(err.message));
+    setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)));
+    client.patch(`/topology/zones/${zoneId}`, patch).catch((err) => setError(err.message));
   }, []);
 
   const handleLabelChange = useCallback((nodeId, text) => {
@@ -303,7 +303,7 @@ function TopologyCanvas() {
           buildDeviceNode(device, { onDeviceResizeEnd: handleDeviceResizeEnd })
         );
         const zoneNodes = (zonesRes.data || []).map((zone) =>
-          buildZoneNode(zone, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneRename: handleZoneRename })
+          buildZoneNode(zone, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneUpdate: handleZoneUpdate })
         );
         const labelNodes = (labelsRes.data || []).map((label) =>
           buildTextNode(label, { onLabelChange: handleLabelChange, onLabelDelete: handleLabelDelete })
@@ -340,7 +340,7 @@ function TopologyCanvas() {
   }, [
     handleZoneResizeEnd,
     handleZoneDelete,
-    handleZoneRename,
+    handleZoneUpdate,
     handleDeviceResizeEnd,
     handleEdgeEdit,
     handleEdgeDelete,
@@ -542,9 +542,11 @@ function TopologyCanvas() {
 
   const onNodeDoubleClick = useCallback(
     (_event, node) => {
-      if (mode === 'select' && node.type === 'device') navigate(`/devices/${node.data.id}`);
+      // Double-click edits an element regardless of the active mode. Text and
+      // zone nodes handle their own inline editors; a device opens its page.
+      if (node.type === 'device') navigate(`/devices/${node.data.id}`);
     },
-    [navigate, mode]
+    [navigate]
   );
 
   const projectFromEvent = useCallback(
@@ -588,14 +590,14 @@ function TopologyCanvas() {
           height: 220,
         });
         setNodes((nds) => [
-          buildZoneNode(res.data, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneRename: handleZoneRename }),
+          buildZoneNode(res.data, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneUpdate: handleZoneUpdate }),
           ...nds,
         ]);
       } catch (err) {
         setError(err.message);
       }
     },
-    [handleZoneResizeEnd, handleZoneDelete, handleZoneRename]
+    [handleZoneResizeEnd, handleZoneDelete, handleZoneUpdate]
   );
 
   const onPaneClick = useCallback(
@@ -931,6 +933,7 @@ function TopologyCanvas() {
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
             nodesDraggable={mode === 'select'}
+            zoomOnDoubleClick={false}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
