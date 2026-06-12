@@ -33,7 +33,18 @@ async function migrate() {
 
       console.log(`Applying migration ${file}...`);
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
-      await connection.query(sql);
+
+      try {
+        await connection.query(sql);
+      } catch (err) {
+        // Do NOT record this migration in schema_migrations: it must be retried
+        // on the next startup once the cause is fixed. Surface which file failed
+        // and stop, so later migrations don't run against a half-migrated schema.
+        console.error(`Migration ${file} failed; not recording it. It will be retried on next startup.`);
+        throw err;
+      }
+
+      // Only reached when the migration above applied cleanly.
       await connection.query('INSERT INTO schema_migrations (name) VALUES (?)', [file]);
     }
   } finally {
