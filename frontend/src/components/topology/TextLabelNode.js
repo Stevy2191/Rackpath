@@ -33,7 +33,7 @@ function TextLabelNode({ id, data, selected }) {
       {editing ? (
         <textarea
           ref={inputRef}
-          className="text-label-input"
+          className="text-label-input nodrag"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onBlur={commit}

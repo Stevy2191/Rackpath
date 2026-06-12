@@ -72,6 +72,7 @@ function buildZoneNode(zone, callbacks) {
       color: zone.color,
       onResizeEnd: callbacks.onZoneResizeEnd,
       onDelete: callbacks.onZoneDelete,
+      onRename: callbacks.onZoneRename,
     },
   };
 }
@@ -264,6 +265,12 @@ function TopologyCanvas() {
     [reactFlowInstance]
   );
 
+  const handleZoneRename = useCallback((nodeId, name) => {
+    const zoneId = zoneIdFromNodeId(nodeId);
+    setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, name } } : n)));
+    client.patch(`/topology/zones/${zoneId}`, { name }).catch((err) => setError(err.message));
+  }, []);
+
   const handleLabelChange = useCallback((nodeId, text) => {
     const labelId = labelIdFromNodeId(nodeId);
     setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, text } } : n)));
@@ -296,7 +303,7 @@ function TopologyCanvas() {
           buildDeviceNode(device, { onDeviceResizeEnd: handleDeviceResizeEnd })
         );
         const zoneNodes = (zonesRes.data || []).map((zone) =>
-          buildZoneNode(zone, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete })
+          buildZoneNode(zone, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneRename: handleZoneRename })
         );
         const labelNodes = (labelsRes.data || []).map((label) =>
           buildTextNode(label, { onLabelChange: handleLabelChange, onLabelDelete: handleLabelDelete })
@@ -333,6 +340,7 @@ function TopologyCanvas() {
   }, [
     handleZoneResizeEnd,
     handleZoneDelete,
+    handleZoneRename,
     handleDeviceResizeEnd,
     handleEdgeEdit,
     handleEdgeDelete,
@@ -580,14 +588,14 @@ function TopologyCanvas() {
           height: 220,
         });
         setNodes((nds) => [
-          buildZoneNode(res.data, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete }),
+          buildZoneNode(res.data, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneRename: handleZoneRename }),
           ...nds,
         ]);
       } catch (err) {
         setError(err.message);
       }
     },
-    [handleZoneResizeEnd, handleZoneDelete]
+    [handleZoneResizeEnd, handleZoneDelete, handleZoneRename]
   );
 
   const onPaneClick = useCallback(

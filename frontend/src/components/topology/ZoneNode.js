@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { NodeResizer } from 'reactflow';
 import './ZoneNode.css';
 
@@ -15,6 +15,27 @@ function ZoneNode({ id, data, selected }) {
   const palette = ZONE_COLORS[data.color] || ZONE_COLORS.blue;
   const borderStyle = data.border_style === 'dotted' ? 'dotted' : 'solid';
 
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(data.name || '');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    setValue(data.name || '');
+  }, [data.name]);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    const next = value.trim();
+    if (next !== (data.name || '')) data.onRename?.(id, next);
+  };
+
   return (
     <div
       className="zone-node"
@@ -30,10 +51,34 @@ function ZoneNode({ id, data, selected }) {
         minHeight={80}
         onResizeEnd={(_event, params) => data.onResizeEnd?.(id, params)}
       />
-      <div className="zone-label" style={{ color: palette.border }}>
-        {data.name}
-      </div>
-      {selected && (
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="zone-label-input nodrag"
+          style={{ color: palette.border }}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.target.blur();
+            if (e.key === 'Escape') {
+              setValue(data.name || '');
+              setEditing(false);
+            }
+          }}
+          placeholder="Zone name"
+        />
+      ) : (
+        <div
+          className="zone-label"
+          style={{ color: palette.border }}
+          onDoubleClick={() => setEditing(true)}
+          title="Double-click to rename"
+        >
+          {data.name || 'Zone'}
+        </div>
+      )}
+      {selected && !editing && (
         <button className="zone-delete" onClick={() => data.onDelete?.(id)} aria-label="Delete zone">
           &times;
         </button>
