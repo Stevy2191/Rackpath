@@ -25,13 +25,23 @@ function DeviceNode({ id, data, selected }) {
         onResizeEnd={(_event, params) => data.onResizeEnd?.(id, params)}
       />
       {HANDLES.map((handle) => (
-        <Handle
-          key={handle.id}
-          id={handle.id}
-          type="source"
-          position={handle.position}
-          className="device-node-handle"
-        />
+        // Pair a target handle with each source handle (same id) so React
+        // Flow always has a fresh drop target registered at this point,
+        // even right after a previous edge using it was deleted.
+        <React.Fragment key={handle.id}>
+          <Handle
+            id={handle.id}
+            type="target"
+            position={handle.position}
+            className="device-node-handle device-node-handle-target"
+          />
+          <Handle
+            id={handle.id}
+            type="source"
+            position={handle.position}
+            className="device-node-handle device-node-handle-source"
+          />
+        </React.Fragment>
       ))}
       <div className="device-node-icon" style={{ color: info.color }} aria-hidden="true">
         {isCustomType(data.type) ? (

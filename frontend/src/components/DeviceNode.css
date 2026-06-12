@@ -54,3 +54,18 @@
   background: var(--color-border-strong);
   border: 1px solid var(--color-bg-elevated);
 }
+
+/* Larger, invisible drop target sitting under the visible source dot so a
+   new connection can always be dropped on this point, even immediately
+   after a previous connection using it was deleted. */
+.device-node-handle-target {
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  border: none;
+  z-index: 0;
+}
+
+.device-node-handle-source {
+  z-index: 1;
+}

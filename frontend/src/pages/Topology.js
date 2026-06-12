@@ -267,32 +267,37 @@ function TopologyCanvas() {
 
   const onEdgesChange = useCallback(
     (changes) => {
+      const touchedNodeIds = new Set();
+
       changes.forEach((change) => {
         if (change.type === 'remove') {
           const edgeId = Number(change.id.replace('edge-', ''));
           client.delete(`/topology/edges/${edgeId}`).catch((err) => setError(err.message));
 
-          // Reset the cached handle bounds on both endpoints so a fresh
-          // connection started from the same handle isn't influenced by the
-          // deleted edge's stale state.
           const removed = reactFlowInstance.getEdge(change.id);
           if (removed) {
-            updateNodeInternals(removed.source);
-            updateNodeInternals(removed.target);
+            touchedNodeIds.add(removed.source);
+            touchedNodeIds.add(removed.target);
           }
         }
       });
 
       setEdges((eds) => applyEdgeChanges(changes, eds));
+
+      // Fully reset the cached handle bounds on every node touched by a
+      // deleted edge, so a fresh connection drawn from the same handle
+      // starts clean instead of inheriting the deleted edge's handle state.
+      touchedNodeIds.forEach((nodeId) => updateNodeInternals(nodeId));
     },
     [reactFlowInstance, updateNodeInternals]
   );
 
   const onConnect = useCallback((params) => {
     if (!params.source || !params.target || params.source === params.target) return;
-    // Build a fresh object from the connection params rather than holding on
-    // to React Flow's internal params reference, so a new connection never
-    // reuses a stale handle from a previously deleted edge.
+    // Build a brand-new object from the connection params rather than
+    // holding on to React Flow's internal params reference, so a new edge
+    // always reflects the handles for *this* connection, never a cached
+    // reference from a previously deleted one.
     setPendingConnection({
       source: params.source,
       sourceHandle: params.sourceHandle ?? null,
