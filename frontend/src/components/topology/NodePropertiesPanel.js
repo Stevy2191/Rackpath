@@ -46,7 +46,6 @@ export default function NodePropertiesPanel({
 }) {
   const [displayNode, setDisplayNode] = useState(null);
   const [hostname, setHostname] = useState('');
-  const [ip, setIp] = useState('');
   const [interfaces, setInterfaces] = useState([]);
   const [connectionPoints, setConnectionPoints] = useState([]);
   const [error, setError] = useState(null);
@@ -60,7 +59,6 @@ export default function NodePropertiesPanel({
 
   useEffect(() => {
     setHostname(data?.hostname || '');
-    setIp(data?.ip || '');
     // Only re-sync local input state when the selected device changes, not
     // on every keystroke while editing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,11 +103,6 @@ export default function NodePropertiesPanel({
   const commitHostname = () => {
     const next = hostname.trim() || null;
     if (next !== (data.hostname || null)) onUpdateDevice(deviceId, { hostname: next });
-  };
-
-  const commitIp = () => {
-    const next = ip.trim() || null;
-    if (next !== (data.ip || null)) onUpdateDevice(deviceId, { ip: next });
   };
 
   const handleAddInterface = async () => {
@@ -235,23 +228,6 @@ export default function NodePropertiesPanel({
             if (e.key === 'Enter') e.target.blur();
           }}
           placeholder={`Device ${deviceId}`}
-        />
-      </div>
-
-      <div className="node-properties-section">
-        <label className="node-properties-label" htmlFor="node-prop-ip">
-          IP Address
-        </label>
-        <input
-          id="node-prop-ip"
-          className="node-properties-input"
-          value={ip}
-          onChange={(e) => setIp(e.target.value)}
-          onBlur={commitIp}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.target.blur();
-          }}
-          placeholder="-"
         />
       </div>
 
