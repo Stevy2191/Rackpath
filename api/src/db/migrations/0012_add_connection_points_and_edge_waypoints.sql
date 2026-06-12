@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS topology_connection_points (
     project_id  INT UNSIGNED                        NOT NULL DEFAULT 1,
     device_id   INT UNSIGNED                        NOT NULL,
     name        VARCHAR(128)                        NOT NULL DEFAULT '',
-    position    ENUM('top','bottom','left','right') NOT NULL DEFAULT 'top',
+    `position`  ENUM('top','bottom','left','right') NOT NULL DEFAULT 'top',
     created_at  TIMESTAMP                           NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_topology_connection_points_device
         FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,

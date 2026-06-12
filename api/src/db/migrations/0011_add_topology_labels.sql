@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS topology_labels (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     project_id  INT UNSIGNED        NOT NULL DEFAULT 1,
-    text        VARCHAR(512)        NOT NULL DEFAULT '',
+    `text`      VARCHAR(512)        NOT NULL DEFAULT '',
     x           DOUBLE              NOT NULL DEFAULT 0,
     y           DOUBLE              NOT NULL DEFAULT 0,
     font_size   INT UNSIGNED        NOT NULL DEFAULT 14,

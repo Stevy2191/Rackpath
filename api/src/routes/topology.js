@@ -269,7 +269,7 @@ router.post('/nodes/:id/connection-points', async (req, res, next) => {
     const pos = ['top', 'bottom', 'left', 'right'].includes(position) ? position : 'top';
 
     const [result] = await pool.query(
-      'INSERT INTO topology_connection_points (project_id, device_id, name, position) VALUES (?, ?, ?, ?)',
+      'INSERT INTO topology_connection_points (project_id, device_id, name, `position`) VALUES (?, ?, ?, ?)',
       [req.projectId, req.params.id, (name || '').trim(), pos]
     );
 
@@ -291,7 +291,7 @@ router.patch('/nodes/:id/connection-points/:pointId', async (req, res, next) => 
       values.push((req.body.name || '').trim());
     }
     if (req.body.position !== undefined && ['top', 'bottom', 'left', 'right'].includes(req.body.position)) {
-      updates.push('position = ?');
+      updates.push('`position` = ?');
       values.push(req.body.position);
     }
 
@@ -544,7 +544,7 @@ router.post('/labels', async (req, res, next) => {
     const { text, x, y, font_size, color } = req.body;
 
     const [result] = await pool.query(
-      'INSERT INTO topology_labels (project_id, text, x, y, font_size, color) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO topology_labels (project_id, `text`, x, y, font_size, color) VALUES (?, ?, ?, ?, ?, ?)',
       [req.projectId, text || '', x ?? 0, y ?? 0, font_size || 14, color || null]
     );
 
@@ -564,7 +564,8 @@ router.patch('/labels/:id', async (req, res, next) => {
 
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
-        updates.push(`${field} = ?`);
+        // Backtick-quote columns: `text` is a reserved word in MariaDB.
+        updates.push(`\`${field}\` = ?`);
         values.push(req.body[field]);
       }
     }
