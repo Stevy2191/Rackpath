@@ -153,6 +153,16 @@
   flex: 1;
 }
 
+.node-properties-interface-meta-row {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.node-properties-interface-meta-row .node-properties-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .node-properties-icon-btn {
   display: flex;
   align-items: center;
@@ -199,7 +209,8 @@
 /* VLAN sub-interface row, indented under its parent interface. */
 .node-properties-subinterface-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 0.4rem;
   margin-left: 1.1rem;
   padding: 0.3rem 0.4rem;
@@ -207,6 +218,19 @@
   border-left: 3px solid var(--color-accent);
   border-radius: 4px;
   background: var(--color-bg-subtle);
+}
+
+.node-properties-subinterface-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.node-properties-vlan-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .node-properties-vlan-tag {

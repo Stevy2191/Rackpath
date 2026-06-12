@@ -199,7 +199,7 @@ router.post('/nodes/:id/interfaces', async (req, res, next) => {
 // PATCH /api/topology/nodes/:id/interfaces/:interfaceId - update an interface's name/description
 router.patch('/nodes/:id/interfaces/:interfaceId', async (req, res, next) => {
   try {
-    const allowedFields = ['name', 'description', 'vlan_id'];
+    const allowedFields = ['name', 'description', 'vlan_id', 'ip', 'speed', 'cable_type'];
     const updates = [];
     const values = [];
 

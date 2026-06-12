@@ -35,6 +35,8 @@ function ColorSwatchPicker({ value, onChange, onReset }) {
 }
 
 const CONNECTION_POINT_POSITIONS = ['top', 'bottom', 'left', 'right'];
+const CABLE_TYPES = ['Copper (Cat6)', 'Multi-Mode Fibre', 'Single-Mode Fibre', 'Wireless Link'];
+const SPEEDS = ['100Mbps', '1Gbps', '10Gbps', '25Gbps', '40Gbps', '100Gbps'];
 
 export default function NodePropertiesPanel({
   node,
@@ -127,6 +129,9 @@ export default function NodePropertiesPanel({
         name: iface.name || '',
         description: iface.description || null,
         vlan_id: iface.vlan_id ?? null,
+        ip: iface.ip || null,
+        speed: iface.speed || null,
+        cable_type: iface.cable_type || null,
       });
     } catch (err) {
       setError(err.message);
@@ -268,14 +273,58 @@ export default function NodePropertiesPanel({
                   />
                   <input
                     className="node-properties-input"
+                    value={iface.ip || ''}
+                    onChange={(e) => updateInterfaceField(iface.id, 'ip', e.target.value)}
+                    onBlur={() => commitInterface(iface)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.target.blur();
+                    }}
+                    placeholder="IP address"
+                  />
+                  <input
+                    className="node-properties-input"
                     value={iface.description || ''}
                     onChange={(e) => updateInterfaceField(iface.id, 'description', e.target.value)}
                     onBlur={() => commitInterface(iface)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') e.target.blur();
                     }}
-                    placeholder="Description / IP"
+                    placeholder="Description"
                   />
+                  <div className="node-properties-interface-meta-row">
+                    <select
+                      className="node-properties-input"
+                      value={iface.speed || ''}
+                      onChange={(e) => {
+                        const next = { ...iface, speed: e.target.value };
+                        updateInterfaceField(iface.id, 'speed', e.target.value);
+                        commitInterface(next);
+                      }}
+                    >
+                      <option value="">Speed</option>
+                      {SPEEDS.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="node-properties-input"
+                      value={iface.cable_type || ''}
+                      onChange={(e) => {
+                        const next = { ...iface, cable_type: e.target.value };
+                        updateInterfaceField(iface.id, 'cable_type', e.target.value);
+                        commitInterface(next);
+                      }}
+                    >
+                      <option value="">Cable Type</option>
+                      {CABLE_TYPES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -297,30 +346,44 @@ export default function NodePropertiesPanel({
               </li>
               {(subInterfacesByParent[iface.id] || []).map((sub) => (
                 <li key={sub.id} className="node-properties-subinterface-row">
-                  <span className="node-properties-vlan-tag">VLAN</span>
-                  <input
-                    type="number"
-                    className="node-properties-input node-properties-vlan-input"
-                    value={sub.vlan_id ?? ''}
-                    onChange={(e) =>
-                      updateInterfaceField(sub.id, 'vlan_id', e.target.value === '' ? null : Number(e.target.value))
-                    }
-                    onBlur={() => commitInterface(sub)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') e.target.blur();
-                    }}
-                    placeholder="ID"
-                  />
-                  <input
-                    className="node-properties-input"
-                    value={sub.description || ''}
-                    onChange={(e) => updateInterfaceField(sub.id, 'description', e.target.value)}
-                    onBlur={() => commitInterface(sub)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') e.target.blur();
-                    }}
-                    placeholder="IP / description"
-                  />
+                  <div className="node-properties-subinterface-edit">
+                    <div className="node-properties-vlan-header">
+                      <span className="node-properties-vlan-tag">VLAN</span>
+                      <input
+                        type="number"
+                        className="node-properties-input node-properties-vlan-input"
+                        value={sub.vlan_id ?? ''}
+                        onChange={(e) =>
+                          updateInterfaceField(sub.id, 'vlan_id', e.target.value === '' ? null : Number(e.target.value))
+                        }
+                        onBlur={() => commitInterface(sub)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.target.blur();
+                        }}
+                        placeholder="ID"
+                      />
+                    </div>
+                    <input
+                      className="node-properties-input"
+                      value={sub.ip || ''}
+                      onChange={(e) => updateInterfaceField(sub.id, 'ip', e.target.value)}
+                      onBlur={() => commitInterface(sub)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.target.blur();
+                      }}
+                      placeholder="IP address"
+                    />
+                    <input
+                      className="node-properties-input"
+                      value={sub.description || ''}
+                      onChange={(e) => updateInterfaceField(sub.id, 'description', e.target.value)}
+                      onBlur={() => commitInterface(sub)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.target.blur();
+                      }}
+                      placeholder="Description"
+                    />
+                  </div>
                   <button
                     type="button"
                     className="node-properties-icon-btn node-properties-icon-btn-danger"

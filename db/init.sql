@@ -230,6 +230,8 @@ CREATE TABLE IF NOT EXISTS topology_edges (
     target_device_id    INT UNSIGNED        NOT NULL,
     source_handle       VARCHAR(16)         NULL,
     target_handle       VARCHAR(16)         NULL,
+    waypoint_x          DOUBLE              NULL,
+    waypoint_y          DOUBLE              NULL,
     source_interface    VARCHAR(128)        NULL,
     target_interface    VARCHAR(128)        NULL,
     label               VARCHAR(128)        NULL,
@@ -260,24 +262,83 @@ ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS target_handle VARCHAR(16) NU
 ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS source_interface VARCHAR(128) NULL AFTER target_handle;
 ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS target_interface VARCHAR(128) NULL AFTER source_interface;
 
+-- Upgrade path for existing deployments: add the edge reroute waypoint to a
+-- topology_edges table created before it existed.
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS waypoint_x DOUBLE NULL AFTER target_handle;
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS waypoint_y DOUBLE NULL AFTER waypoint_x;
+
 -- ---------------------------------------------------------------------------
 -- topology_node_interfaces - named interfaces shown in the topology node
--- properties panel and used to label edge connection points.
+-- properties panel and used to label edge connection points. A row with a
+-- parent_id is a VLAN sub-interface of that parent (vlan_id holds the VLAN
+-- number). ip/speed/cable_type hold the per-interface link details shown in
+-- the properties panel.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS topology_node_interfaces (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     project_id  INT UNSIGNED        NOT NULL DEFAULT 1,
     device_id   INT UNSIGNED        NOT NULL,
+    parent_id   INT UNSIGNED        NULL,
     name        VARCHAR(128)        NOT NULL,
+    vlan_id     INT                 NULL,
     description VARCHAR(255)        NULL,
+    ip          VARCHAR(45)         NULL,
+    speed       VARCHAR(32)         NULL,
+    cable_type  VARCHAR(64)         NULL,
     created_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_topology_node_interfaces_device
         FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
     CONSTRAINT fk_topology_node_interfaces_project
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_topology_node_interfaces_parent
+        FOREIGN KEY (parent_id) REFERENCES topology_node_interfaces(id) ON DELETE CASCADE,
     KEY idx_topology_node_interfaces_device (device_id),
-    KEY idx_topology_node_interfaces_project (project_id)
+    KEY idx_topology_node_interfaces_project (project_id),
+    KEY idx_topology_node_interfaces_parent (parent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Upgrade path for existing deployments: add per-interface link details to a
+-- topology_node_interfaces table created before they existed.
+ALTER TABLE topology_node_interfaces ADD COLUMN IF NOT EXISTS ip VARCHAR(45) NULL AFTER description;
+ALTER TABLE topology_node_interfaces ADD COLUMN IF NOT EXISTS speed VARCHAR(32) NULL AFTER ip;
+ALTER TABLE topology_node_interfaces ADD COLUMN IF NOT EXISTS cable_type VARCHAR(64) NULL AFTER speed;
+
+-- ---------------------------------------------------------------------------
+-- topology_connection_points - named port anchors (e.g. "Uplink") that can be
+-- added to a node at a specific side via the properties panel. Edges can
+-- attach to these in addition to the default directional handles.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS topology_connection_points (
+    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id  INT UNSIGNED                        NOT NULL DEFAULT 1,
+    device_id   INT UNSIGNED                        NOT NULL,
+    name        VARCHAR(128)                        NOT NULL DEFAULT '',
+    `position`  ENUM('top','bottom','left','right') NOT NULL DEFAULT 'top',
+    created_at  TIMESTAMP                           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_topology_connection_points_device
+        FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
+    CONSTRAINT fk_topology_connection_points_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    KEY idx_topology_connection_points_device (device_id),
+    KEY idx_topology_connection_points_project (project_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------------
+-- topology_labels - floating text labels placed directly on the canvas.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS topology_labels (
+    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id  INT UNSIGNED        NOT NULL DEFAULT 1,
+    `text`      VARCHAR(512)        NOT NULL DEFAULT '',
+    x           DOUBLE              NOT NULL DEFAULT 0,
+    y           DOUBLE              NOT NULL DEFAULT 0,
+    font_size   INT UNSIGNED        NOT NULL DEFAULT 14,
+    color       VARCHAR(32)         NULL,
+    created_at  TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_topology_labels_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    KEY idx_topology_labels_project (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------

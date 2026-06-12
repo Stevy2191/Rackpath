@@ -94,12 +94,7 @@ function buildTextNode(label, callbacks) {
 }
 
 function edgeLabelText(edge) {
-  const parts = [];
-  if (edge.label) parts.push(edge.label);
-  if (edge.vlan) parts.push(`VLAN ${edge.vlan}`);
-  if (edge.speed) parts.push(edge.speed);
-  if (edge.cable_type) parts.push(edge.cable_type);
-  return parts.join(' · ') || undefined;
+  return edge.label || undefined;
 }
 
 function buildEdge(edge, showLabels, callbacks) {
