@@ -146,41 +146,11 @@
   background: var(--color-bg-subtle);
 }
 
-.node-properties-interface-info {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.node-properties-interface-name {
-  font-size: 0.8rem;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.node-properties-interface-desc {
-  font-size: 0.7rem;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .node-properties-interface-edit {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
   flex: 1;
-}
-
-.node-properties-interface-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  flex-shrink: 0;
 }
 
 .node-properties-icon-btn {
@@ -220,6 +190,11 @@
 
 .node-properties-add-interface:hover {
   background: var(--color-bg-subtle);
+}
+
+.node-properties-error {
+  color: var(--color-danger);
+  font-size: 0.75rem;
 }
 
 .node-properties-actions {

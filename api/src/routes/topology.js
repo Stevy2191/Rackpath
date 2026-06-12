@@ -174,11 +174,10 @@ router.get('/nodes/:id/interfaces', async (req, res, next) => {
 router.post('/nodes/:id/interfaces', async (req, res, next) => {
   try {
     const { name, description } = req.body;
-    if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
 
     const [result] = await pool.query(
       'INSERT INTO topology_node_interfaces (project_id, device_id, name, description) VALUES (?, ?, ?, ?)',
-      [req.projectId, req.params.id, name.trim(), description || null]
+      [req.projectId, req.params.id, (name || '').trim(), description || null]
     );
 
     const [rows] = await pool.query('SELECT * FROM topology_node_interfaces WHERE id = ?', [result.insertId]);
@@ -188,8 +187,8 @@ router.post('/nodes/:id/interfaces', async (req, res, next) => {
   }
 });
 
-// PATCH /api/topology/interfaces/:id - update an interface's name/description
-router.patch('/interfaces/:id', async (req, res, next) => {
+// PATCH /api/topology/nodes/:id/interfaces/:interfaceId - update an interface's name/description
+router.patch('/nodes/:id/interfaces/:interfaceId', async (req, res, next) => {
   try {
     const allowedFields = ['name', 'description'];
     const updates = [];
@@ -206,26 +205,26 @@ router.patch('/interfaces/:id', async (req, res, next) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    values.push(req.params.id, req.projectId);
+    values.push(req.params.interfaceId, req.params.id, req.projectId);
     const [result] = await pool.query(
-      `UPDATE topology_node_interfaces SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`,
+      `UPDATE topology_node_interfaces SET ${updates.join(', ')} WHERE id = ? AND device_id = ? AND project_id = ?`,
       values
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Interface not found' });
 
-    const [rows] = await pool.query('SELECT * FROM topology_node_interfaces WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.query('SELECT * FROM topology_node_interfaces WHERE id = ?', [req.params.interfaceId]);
     res.json(rows[0]);
   } catch (err) {
     next(err);
   }
 });
 
-// DELETE /api/topology/interfaces/:id
-router.delete('/interfaces/:id', async (req, res, next) => {
+// DELETE /api/topology/nodes/:id/interfaces/:interfaceId
+router.delete('/nodes/:id/interfaces/:interfaceId', async (req, res, next) => {
   try {
     const [result] = await pool.query(
-      'DELETE FROM topology_node_interfaces WHERE id = ? AND project_id = ?',
-      [req.params.id, req.projectId]
+      'DELETE FROM topology_node_interfaces WHERE id = ? AND device_id = ? AND project_id = ?',
+      [req.params.interfaceId, req.params.id, req.projectId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Interface not found' });
     res.status(204).send();

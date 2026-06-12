@@ -28,7 +28,6 @@ import DevicePicker, {
 import NodePropertiesPanel from '../components/topology/NodePropertiesPanel';
 import ConnectionModal from '../components/topology/ConnectionModal';
 import ZoneFormModal from '../components/topology/ZoneFormModal';
-import AddDeviceModal from '../components/topology/AddDeviceModal';
 import { getLayoutedElements } from '../utils/layout';
 import './Topology.css';
 
@@ -124,7 +123,6 @@ function TopologyCanvas() {
   const [showEdgeLabels, setShowEdgeLabels] = useState(true);
   const [pendingConnection, setPendingConnection] = useState(null);
   const [editingEdge, setEditingEdge] = useState(null);
-  const [pendingManualDrop, setPendingManualDrop] = useState(null);
   const [showZoneModal, setShowZoneModal] = useState(false);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -657,7 +655,20 @@ function TopologyCanvas() {
       const discoveredId = event.dataTransfer.getData(DISCOVERED_DRAG_TYPE);
 
       if (manualData) {
-        setPendingManualDrop({ deviceInfo: JSON.parse(manualData), position });
+        const deviceInfo = JSON.parse(manualData);
+        try {
+          const res = await client.post('/topology/nodes', {
+            hostname: deviceInfo.label,
+            type: deviceInfo.type,
+            x: position.x,
+            y: position.y,
+          });
+          const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
+          setNodes((nds) => [...nds, newNode]);
+          setSelectedNodeId(newNode.id);
+        } catch (err) {
+          setError(err.message);
+        }
       } else if (discoveredId) {
         const deviceId = Number(discoveredId);
         const device = unplacedDevices.find((d) => d.id === deviceId);
@@ -678,27 +689,6 @@ function TopologyCanvas() {
       }
     },
     [reactFlowInstance, unplacedDevices, handleDeviceResizeEnd]
-  );
-
-  const handleManualDeviceSubmit = useCallback(
-    async ({ hostname, ip }) => {
-      if (!pendingManualDrop) return;
-      try {
-        const res = await client.post('/topology/nodes', {
-          hostname,
-          ip,
-          type: pendingManualDrop.deviceInfo.type,
-          x: pendingManualDrop.position.x,
-          y: pendingManualDrop.position.y,
-        });
-        setNodes((nds) => [...nds, buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd })]);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setPendingManualDrop(null);
-      }
-    },
-    [pendingManualDrop, handleDeviceResizeEnd]
   );
 
   if (loading) return <div className="page-status">Loading topology...</div>;
@@ -799,14 +789,6 @@ function TopologyCanvas() {
       )}
 
       {showZoneModal && <ZoneFormModal onSubmit={handleAddZone} onCancel={() => setShowZoneModal(false)} />}
-
-      {pendingManualDrop && (
-        <AddDeviceModal
-          deviceInfo={pendingManualDrop.deviceInfo}
-          onSubmit={handleManualDeviceSubmit}
-          onCancel={() => setPendingManualDrop(null)}
-        />
-      )}
     </div>
   );
 }
