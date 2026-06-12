@@ -37,8 +37,14 @@
   color: var(--color-text);
 }
 
+.subnet-calc-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
 .subnet-calc-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--color-border-strong);
@@ -47,6 +53,19 @@
   color: var(--color-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85rem;
+}
+
+.subnet-calc-prefix {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 0.4rem 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 
 .subnet-calc-error {
