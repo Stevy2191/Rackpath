@@ -100,6 +100,14 @@ file:
    schema changes shipped after your initial deploy are picked up
    automatically.
 
+   **Schema changes:** any commit that adds or alters a table/column in
+   `db/init.sql` (or that a route now depends on) MUST also add a
+   `api/src/db/migrations/NNNN_description.sql` file in the same commit,
+   using `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` so it's
+   safe to run against existing databases. Without it, existing deployments
+   never get the new table/column and the API returns 500s once code that
+   depends on it ships.
+
 6. Create the default admin user:
 
    ```bash
