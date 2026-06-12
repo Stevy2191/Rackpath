@@ -1,24 +1,16 @@
 import React, { useState } from 'react';
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, Position, useReactFlow } from 'reactflow';
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, useReactFlow } from 'reactflow';
 import { Pencil, X } from 'lucide-react';
 import './ConnectionEdge.css';
 
-// Small offset applied to an endpoint's interface label so it sits just
-// outside the node, in the direction the edge leaves/enters that node.
-function interfaceLabelOffset(position) {
-  switch (position) {
-    case Position.Top:
-      return { x: 0, y: -14 };
-    case Position.Bottom:
-      return { x: 0, y: 14 };
-    case Position.Left:
-      return { x: -14, y: 0 };
-    case Position.Right:
-      return { x: 14, y: 0 };
-    default:
-      return { x: 0, y: 0 };
-  }
+// Linear interpolation between two points; t=0 is `a`, t=1 is `b`.
+function lerp(a, b, t) {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
+
+// How far along the edge (from each node) the port labels sit. Keeps them off
+// the node's hostname caption and clearly on the edge line.
+const PORT_LABEL_FRACTION = 0.28;
 
 export default function ConnectionEdge({
   id,
@@ -67,8 +59,13 @@ export default function ConnectionEdge({
     strokeWidth: selected ? 2.5 : style?.strokeWidth,
   };
 
-  const sourceOffset = interfaceLabelOffset(sourcePosition);
-  const targetOffset = interfaceLabelOffset(targetPosition);
+  // Place each port label a fixed fraction along the edge, measured toward the
+  // next path point (the waypoint if the edge is rerouted, otherwise the far
+  // node). This keeps the label on the line and away from the node caption.
+  const sourcePoint = { x: sourceX, y: sourceY };
+  const targetPoint = { x: targetX, y: targetY };
+  const sourceLabelPos = lerp(sourcePoint, waypoint || targetPoint, PORT_LABEL_FRACTION);
+  const targetLabelPos = lerp(targetPoint, waypoint || sourcePoint, PORT_LABEL_FRACTION);
 
   const handlePointerDown = (e) => {
     e.stopPropagation();
@@ -103,9 +100,7 @@ export default function ConnectionEdge({
           <div
             className="connection-edge-interface-label"
             style={{
-              transform: `translate(-50%, -50%) translate(${sourceX + sourceOffset.x}px, ${
-                sourceY + sourceOffset.y
-              }px)`,
+              transform: `translate(-50%, -50%) translate(${sourceLabelPos.x}px, ${sourceLabelPos.y}px)`,
             }}
           >
             {data.source_interface}
@@ -115,9 +110,7 @@ export default function ConnectionEdge({
           <div
             className="connection-edge-interface-label"
             style={{
-              transform: `translate(-50%, -50%) translate(${targetX + targetOffset.x}px, ${
-                targetY + targetOffset.y
-              }px)`,
+              transform: `translate(-50%, -50%) translate(${targetLabelPos.x}px, ${targetLabelPos.y}px)`,
             }}
           >
             {data.target_interface}

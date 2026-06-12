@@ -69,30 +69,11 @@
   pointer-events: none;
 }
 
-/* Centre handle used for click-to-link. Hidden by default; shown only while
-   hovering a node in Link mode. */
-.device-node-link-dot {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 14px;
-  height: 14px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: var(--color-accent);
-  border: 2px solid var(--color-bg-elevated);
-  box-shadow: 0 1px 4px var(--color-shadow);
-  display: none;
-  pointer-events: none;
-  z-index: 3;
-}
-
-.device-node.is-link-mode:hover .device-node-link-dot {
-  display: block;
-}
-
+/* In Link mode the whole node is the click target (no dot is drawn over the
+   icon); the accent border on hover signals the node is ready to connect. */
 .device-node.is-link-mode:hover {
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 
 /* Named connection points: small visible dots with a label. */

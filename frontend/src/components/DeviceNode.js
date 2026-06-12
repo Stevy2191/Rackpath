@@ -116,9 +116,6 @@ function DeviceNode({ id, data, selected }) {
         ))
       )}
 
-      {/* Single centre handle shown only while hovering in Link mode. */}
-      <span className="device-node-link-dot" aria-hidden="true" />
-
       <div className="device-node-icon" style={{ color: iconColor }} aria-hidden="true">
         {isCustomType(data.type) ? (
           <img className="device-node-custom-icon" src={customIconUrl(customIconFilename(data.type))} alt="" />
