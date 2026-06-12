@@ -15,6 +15,12 @@
   box-shadow: 0 1px 4px var(--color-shadow);
 }
 
+/* Highlight the first node picked while drawing a connection in Link mode. */
+.device-node.is-link-source {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 .device-node-icon {
   display: flex;
   align-items: center;
@@ -34,33 +40,108 @@
   top: calc(100% + 0.3rem);
   left: 50%;
   transform: translateX(-50%);
-  max-width: 160px;
+  /* Wrap long hostnames onto a second line, then truncate with an ellipsis so
+     the label never runs off the canvas. Full name is available on hover via
+     the title attribute. */
+  width: max-content;
+  max-width: 140px;
   font-weight: 600;
   font-size: 0.75rem;
+  line-height: 1.2;
   text-align: center;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
 }
 
+/* Directional anchor handles are invisible: edges attach to them but no dot
+   is drawn, and they ignore pointer events so they never block node clicks. */
 .device-node-handle {
-  width: 8px;
-  height: 8px;
-  background: var(--color-border-strong);
-  border: 1px solid var(--color-bg-elevated);
-}
-
-/* Larger, invisible drop target sitting under the visible source dot so a
-   new connection can always be dropped on this point, even immediately
-   after a previous connection using it was deleted. */
-.device-node-handle-target {
-  width: 16px;
-  height: 16px;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
   background: transparent;
   border: none;
-  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.device-node-handle-source {
+/* Centre handle used for click-to-link. Hidden by default; shown only while
+   hovering a node in Link mode. */
+.device-node-link-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--color-bg-elevated);
+  box-shadow: 0 1px 4px var(--color-shadow);
+  display: none;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.device-node.is-link-mode:hover .device-node-link-dot {
+  display: block;
+}
+
+.device-node.is-link-mode:hover {
+  border-color: var(--color-accent);
+}
+
+/* Named connection points: small visible dots with a label. */
+.device-node-cp-handle {
+  width: 9px;
+  height: 9px;
+  background: var(--color-accent);
+  border: 1.5px solid var(--color-bg-elevated);
+  z-index: 2;
+}
+
+.device-node-cp-handle-target {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border: none;
   z-index: 1;
+}
+
+.device-node-cp-label {
+  position: absolute;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  padding: 0 0.2rem;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.device-node-cp-label-top {
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+}
+
+.device-node-cp-label-bottom {
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+}
+
+.device-node-cp-label-left {
+  right: calc(100% + 6px);
+  transform: translateY(-50%);
+}
+
+.device-node-cp-label-right {
+  left: calc(100% + 6px);
+  transform: translateY(-50%);
 }

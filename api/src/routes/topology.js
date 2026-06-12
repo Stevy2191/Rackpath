@@ -233,6 +233,100 @@ router.delete('/nodes/:id/interfaces/:interfaceId', async (req, res, next) => {
   }
 });
 
+// GET /api/topology/connection-points - all named port anchors for the project,
+// used to render every node's anchors when the canvas first loads.
+router.get('/connection-points', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM topology_connection_points WHERE project_id = ? ORDER BY id',
+      [req.projectId]
+    );
+    res.json(rows);
+  } catch (err) {
+    if (isTableMissing(err)) return res.json([]);
+    next(err);
+  }
+});
+
+// GET /api/topology/nodes/:id/connection-points - list a device's named port anchors
+router.get('/nodes/:id/connection-points', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM topology_connection_points WHERE device_id = ? AND project_id = ? ORDER BY id',
+      [req.params.id, req.projectId]
+    );
+    res.json(rows);
+  } catch (err) {
+    if (isTableMissing(err)) return res.json([]);
+    next(err);
+  }
+});
+
+// POST /api/topology/nodes/:id/connection-points - add a named port anchor
+router.post('/nodes/:id/connection-points', async (req, res, next) => {
+  try {
+    const { name, position } = req.body;
+    const pos = ['top', 'bottom', 'left', 'right'].includes(position) ? position : 'top';
+
+    const [result] = await pool.query(
+      'INSERT INTO topology_connection_points (project_id, device_id, name, position) VALUES (?, ?, ?, ?)',
+      [req.projectId, req.params.id, (name || '').trim(), pos]
+    );
+
+    const [rows] = await pool.query('SELECT * FROM topology_connection_points WHERE id = ?', [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/topology/nodes/:id/connection-points/:pointId - rename or move an anchor
+router.patch('/nodes/:id/connection-points/:pointId', async (req, res, next) => {
+  try {
+    const updates = [];
+    const values = [];
+
+    if (req.body.name !== undefined) {
+      updates.push('name = ?');
+      values.push((req.body.name || '').trim());
+    }
+    if (req.body.position !== undefined && ['top', 'bottom', 'left', 'right'].includes(req.body.position)) {
+      updates.push('position = ?');
+      values.push(req.body.position);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(req.params.pointId, req.params.id, req.projectId);
+    const [result] = await pool.query(
+      `UPDATE topology_connection_points SET ${updates.join(', ')} WHERE id = ? AND device_id = ? AND project_id = ?`,
+      values
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Connection point not found' });
+
+    const [rows] = await pool.query('SELECT * FROM topology_connection_points WHERE id = ?', [req.params.pointId]);
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/topology/nodes/:id/connection-points/:pointId
+router.delete('/nodes/:id/connection-points/:pointId', async (req, res, next) => {
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM topology_connection_points WHERE id = ? AND device_id = ? AND project_id = ?',
+      [req.params.pointId, req.params.id, req.projectId]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Connection point not found' });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/topology/edges
 router.get('/edges', async (req, res, next) => {
   try {
@@ -296,6 +390,8 @@ router.patch('/edges/:id', async (req, res, next) => {
       'target_device_id',
       'source_handle',
       'target_handle',
+      'waypoint_x',
+      'waypoint_y',
       'source_interface',
       'target_interface',
       'label',
@@ -425,6 +521,80 @@ router.delete('/zones/:id', async (req, res, next) => {
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Zone not found' });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/topology/labels - floating text labels on the canvas
+router.get('/labels', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM topology_labels WHERE project_id = ?', [req.projectId]);
+    res.json(rows);
+  } catch (err) {
+    if (isTableMissing(err)) return res.json([]);
+    next(err);
+  }
+});
+
+// POST /api/topology/labels
+router.post('/labels', async (req, res, next) => {
+  try {
+    const { text, x, y, font_size, color } = req.body;
+
+    const [result] = await pool.query(
+      'INSERT INTO topology_labels (project_id, text, x, y, font_size, color) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.projectId, text || '', x ?? 0, y ?? 0, font_size || 14, color || null]
+    );
+
+    const [rows] = await pool.query('SELECT * FROM topology_labels WHERE id = ?', [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/topology/labels/:id - update text, position, or styling
+router.patch('/labels/:id', async (req, res, next) => {
+  try {
+    const allowedFields = ['text', 'x', 'y', 'font_size', 'color'];
+    const updates = [];
+    const values = [];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(req.body[field]);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(req.params.id, req.projectId);
+    const [result] = await pool.query(
+      `UPDATE topology_labels SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`,
+      values
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Label not found' });
+
+    const [rows] = await pool.query('SELECT * FROM topology_labels WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/topology/labels/:id
+router.delete('/labels/:id', async (req, res, next) => {
+  try {
+    const [result] = await pool.query('DELETE FROM topology_labels WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Label not found' });
     res.status(204).send();
   } catch (err) {
     next(err);

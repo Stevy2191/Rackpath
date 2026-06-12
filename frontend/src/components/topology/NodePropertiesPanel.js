@@ -34,11 +34,21 @@ function ColorSwatchPicker({ value, onChange, onReset }) {
   );
 }
 
-export default function NodePropertiesPanel({ node, onClose, onUpdateDevice, onDelete, onCopy }) {
+const CONNECTION_POINT_POSITIONS = ['top', 'bottom', 'left', 'right'];
+
+export default function NodePropertiesPanel({
+  node,
+  onClose,
+  onUpdateDevice,
+  onDelete,
+  onCopy,
+  onConnectionPointsChange,
+}) {
   const [displayNode, setDisplayNode] = useState(null);
   const [hostname, setHostname] = useState('');
   const [ip, setIp] = useState('');
   const [interfaces, setInterfaces] = useState([]);
+  const [connectionPoints, setConnectionPoints] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -66,6 +76,14 @@ export default function NodePropertiesPanel({ node, onClose, onUpdateDevice, onD
       })
       .catch(() => {
         if (!cancelled) setInterfaces([]);
+      });
+    client
+      .get(`/topology/nodes/${deviceId}/connection-points`)
+      .then((res) => {
+        if (!cancelled) setConnectionPoints(res.data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setConnectionPoints([]);
       });
     return () => {
       cancelled = true;
@@ -118,6 +136,47 @@ export default function NodePropertiesPanel({ node, onClose, onUpdateDevice, onD
     try {
       await client.delete(`/topology/nodes/${deviceId}/interfaces/${id}`);
       setInterfaces((prev) => prev.filter((i) => i.id !== id));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const syncConnectionPoints = (points) => {
+    setConnectionPoints(points);
+    onConnectionPointsChange?.(deviceId, points);
+  };
+
+  const handleAddConnectionPoint = async () => {
+    try {
+      const res = await client.post(`/topology/nodes/${deviceId}/connection-points`, {
+        name: `Port ${connectionPoints.length + 1}`,
+        position: 'top',
+      });
+      syncConnectionPoints([...connectionPoints, res.data]);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const updateConnectionPointField = (id, field, value) => {
+    syncConnectionPoints(connectionPoints.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
+  };
+
+  const commitConnectionPoint = async (point) => {
+    try {
+      await client.patch(`/topology/nodes/${deviceId}/connection-points/${point.id}`, {
+        name: point.name || '',
+        position: point.position,
+      });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const deleteConnectionPoint = async (id) => {
+    try {
+      await client.delete(`/topology/nodes/${deviceId}/connection-points/${id}`);
+      syncConnectionPoints(connectionPoints.filter((p) => p.id !== id));
     } catch (err) {
       setError(err.message);
     }
@@ -232,6 +291,55 @@ export default function NodePropertiesPanel({ node, onClose, onUpdateDevice, onD
         </ul>
         <button type="button" className="node-properties-add-interface" onClick={handleAddInterface}>
           + Add
+        </button>
+      </div>
+
+      <div className="node-properties-section">
+        <span className="node-properties-label">Connection Points</span>
+        <ul className="node-properties-interfaces">
+          {connectionPoints.map((point) => (
+            <li key={point.id} className="node-properties-interface-row">
+              <div className="node-properties-interface-edit">
+                <input
+                  className="node-properties-input"
+                  value={point.name || ''}
+                  onChange={(e) => updateConnectionPointField(point.id, 'name', e.target.value)}
+                  onBlur={() => commitConnectionPoint(point)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.target.blur();
+                  }}
+                  placeholder="Name (e.g. Uplink)"
+                />
+                <select
+                  className="node-properties-input"
+                  value={point.position}
+                  onChange={(e) => {
+                    const next = { ...point, position: e.target.value };
+                    updateConnectionPointField(point.id, 'position', e.target.value);
+                    commitConnectionPoint(next);
+                  }}
+                >
+                  {CONNECTION_POINT_POSITIONS.map((pos) => (
+                    <option key={pos} value={pos}>
+                      {pos.charAt(0).toUpperCase() + pos.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="node-properties-icon-btn node-properties-icon-btn-danger"
+                onClick={() => deleteConnectionPoint(point.id)}
+                aria-label="Delete connection point"
+                title="Delete"
+              >
+                <Trash2 size={13} />
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="node-properties-add-interface" onClick={handleAddConnectionPoint}>
+          + Add Connection Point
         </button>
         {error && <div className="node-properties-error">{error}</div>}
       </div>

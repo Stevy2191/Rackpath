@@ -5,79 +5,6 @@
   min-height: 0;
 }
 
-.topology-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 1rem;
-  background: var(--color-bg-elevated);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.topology-toolbar button {
-  padding: 0.4rem 0.9rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 4px;
-  background: var(--color-bg-elevated);
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-.topology-toolbar button:hover {
-  background: var(--color-bg-subtle);
-}
-
-.topology-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-left: auto;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-
-.topology-toolbar button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.topology-danger-button {
-  color: var(--color-danger) !important;
-  border-color: var(--color-danger-border) !important;
-}
-
-.topology-danger-button:hover {
-  background: var(--color-danger-bg) !important;
-}
-
-.topology-export {
-  position: relative;
-}
-
-.topology-export-menu {
-  position: absolute;
-  top: calc(100% + 0.25rem);
-  left: 0;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  min-width: 160px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 4px;
-  box-shadow: 0 4px 12px var(--color-shadow);
-  overflow: hidden;
-}
-
-.topology-export-menu button {
-  border: none;
-  border-radius: 0;
-  text-align: left;
-  padding: 0.5rem 0.9rem;
-}
-
 .topology-toast {
   position: absolute;
   bottom: 1.5rem;
@@ -120,4 +47,41 @@
 .topology-canvas .react-flow {
   width: 100%;
   height: 100%;
+}
+
+/* In Link/Text/Shape modes the pane cursor hints that clicking the canvas
+   performs an action rather than panning. */
+.topology-mode-text,
+.topology-mode-shape {
+  cursor: crosshair;
+}
+
+.topology-mode-link .react-flow__pane {
+  cursor: crosshair;
+}
+
+/* Small floating Auto Layout / Fit View buttons at the bottom right, near the
+   zoom controls (which sit at the bottom left). */
+.topology-floating-actions {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 8;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.topology-floating-actions button {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.78rem;
+  box-shadow: 0 1px 4px var(--color-shadow);
+}
+
+.topology-floating-actions button:hover {
+  background: var(--color-bg-subtle);
 }
