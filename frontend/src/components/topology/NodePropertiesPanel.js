@@ -95,6 +95,13 @@ export default function NodePropertiesPanel({
   const info = DEVICE_TYPES[classifyDevice(data.type)];
   const Icon = info.icon;
 
+  // Top-level interfaces, each with its VLAN sub-interfaces grouped beneath.
+  const mainInterfaces = interfaces.filter((i) => !i.parent_id);
+  const subInterfacesByParent = interfaces.reduce((acc, i) => {
+    if (i.parent_id) (acc[i.parent_id] = acc[i.parent_id] || []).push(i);
+    return acc;
+  }, {});
+
   const commitHostname = () => {
     const next = hostname.trim() || null;
     if (next !== (data.hostname || null)) onUpdateDevice(deviceId, { hostname: next });
@@ -126,7 +133,22 @@ export default function NodePropertiesPanel({
       await client.patch(`/topology/nodes/${deviceId}/interfaces/${iface.id}`, {
         name: iface.name || '',
         description: iface.description || null,
+        vlan_id: iface.vlan_id ?? null,
       });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleAddSubInterface = async (parent) => {
+    try {
+      const res = await client.post(`/topology/nodes/${deviceId}/interfaces`, {
+        name: '',
+        description: '',
+        parent_id: parent.id,
+        vlan_id: null,
+      });
+      setInterfaces((prev) => [...prev, res.data]);
     } catch (err) {
       setError(err.message);
     }
@@ -135,7 +157,8 @@ export default function NodePropertiesPanel({
   const deleteInterface = async (id) => {
     try {
       await client.delete(`/topology/nodes/${deviceId}/interfaces/${id}`);
-      setInterfaces((prev) => prev.filter((i) => i.id !== id));
+      // Drop the interface and any VLAN sub-interfaces parented to it.
+      setInterfaces((prev) => prev.filter((i) => i.id !== id && i.parent_id !== id));
     } catch (err) {
       setError(err.message);
     }
@@ -253,40 +276,87 @@ export default function NodePropertiesPanel({
       <div className="node-properties-section">
         <span className="node-properties-label">Interfaces</span>
         <ul className="node-properties-interfaces">
-          {interfaces.map((iface) => (
-            <li key={iface.id} className="node-properties-interface-row">
-              <div className="node-properties-interface-edit">
-                <input
-                  className="node-properties-input"
-                  value={iface.name || ''}
-                  onChange={(e) => updateInterfaceField(iface.id, 'name', e.target.value)}
-                  onBlur={() => commitInterface(iface)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.target.blur();
-                  }}
-                  placeholder="Name (e.g. eth0)"
-                />
-                <input
-                  className="node-properties-input"
-                  value={iface.description || ''}
-                  onChange={(e) => updateInterfaceField(iface.id, 'description', e.target.value)}
-                  onBlur={() => commitInterface(iface)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.target.blur();
-                  }}
-                  placeholder="Description / IP"
-                />
-              </div>
-              <button
-                type="button"
-                className="node-properties-icon-btn node-properties-icon-btn-danger"
-                onClick={() => deleteInterface(iface.id)}
-                aria-label="Delete interface"
-                title="Delete"
-              >
-                <Trash2 size={13} />
-              </button>
-            </li>
+          {mainInterfaces.map((iface) => (
+            <React.Fragment key={iface.id}>
+              <li className="node-properties-interface-row">
+                <div className="node-properties-interface-edit">
+                  <input
+                    className="node-properties-input"
+                    value={iface.name || ''}
+                    onChange={(e) => updateInterfaceField(iface.id, 'name', e.target.value)}
+                    onBlur={() => commitInterface(iface)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.target.blur();
+                    }}
+                    placeholder="Name (e.g. eth0)"
+                  />
+                  <input
+                    className="node-properties-input"
+                    value={iface.description || ''}
+                    onChange={(e) => updateInterfaceField(iface.id, 'description', e.target.value)}
+                    onBlur={() => commitInterface(iface)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.target.blur();
+                    }}
+                    placeholder="Description / IP"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="node-properties-vlan-add"
+                  onClick={() => handleAddSubInterface(iface)}
+                  title="Add VLAN sub-interface"
+                >
+                  + VLAN
+                </button>
+                <button
+                  type="button"
+                  className="node-properties-icon-btn node-properties-icon-btn-danger"
+                  onClick={() => deleteInterface(iface.id)}
+                  aria-label="Delete interface"
+                  title="Delete"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </li>
+              {(subInterfacesByParent[iface.id] || []).map((sub) => (
+                <li key={sub.id} className="node-properties-subinterface-row">
+                  <span className="node-properties-vlan-tag">VLAN</span>
+                  <input
+                    type="number"
+                    className="node-properties-input node-properties-vlan-input"
+                    value={sub.vlan_id ?? ''}
+                    onChange={(e) =>
+                      updateInterfaceField(sub.id, 'vlan_id', e.target.value === '' ? null : Number(e.target.value))
+                    }
+                    onBlur={() => commitInterface(sub)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.target.blur();
+                    }}
+                    placeholder="ID"
+                  />
+                  <input
+                    className="node-properties-input"
+                    value={sub.description || ''}
+                    onChange={(e) => updateInterfaceField(sub.id, 'description', e.target.value)}
+                    onBlur={() => commitInterface(sub)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.target.blur();
+                    }}
+                    placeholder="IP / description"
+                  />
+                  <button
+                    type="button"
+                    className="node-properties-icon-btn node-properties-icon-btn-danger"
+                    onClick={() => deleteInterface(sub.id)}
+                    aria-label="Delete VLAN sub-interface"
+                    title="Delete"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </li>
+              ))}
+            </React.Fragment>
           ))}
         </ul>
         <button type="button" className="node-properties-add-interface" onClick={handleAddInterface}>

@@ -177,6 +177,51 @@
   border-color: var(--color-danger-border);
 }
 
+.node-properties-vlan-add {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.node-properties-vlan-add:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* VLAN sub-interface row, indented under its parent interface. */
+.node-properties-subinterface-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 1.1rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 4px;
+  background: var(--color-bg-subtle);
+}
+
+.node-properties-vlan-tag {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
+.node-properties-vlan-input {
+  flex: 0 0 3.2rem;
+  width: 3.2rem;
+}
+
 .node-properties-add-interface {
   align-self: flex-start;
   padding: 0.3rem 0.6rem;

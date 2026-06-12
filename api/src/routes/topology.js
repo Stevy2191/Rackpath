@@ -174,11 +174,19 @@ router.get('/nodes/:id/interfaces', async (req, res, next) => {
 // POST /api/topology/nodes/:id/interfaces - add an interface to a device
 router.post('/nodes/:id/interfaces', async (req, res, next) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, parent_id, vlan_id } = req.body;
 
     const [result] = await pool.query(
-      'INSERT INTO topology_node_interfaces (project_id, device_id, name, description) VALUES (?, ?, ?, ?)',
-      [req.projectId, req.params.id, (name || '').trim(), description || null]
+      `INSERT INTO topology_node_interfaces (project_id, device_id, parent_id, name, vlan_id, description)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        req.projectId,
+        req.params.id,
+        parent_id || null,
+        (name || '').trim(),
+        vlan_id === undefined || vlan_id === null || vlan_id === '' ? null : Number(vlan_id),
+        description || null,
+      ]
     );
 
     const [rows] = await pool.query('SELECT * FROM topology_node_interfaces WHERE id = ?', [result.insertId]);
@@ -191,14 +199,15 @@ router.post('/nodes/:id/interfaces', async (req, res, next) => {
 // PATCH /api/topology/nodes/:id/interfaces/:interfaceId - update an interface's name/description
 router.patch('/nodes/:id/interfaces/:interfaceId', async (req, res, next) => {
   try {
-    const allowedFields = ['name', 'description'];
+    const allowedFields = ['name', 'description', 'vlan_id'];
     const updates = [];
     const values = [];
 
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         updates.push(`${field} = ?`);
-        values.push(req.body[field]);
+        const raw = req.body[field];
+        values.push(field === 'vlan_id' && (raw === null || raw === '') ? null : raw);
       }
     }
 
@@ -223,6 +232,13 @@ router.patch('/nodes/:id/interfaces/:interfaceId', async (req, res, next) => {
 // DELETE /api/topology/nodes/:id/interfaces/:interfaceId
 router.delete('/nodes/:id/interfaces/:interfaceId', async (req, res, next) => {
   try {
+    // Remove any VLAN sub-interfaces of this interface first, so deleting a
+    // parent cleans up its children even where the FK cascade isn't present.
+    await pool.query(
+      'DELETE FROM topology_node_interfaces WHERE parent_id = ? AND device_id = ? AND project_id = ?',
+      [req.params.interfaceId, req.params.id, req.projectId]
+    );
+
     const [result] = await pool.query(
       'DELETE FROM topology_node_interfaces WHERE id = ? AND device_id = ? AND project_id = ?',
       [req.params.interfaceId, req.params.id, req.projectId]

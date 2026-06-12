@@ -64,7 +64,9 @@ function DeviceNode({ id, data, selected }) {
 
   const mode = data.mode || 'select';
   const connectionPoints = data.connectionPoints || [];
-  const fullLabel = data.hostname || data.ip || `Device ${data.id}`;
+  // Only the hostname is shown on the canvas; the IP stays editable in the
+  // properties panel but is intentionally not displayed under the node.
+  const fullLabel = data.hostname || `Device ${data.id}`;
 
   // Group connection points by side so each side can spread its points evenly.
   const bySide = { top: [], right: [], bottom: [], left: [] };

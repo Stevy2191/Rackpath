@@ -13,11 +13,27 @@ const CABLE_TYPES = [
 
 const SPEEDS = ['100Mbps', '1Gbps', '10Gbps', '25Gbps', '40Gbps', '100Gbps'];
 
+// Build the dropdown options: each top-level interface, with its VLAN
+// sub-interfaces listed indented beneath it as "eth0.10 (VLAN 10)".
+function buildInterfaceOptions(interfaces) {
+  const mains = interfaces.filter((i) => !i.parent_id);
+  const options = [];
+  mains.forEach((m) => {
+    if (m.name) options.push({ value: m.name, label: m.name });
+    interfaces
+      .filter((s) => s.parent_id === m.id)
+      .forEach((s) => {
+        const sub = `${m.name}.${s.vlan_id ?? ''}`;
+        options.push({ value: sub, label: `  ${sub} (VLAN ${s.vlan_id ?? '?'})` });
+      });
+  });
+  return options;
+}
+
 function InterfaceSelect({ deviceLabel, interfaces, value, onChange }) {
-  // Make sure an already-saved interface still shows even if it isn't in the
-  // fetched list (e.g. it was typed manually before).
-  const names = interfaces.map((i) => i.name).filter(Boolean);
-  const options = value && !names.includes(value) ? [value, ...names] : names;
+  const options = buildInterfaceOptions(interfaces);
+  // Keep an already-saved value selectable even if it isn't in the list.
+  const finalOptions = value && !options.some((o) => o.value === value) ? [{ value, label: value }, ...options] : options;
 
   return (
     <label className="link-config-port">
@@ -26,9 +42,9 @@ function InterfaceSelect({ deviceLabel, interfaces, value, onChange }) {
       </span>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">— select interface —</option>
-        {options.map((name) => (
-          <option key={name} value={name}>
-            {name}
+        {finalOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
           </option>
         ))}
       </select>
