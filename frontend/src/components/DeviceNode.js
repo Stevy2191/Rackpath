@@ -14,9 +14,11 @@ function DeviceNode({ id, data, selected }) {
   const kind = classifyDevice(data.type);
   const info = DEVICE_TYPES[kind];
   const Icon = info.icon;
+  const iconColor = data.icon_color || info.color;
+  const textColor = data.text_color || 'var(--color-text)';
 
   return (
-    <div className="device-node" style={{ borderColor: info.color }}>
+    <div className="device-node" style={{ borderColor: selected ? 'var(--color-accent)' : undefined }}>
       <NodeResizer
         color={info.color}
         isVisible={selected}
@@ -43,16 +45,15 @@ function DeviceNode({ id, data, selected }) {
           />
         </React.Fragment>
       ))}
-      <div className="device-node-icon" style={{ color: info.color }} aria-hidden="true">
+      <div className="device-node-icon" style={{ color: iconColor }} aria-hidden="true">
         {isCustomType(data.type) ? (
           <img className="device-node-custom-icon" src={customIconUrl(customIconFilename(data.type))} alt="" />
         ) : (
           <Icon size={22} strokeWidth={2} />
         )}
       </div>
-      <div className="device-node-body">
-        <div className="device-node-label">{data.hostname || data.ip || `Device ${data.id}`}</div>
-        {data.ip && <div className="device-node-ip">{data.ip}</div>}
+      <div className="device-node-caption" style={{ color: textColor }}>
+        {data.hostname || data.ip || `Device ${data.id}`}
       </div>
     </div>
   );

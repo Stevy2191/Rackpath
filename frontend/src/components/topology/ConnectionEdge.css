@@ -10,6 +10,14 @@
   white-space: nowrap;
 }
 
+.connection-edge-interface-label {
+  position: absolute;
+  pointer-events: none;
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
 .connection-edge-toolbar {
   position: absolute;
   pointer-events: all;

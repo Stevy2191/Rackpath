@@ -25,7 +25,7 @@ import DevicePicker, {
   MANUAL_DRAG_TYPE,
   DISCOVERED_DRAG_TYPE,
 } from '../components/topology/DevicePicker';
-import QuickInfoPanel from '../components/topology/QuickInfoPanel';
+import NodePropertiesPanel from '../components/topology/NodePropertiesPanel';
 import ConnectionModal from '../components/topology/ConnectionModal';
 import ZoneFormModal from '../components/topology/ZoneFormModal';
 import AddDeviceModal from '../components/topology/AddDeviceModal';
@@ -49,6 +49,8 @@ function buildDeviceNode(device, callbacks) {
       type: device.type,
       snmp_community: device.snmp_community,
       notes: device.notes,
+      icon_color: device.icon_color,
+      text_color: device.text_color,
       updated_at: device.updated_at,
       onResizeEnd: callbacks?.onDeviceResizeEnd,
     },
@@ -118,7 +120,7 @@ function TopologyCanvas() {
   const [unplacedDevices, setUnplacedDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedNode, setSelectedNode] = useState(null);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [showEdgeLabels, setShowEdgeLabels] = useState(true);
   const [pendingConnection, setPendingConnection] = useState(null);
   const [editingEdge, setEditingEdge] = useState(null);
@@ -401,7 +403,7 @@ function TopologyCanvas() {
   }, []);
 
   const onNodeClick = useCallback((_event, node) => {
-    if (node.type === 'device') setSelectedNode(node);
+    if (node.type === 'device') setSelectedNodeId(node.id);
   }, []);
 
   const onNodeDoubleClick = useCallback(
@@ -412,15 +414,56 @@ function TopologyCanvas() {
   );
 
   const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
+    setSelectedNodeId(null);
     setShowExportMenu(false);
   }, []);
 
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
+
   const handleRemoveSelected = useCallback(() => {
+    if (!selectedNodeId) return;
+    reactFlowInstance.deleteElements({ nodes: [{ id: selectedNodeId }] });
+    setSelectedNodeId(null);
+  }, [selectedNodeId, reactFlowInstance]);
+
+  const handleUpdateDevice = useCallback((deviceId, patch) => {
+    setNodes((nds) =>
+      nds.map((n) => (n.id === `device-${deviceId}` ? { ...n, data: { ...n.data, ...patch } } : n))
+    );
+    client.patch(`/devices/${deviceId}`, patch).catch((err) => setError(err.message));
+  }, []);
+
+  const handleCopyNode = useCallback(async () => {
     if (!selectedNode) return;
-    reactFlowInstance.deleteElements({ nodes: [{ id: selectedNode.id }] });
-    setSelectedNode(null);
-  }, [selectedNode, reactFlowInstance]);
+    try {
+      const deviceId = deviceIdFromNodeId(selectedNode.id);
+      const res = await client.post('/topology/nodes', {
+        hostname: selectedNode.data.hostname ? `${selectedNode.data.hostname} (copy)` : null,
+        type: selectedNode.data.type,
+        icon_color: selectedNode.data.icon_color,
+        text_color: selectedNode.data.text_color,
+        x: selectedNode.position.x + 40,
+        y: selectedNode.position.y + 40,
+      });
+
+      const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
+      setNodes((nds) => [...nds, newNode]);
+
+      const ifaceRes = await client.get(`/topology/nodes/${deviceId}/interfaces`);
+      await Promise.all(
+        (ifaceRes.data || []).map((iface) =>
+          client.post(`/topology/nodes/${res.data.id}/interfaces`, {
+            name: iface.name,
+            description: iface.description,
+          })
+        )
+      );
+
+      setSelectedNodeId(newNode.id);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [selectedNode, handleDeviceResizeEnd]);
 
   const handleAutoLayout = useCallback(() => {
     const deviceNodes = nodes.filter((n) => n.type === 'device');
@@ -463,7 +506,7 @@ function TopologyCanvas() {
       ]);
       setNodes([]);
       setEdges([]);
-      setSelectedNode(null);
+      setSelectedNodeId(null);
     } catch (err) {
       setError(err.message);
     }
@@ -731,7 +774,13 @@ function TopologyCanvas() {
             <Controls />
           </ReactFlow>
 
-          <QuickInfoPanel node={selectedNode} onClose={() => setSelectedNode(null)} onRemove={handleRemoveSelected} />
+          <NodePropertiesPanel
+            node={selectedNode}
+            onClose={() => setSelectedNodeId(null)}
+            onUpdateDevice={handleUpdateDevice}
+            onDelete={handleRemoveSelected}
+            onCopy={handleCopyNode}
+          />
 
           {showSavedToast && <div className="topology-toast">Saved!</div>}
         </div>

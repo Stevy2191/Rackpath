@@ -7,6 +7,7 @@ const pool = require('../db/pool');
 const router = express.Router();
 
 const NODE_FIELDS = `d.id, d.hostname, d.ip, d.mac, d.type, d.snmp_community, d.notes,
+              d.icon_color, d.text_color,
               d.updated_at, tl.x, tl.y, tl.width, tl.height`;
 
 // Returns true if the error is MariaDB/MySQL's "table doesn't exist" error.
@@ -107,11 +108,11 @@ router.patch('/layout', async (req, res, next) => {
 // POST /api/topology/nodes - create a new device and place it on the canvas
 router.post('/nodes', async (req, res, next) => {
   try {
-    const { hostname, ip, type, x, y } = req.body;
+    const { hostname, ip, type, x, y, icon_color, text_color } = req.body;
 
     const [result] = await pool.query(
-      `INSERT INTO devices (project_id, hostname, ip, type) VALUES (?, ?, ?, ?)`,
-      [req.projectId, hostname || null, ip || null, type || null]
+      `INSERT INTO devices (project_id, hostname, ip, type, icon_color, text_color) VALUES (?, ?, ?, ?, ?, ?)`,
+      [req.projectId, hostname || null, ip || null, type || null, icon_color || null, text_color || null]
     );
     const deviceId = result.insertId;
 
@@ -155,6 +156,84 @@ router.delete('/nodes/:id', async (req, res, next) => {
   }
 });
 
+// GET /api/topology/nodes/:id/interfaces - list interfaces for a device
+router.get('/nodes/:id/interfaces', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM topology_node_interfaces WHERE device_id = ? AND project_id = ? ORDER BY id',
+      [req.params.id, req.projectId]
+    );
+    res.json(rows);
+  } catch (err) {
+    if (isTableMissing(err)) return res.json([]);
+    next(err);
+  }
+});
+
+// POST /api/topology/nodes/:id/interfaces - add an interface to a device
+router.post('/nodes/:id/interfaces', async (req, res, next) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+
+    const [result] = await pool.query(
+      'INSERT INTO topology_node_interfaces (project_id, device_id, name, description) VALUES (?, ?, ?, ?)',
+      [req.projectId, req.params.id, name.trim(), description || null]
+    );
+
+    const [rows] = await pool.query('SELECT * FROM topology_node_interfaces WHERE id = ?', [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/topology/interfaces/:id - update an interface's name/description
+router.patch('/interfaces/:id', async (req, res, next) => {
+  try {
+    const allowedFields = ['name', 'description'];
+    const updates = [];
+    const values = [];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(req.body[field]);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(req.params.id, req.projectId);
+    const [result] = await pool.query(
+      `UPDATE topology_node_interfaces SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`,
+      values
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Interface not found' });
+
+    const [rows] = await pool.query('SELECT * FROM topology_node_interfaces WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/topology/interfaces/:id
+router.delete('/interfaces/:id', async (req, res, next) => {
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM topology_node_interfaces WHERE id = ? AND project_id = ?',
+      [req.params.id, req.projectId]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Interface not found' });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/topology/edges
 router.get('/edges', async (req, res, next) => {
   try {
@@ -169,21 +248,33 @@ router.get('/edges', async (req, res, next) => {
 // POST /api/topology/edges
 router.post('/edges', async (req, res, next) => {
   try {
-    const { source_device_id, target_device_id, source_handle, target_handle, label, speed, cable_type, vlan } =
-      req.body;
+    const {
+      source_device_id,
+      target_device_id,
+      source_handle,
+      target_handle,
+      source_interface,
+      target_interface,
+      label,
+      speed,
+      cable_type,
+      vlan,
+    } = req.body;
     if (!source_device_id || !target_device_id) {
       return res.status(400).json({ error: 'source_device_id and target_device_id are required' });
     }
 
     const [result] = await pool.query(
-      `INSERT INTO topology_edges (project_id, source_device_id, target_device_id, source_handle, target_handle, label, speed, cable_type, vlan)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO topology_edges (project_id, source_device_id, target_device_id, source_handle, target_handle, source_interface, target_interface, label, speed, cable_type, vlan)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId,
         source_device_id,
         target_device_id,
         source_handle || null,
         target_handle || null,
+        source_interface || null,
+        target_interface || null,
         label || null,
         speed || null,
         cable_type || null,
@@ -206,6 +297,8 @@ router.patch('/edges/:id', async (req, res, next) => {
       'target_device_id',
       'source_handle',
       'target_handle',
+      'source_interface',
+      'target_interface',
       'label',
       'speed',
       'cable_type',

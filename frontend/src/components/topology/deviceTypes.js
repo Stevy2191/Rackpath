@@ -51,6 +51,21 @@ export const DEVICE_CATEGORIES = [
   { name: 'Other', types: ['unknown', 'cloud', 'internet'] },
 ];
 
+// Swatches offered in the node properties panel for icon/text color
+// overrides. Stored on the device as a hex string; null means "use default".
+export const COLOR_SWATCHES = [
+  { name: 'blue', hex: '#2563eb' },
+  { name: 'red', hex: '#dc2626' },
+  { name: 'orange', hex: '#d97706' },
+  { name: 'yellow', hex: '#eab308' },
+  { name: 'green', hex: '#16a34a' },
+  { name: 'purple', hex: '#7c3aed' },
+  { name: 'pink', hex: '#db2777' },
+  { name: 'gray', hex: '#6b7280' },
+  { name: 'white', hex: '#ffffff' },
+  { name: 'black', hex: '#000000' },
+];
+
 const CUSTOM_TYPE_PREFIX = 'custom:';
 
 // Custom uploaded icons are stored as a device "type" of `custom:<filename>`

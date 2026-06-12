@@ -72,6 +72,48 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+// PATCH /api/devices/:id - partial update (used for auto-save from the
+// topology properties panel)
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const allowedFields = [
+      'hostname',
+      'ip',
+      'mac',
+      'type',
+      'snmp_community',
+      'notes',
+      'icon_color',
+      'text_color',
+    ];
+    const updates = [];
+    const values = [];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(req.body[field]);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(req.params.id, req.projectId);
+    const [result] = await pool.query(
+      `UPDATE devices SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`,
+      values
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Device not found' });
+
+    const [rows] = await pool.query('SELECT * FROM devices WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/devices/:id
 router.delete('/:id', async (req, res, next) => {
   try {

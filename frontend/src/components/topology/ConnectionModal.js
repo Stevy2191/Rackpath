@@ -10,6 +10,8 @@ export default function ConnectionModal({ initialValues, onSubmit, onCancel }) {
   const [vlan, setVlan] = useState(initialValues?.vlan || '');
   const [speed, setSpeed] = useState(initialValues?.speed || '');
   const [cableType, setCableType] = useState(initialValues?.cable_type || '');
+  const [sourceInterface, setSourceInterface] = useState(initialValues?.source_interface || '');
+  const [targetInterface, setTargetInterface] = useState(initialValues?.target_interface || '');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -18,6 +20,8 @@ export default function ConnectionModal({ initialValues, onSubmit, onCancel }) {
       vlan: vlan.trim() || null,
       speed: speed || null,
       cable_type: cableType || null,
+      source_interface: sourceInterface.trim() || null,
+      target_interface: targetInterface.trim() || null,
     });
   };
 
@@ -33,6 +37,22 @@ export default function ConnectionModal({ initialValues, onSubmit, onCancel }) {
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="Optional"
+            />
+          </label>
+          <label>
+            Source Interface
+            <input
+              value={sourceInterface}
+              onChange={(e) => setSourceInterface(e.target.value)}
+              placeholder="e.g. Gi0/1"
+            />
+          </label>
+          <label>
+            Target Interface
+            <input
+              value={targetInterface}
+              onChange={(e) => setTargetInterface(e.target.value)}
+              placeholder="e.g. eth0"
             />
           </label>
           <label>
