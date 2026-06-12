@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS topology_icons (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name            VARCHAR(255)            NOT NULL,
+    filename        VARCHAR(255)            NOT NULL,
+    created_at      TIMESTAMP               NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

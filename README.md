@@ -95,6 +95,11 @@ file:
    docker compose exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql
    ```
 
+   On every startup, the API also applies any pending SQL files in
+   `api/src/db/migrations/` (tracked in a `schema_migrations` table), so
+   schema changes shipped after your initial deploy are picked up
+   automatically.
+
 6. Create the default admin user:
 
    ```bash
