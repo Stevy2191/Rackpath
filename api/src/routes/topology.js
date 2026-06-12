@@ -57,11 +57,12 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// DELETE /api/topology/all - clear the canvas (all placed nodes, edges, and zones)
+// DELETE /api/topology/all - clear the canvas (all placed nodes, edges, zones, and labels)
 router.delete('/all', async (req, res, next) => {
   try {
     await pool.query('DELETE FROM topology_edges WHERE project_id = ?', [req.projectId]);
     await pool.query('DELETE FROM topology_zones WHERE project_id = ?', [req.projectId]);
+    await pool.query('DELETE FROM topology_labels WHERE project_id = ?', [req.projectId]);
     await pool.query('DELETE FROM topology_layout WHERE project_id = ?', [req.projectId]);
     res.status(204).send();
   } catch (err) {

@@ -700,7 +700,7 @@ function TopologyCanvas() {
 
   const handleClearCanvas = useCallback(async () => {
     const confirmed = window.confirm(
-      'Are you sure you want to clear the canvas? This will delete all nodes, edges, and zones. This cannot be undone.'
+      'Are you sure you want to clear the canvas? This will delete all nodes, edges, zones, and text labels. This cannot be undone.'
     );
     if (!confirmed) return;
 
@@ -715,7 +715,7 @@ function TopologyCanvas() {
             return deviceData;
           }),
       ]);
-      setNodes((nds) => nds.filter((n) => n.type === 'text'));
+      setNodes([]);
       setEdges([]);
       setSelectedNodeId(null);
     } catch (err) {
