@@ -135,6 +135,159 @@
   gap: 0.4rem;
 }
 
+.node-properties-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.node-properties-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.node-properties-add-btn {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.node-properties-add-btn:hover {
+  background: var(--color-bg-subtle);
+}
+
+/* Compact, single-line interface rows: no card borders, just a hairline
+   separator between rows. */
+.node-properties-iface-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.node-properties-iface-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.node-properties-iface-list .node-properties-iface-row:last-child {
+  border-bottom: none;
+}
+
+.node-properties-iface-row-sub {
+  margin-left: 1.1rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--color-border-strong);
+}
+
+.node-properties-iface-name {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.node-properties-iface-name:hover {
+  background: var(--color-bg-subtle);
+}
+
+.node-properties-iface-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.node-properties-iface-ip {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  box-sizing: border-box;
+}
+
+.node-properties-vlan-prefix {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.node-properties-vlan-id-input {
+  flex: 0 0 3rem;
+  width: 3rem;
+  padding: 0.25rem 0.3rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  box-sizing: border-box;
+}
+
+.node-properties-iface-vlan-btn {
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-success, #16a34a);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.node-properties-iface-vlan-btn:hover {
+  opacity: 0.85;
+}
+
+.node-properties-iface-delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.node-properties-iface-delete:hover {
+  color: var(--color-danger);
+}
+
 .node-properties-interface-row {
   display: flex;
   align-items: flex-start;
@@ -151,16 +304,6 @@
   flex-direction: column;
   gap: 0.3rem;
   flex: 1;
-}
-
-.node-properties-interface-meta-row {
-  display: flex;
-  gap: 0.3rem;
-}
-
-.node-properties-interface-meta-row .node-properties-input {
-  flex: 1;
-  min-width: 0;
 }
 
 .node-properties-icon-btn {
@@ -185,65 +328,6 @@
 .node-properties-icon-btn-danger:hover {
   color: var(--color-danger);
   border-color: var(--color-danger-border);
-}
-
-.node-properties-vlan-add {
-  flex-shrink: 0;
-  align-self: flex-start;
-  padding: 0.2rem 0.4rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 4px;
-  background: var(--color-bg-elevated);
-  color: var(--color-text-muted);
-  font-size: 0.68rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.node-properties-vlan-add:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-/* VLAN sub-interface row, indented under its parent interface. */
-.node-properties-subinterface-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.4rem;
-  margin-left: 1.1rem;
-  padding: 0.3rem 0.4rem;
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-accent);
-  border-radius: 4px;
-  background: var(--color-bg-subtle);
-}
-
-.node-properties-subinterface-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  flex: 1;
-}
-
-.node-properties-vlan-header {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.node-properties-vlan-tag {
-  flex-shrink: 0;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  color: var(--color-text-muted);
-}
-
-.node-properties-vlan-input {
-  flex: 0 0 3.2rem;
-  width: 3.2rem;
 }
 
 .node-properties-add-interface {
