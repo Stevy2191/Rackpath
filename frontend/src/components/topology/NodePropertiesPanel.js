@@ -109,7 +109,7 @@ export default function NodePropertiesPanel({
   const handleAddInterface = async () => {
     try {
       const res = await client.post(`/topology/nodes/${deviceId}/interfaces`, {
-        name: '',
+        name: `eth${mainInterfaces.length}`,
         description: '',
       });
       setInterfaces((prev) => [...prev, res.data]);
