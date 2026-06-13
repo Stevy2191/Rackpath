@@ -116,6 +116,38 @@
   color: #fff;
 }
 
+.edge-properties-segmented {
+  display: flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.edge-properties-segment {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  border: none;
+  border-right: 1px solid var(--color-border-strong);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edge-properties-segment:last-child {
+  border-right: none;
+}
+
+.edge-properties-segment:hover {
+  background: var(--color-bg-subtle);
+}
+
+.edge-properties-segment.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
 .edge-properties-swatch-row {
   display: flex;
   flex-direction: column;

@@ -1,3 +1,15 @@
+/* Flows the dash pattern from source to target for edges with the
+   "Animated" line style. The dash pattern is 12 units long ("8 4"), so the
+   offset travels two full cycles (24) for a seamless loop. */
+@keyframes connection-edge-flow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 .connection-edge-label {
   position: absolute;
   pointer-events: all;

@@ -98,21 +98,16 @@ function edgeLabelText(edge) {
   return edge.label || undefined;
 }
 
-// Stroke dash pattern for an edge's line style. "default" derives a pattern
-// from the cable type (fibre = dashed, wireless = dotted, otherwise solid).
-function edgeDashArray(edge) {
-  const lineStyle = edge.line_style || 'default';
-  if (lineStyle === 'solid') return undefined;
-  if (lineStyle === 'dashed') return '8 4';
-  if (lineStyle === 'dotted') return '2 3';
-
-  const cableType = (edge.cable_type || '').toLowerCase();
-  if (cableType.includes('fibre') || cableType.includes('fiber')) return '8 4';
-  if (cableType.includes('wireless')) return '2 3';
+// Stroke dash pattern for an edge's line style. Both "dashed" and "animated"
+// use the same dash pattern; "animated" additionally flows the dashes along
+// the line via the connection-edge-flow keyframe animation below.
+function edgeDashArray(lineStyle) {
+  if (lineStyle === 'dashed' || lineStyle === 'animated') return '8 4';
   return undefined;
 }
 
 function buildEdge(edge, showLabels, callbacks) {
+  const lineStyle = edge.line_style || 'solid';
   return {
     id: `edge-${edge.id}`,
     source: `device-${edge.source_device_id}`,
@@ -121,8 +116,10 @@ function buildEdge(edge, showLabels, callbacks) {
     targetHandle: edge.target_handle || null,
     type: 'connection',
     label: showLabels ? edgeLabelText(edge) : undefined,
-    animated: !!edge.animate,
-    style: { strokeDasharray: edgeDashArray(edge) },
+    style: {
+      strokeDasharray: edgeDashArray(lineStyle),
+      animation: lineStyle === 'animated' ? 'connection-edge-flow 1s linear infinite' : undefined,
+    },
     data: {
       ...edge,
       onEdit: callbacks?.onEdgeEdit,
@@ -505,8 +502,8 @@ function TopologyCanvas() {
   );
 
   // "Copy"/"Paste" on the link properties panel transfers style settings
-  // (type, label visibility/color, line style, animate, snapping) from one
-  // edge to another via an in-memory clipboard.
+  // (type, label visibility/color, line style, snapping) from one edge to
+  // another via an in-memory clipboard.
   const handleCopyEdgeStyle = useCallback((edge) => {
     const data = edge.data || {};
     edgeStyleClipboardRef.current = {
@@ -515,7 +512,6 @@ function TopologyCanvas() {
       target_label_visible: data.target_label_visible,
       label_color: data.label_color,
       line_style: data.line_style,
-      animate: data.animate,
       snapping: data.snapping,
     };
   }, []);

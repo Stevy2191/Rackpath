@@ -11,10 +11,9 @@ const CABLE_TYPES = [
 ];
 
 const LINE_STYLES = [
-  { value: 'default', label: 'Default (By Type)' },
   { value: 'solid', label: 'Solid' },
   { value: 'dashed', label: 'Dashed' },
-  { value: 'dotted', label: 'Dotted' },
+  { value: 'animated', label: 'Animated' },
 ];
 
 // DB booleans round-trip as 0/1; treat anything falsy other than
@@ -107,32 +106,19 @@ export default function EdgePropertiesPanel({ edge, sourceHostname, targetHostna
       </div>
 
       <div className="edge-properties-section">
-        <label className="edge-properties-label" htmlFor="edge-prop-line-style">
-          Line Style
-        </label>
-        <select
-          id="edge-prop-line-style"
-          className="edge-properties-input"
-          value={data.line_style || 'default'}
-          onChange={(e) => onUpdate(edgeDbId, { line_style: e.target.value })}
-        >
+        <span className="edge-properties-label">Line Style</span>
+        <div className="edge-properties-segmented">
           {LINE_STYLES.map((s) => (
-            <option key={s.value} value={s.value}>
+            <button
+              key={s.value}
+              type="button"
+              className={`edge-properties-segment${(data.line_style || 'solid') === s.value ? ' active' : ''}`}
+              onClick={() => onUpdate(edgeDbId, { line_style: s.value })}
+            >
               {s.label}
-            </option>
+            </button>
           ))}
-        </select>
-      </div>
-
-      <div className="edge-properties-section">
-        <button
-          type="button"
-          className={`edge-properties-eye-toggle${data.animate ? ' active' : ''}`}
-          onClick={() => onUpdate(edgeDbId, { animate: !data.animate })}
-        >
-          {data.animate ? <Eye size={16} /> : <EyeOff size={16} />}
-          Animate Link
-        </button>
+        </div>
       </div>
 
       <div className="edge-properties-section">
