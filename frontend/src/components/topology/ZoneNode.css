@@ -66,6 +66,18 @@
   border-color: var(--color-text);
 }
 
+.zone-editor-vlan {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 0.75rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+}
+
 .zone-editor-actions {
   display: flex;
   gap: 0.4rem;

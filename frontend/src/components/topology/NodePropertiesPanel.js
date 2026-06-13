@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2, X } from 'lucide-react';
 import client from '../../api/client';
+import { useProject } from '../../project/ProjectContext';
 import {
   COLOR_SWATCHES,
   DEVICE_TYPES,
@@ -44,12 +45,21 @@ export default function NodePropertiesPanel({
   onCopy,
   onConnectionPointsChange,
 }) {
+  const { currentProjectId } = useProject();
   const [displayNode, setDisplayNode] = useState(null);
   const [hostname, setHostname] = useState('');
   const [interfaces, setInterfaces] = useState([]);
   const [connectionPoints, setConnectionPoints] = useState([]);
   const [editingNameId, setEditingNameId] = useState(null);
   const [error, setError] = useState(null);
+  const [vlans, setVlans] = useState([]);
+
+  useEffect(() => {
+    client
+      .get(`/projects/${currentProjectId || 1}/vlans`)
+      .then((res) => setVlans(res.data || []))
+      .catch(() => setVlans([]));
+  }, [currentProjectId]);
 
   useEffect(() => {
     if (node) setDisplayNode(node);
@@ -319,6 +329,7 @@ export default function NodePropertiesPanel({
                   <input
                     type="number"
                     className="node-properties-vlan-id-input"
+                    list="node-properties-vlan-options"
                     value={sub.vlan_id ?? ''}
                     onChange={(e) =>
                       updateInterfaceField(sub.id, 'vlan_id', e.target.value === '' ? null : Number(e.target.value))
@@ -414,6 +425,12 @@ export default function NodePropertiesPanel({
           Delete
         </button>
       </div>
+
+      <datalist id="node-properties-vlan-options">
+        {vlans.map((v) => (
+          <option key={v.id} value={v.vlan_id} label={`${v.name} (VLAN ${v.vlan_id})`} />
+        ))}
+      </datalist>
     </aside>
   );
 }

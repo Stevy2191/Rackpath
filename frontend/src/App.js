@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { BrowserRouter } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import TopologyPage from './pages/Topology';
+import VlansPage from './pages/Vlans';
 import RacksPage from './pages/Racks';
 import DevicesPage from './pages/Devices';
 import ScanPage from './pages/Scan';
@@ -45,6 +46,14 @@ function AppShell() {
             element={
               <RequireAuth>
                 <TopologyPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/vlans"
+            element={
+              <RequireAuth>
+                <VlansPage />
               </RequireAuth>
             }
           />

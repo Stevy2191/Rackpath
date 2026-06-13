@@ -507,7 +507,7 @@ router.post('/zones', async (req, res, next) => {
 // PATCH /api/topology/zones/:id - update position, size, name, or style
 router.patch('/zones/:id', async (req, res, next) => {
   try {
-    const allowedFields = ['name', 'border_style', 'color', 'x', 'y', 'width', 'height'];
+    const allowedFields = ['name', 'border_style', 'color', 'vlan_id', 'x', 'y', 'width', 'height'];
     const updates = [];
     const values = [];
 

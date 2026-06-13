@@ -8,6 +8,7 @@ import './Navbar.css';
 const links = [
   { to: '/scan', label: 'Scan' },
   { to: '/topology', label: 'Topology' },
+  { to: '/vlans', label: 'VLANs' },
   { to: '/racks', label: 'Racks' },
   { to: '/devices', label: 'Devices' },
 ];

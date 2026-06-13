@@ -13,8 +13,25 @@ export const ZONE_COLORS = {
 
 const COLOR_KEYS = Object.keys(ZONE_COLORS);
 
+function hexToRgba(hex, alpha) {
+  const clean = (hex || '').replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+  const num = parseInt(full, 16);
+  if (Number.isNaN(num) || full.length !== 6) return null;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function ZoneNode({ id, data, selected }) {
-  const palette = ZONE_COLORS[data.color] || ZONE_COLORS.blue;
+  const vlans = data.vlans || [];
+  const vlan = data.vlan_id != null ? vlans.find((v) => v.id === data.vlan_id) : null;
+
+  const colorPalette = ZONE_COLORS[data.color] || ZONE_COLORS.blue;
+  const vlanFill = vlan ? hexToRgba(vlan.color, 0.15) : null;
+  const vlanBorder = vlan ? hexToRgba(vlan.color, 0.6) : null;
+  const palette = vlan && vlanFill && vlanBorder ? { fill: vlanFill, border: vlanBorder } : colorPalette;
   const borderStyle = data.border_style === 'dotted' ? 'dotted' : 'solid';
 
   const [editing, setEditing] = useState(false);
@@ -93,6 +110,18 @@ function ZoneNode({ id, data, selected }) {
               />
             ))}
           </div>
+          <select
+            className="zone-editor-vlan"
+            value={data.vlan_id ?? ''}
+            onChange={(e) => data.onUpdate?.(id, { vlan_id: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">No VLAN</option>
+            {vlans.map((v) => (
+              <option key={v.id} value={v.id}>
+                VLAN {v.vlan_id} - {v.name}
+              </option>
+            ))}
+          </select>
           <div className="zone-editor-actions">
             <select
               className="zone-editor-border"
@@ -109,7 +138,7 @@ function ZoneNode({ id, data, selected }) {
         </div>
       ) : (
         <div className="zone-label" style={{ color: palette.border }} title="Double-click to edit">
-          {data.name || 'Zone'}
+          {vlan ? `VLAN ${vlan.vlan_id} · ${vlan.name}` : data.name || 'Zone'}
         </div>
       )}
 

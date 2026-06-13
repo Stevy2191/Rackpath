@@ -18,6 +18,7 @@ import 'reactflow/dist/style.css';
 import { toPng, toSvg } from 'html-to-image';
 import jsPDF from 'jspdf';
 import client from '../api/client';
+import { useProject } from '../project/ProjectContext';
 import DeviceNode from '../components/DeviceNode';
 import ZoneNode from '../components/topology/ZoneNode';
 import TextLabelNode from '../components/topology/TextLabelNode';
@@ -59,7 +60,7 @@ function buildDeviceNode(device, callbacks) {
   };
 }
 
-function buildZoneNode(zone, callbacks) {
+function buildZoneNode(zone, callbacks, vlans) {
   return {
     id: `zone-${zone.id}`,
     type: 'zone',
@@ -71,6 +72,8 @@ function buildZoneNode(zone, callbacks) {
       name: zone.name,
       border_style: zone.border_style,
       color: zone.color,
+      vlan_id: zone.vlan_id,
+      vlans: vlans || [],
       onResizeEnd: callbacks.onZoneResizeEnd,
       onDelete: callbacks.onZoneDelete,
       onUpdate: callbacks.onZoneUpdate,
@@ -167,12 +170,14 @@ function computeHandles(source, target) {
 
 function TopologyCanvas() {
   const navigate = useNavigate();
+  const { currentProjectId } = useProject();
   const reactFlowInstance = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const reactFlowWrapper = useRef(null);
 
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
+  const [vlans, setVlans] = useState([]);
   const [unplacedDevices, setUnplacedDevices] = useState([]);
   const [connectionPointsByDevice, setConnectionPointsByDevice] = useState({});
   const [loading, setLoading] = useState(true);
@@ -301,21 +306,29 @@ function TopologyCanvas() {
 
     async function load() {
       try {
-        const [topoRes, edgesRes, zonesRes, labelsRes, pointsRes, unplacedRes] = await Promise.all([
+        const [topoRes, edgesRes, zonesRes, labelsRes, pointsRes, unplacedRes, vlansRes] = await Promise.all([
           client.get('/topology'),
           client.get('/topology/edges'),
           client.get('/topology/zones'),
           client.get('/topology/labels'),
           client.get('/topology/connection-points'),
           client.get('/devices', { params: { unplaced: true } }),
+          client.get(`/projects/${currentProjectId || 1}/vlans`),
         ]);
         if (cancelled) return;
+
+        const projectVlans = vlansRes.data || [];
+        setVlans(projectVlans);
 
         const deviceNodes = (topoRes.data.nodes || []).map((device) =>
           buildDeviceNode(device, { onDeviceResizeEnd: handleDeviceResizeEnd })
         );
         const zoneNodes = (zonesRes.data || []).map((zone) =>
-          buildZoneNode(zone, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneUpdate: handleZoneUpdate })
+          buildZoneNode(
+            zone,
+            { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneUpdate: handleZoneUpdate },
+            projectVlans
+          )
         );
         const labelNodes = (labelsRes.data || []).map((label) =>
           buildTextNode(label, { onLabelChange: handleLabelChange, onLabelDelete: handleLabelDelete })
@@ -350,6 +363,7 @@ function TopologyCanvas() {
       cancelled = true;
     };
   }, [
+    currentProjectId,
     handleZoneResizeEnd,
     handleZoneDelete,
     handleZoneUpdate,
@@ -648,14 +662,18 @@ function TopologyCanvas() {
           height: 220,
         });
         setNodes((nds) => [
-          buildZoneNode(res.data, { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneUpdate: handleZoneUpdate }),
+          buildZoneNode(
+            res.data,
+            { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneUpdate: handleZoneUpdate },
+            vlans
+          ),
           ...nds,
         ]);
       } catch (err) {
         setError(err.message);
       }
     },
-    [handleZoneResizeEnd, handleZoneDelete, handleZoneUpdate]
+    [handleZoneResizeEnd, handleZoneDelete, handleZoneUpdate, vlans]
   );
 
   const onPaneClick = useCallback(

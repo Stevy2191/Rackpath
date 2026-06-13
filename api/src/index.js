@@ -13,6 +13,7 @@ const racksRouter = require('./routes/racks');
 const rackSlotsRouter = require('./routes/rackSlots');
 const topologyRouter = require('./routes/topology');
 const scanRouter = require('./routes/scan');
+const vlansRouter = require('./routes/vlans');
 const { requireAuth } = require('./auth/middleware');
 const { projectScope } = require('./middleware/projectScope');
 const { migrate } = require('./db/migrate');
@@ -44,6 +45,7 @@ app.use('/api/racks', racksRouter);
 app.use('/api/rack-slots', rackSlotsRouter);
 app.use('/api/topology', topologyRouter);
 app.use('/api/scans', scanRouter);
+app.use('/api', vlansRouter);
 
 // Fallback error handler
 app.use((err, req, res, next) => {

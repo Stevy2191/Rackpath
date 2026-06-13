@@ -1,0 +1,134 @@
+.vlans-page {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  overflow: auto;
+}
+
+.vlans-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.vlans-header h2 {
+  margin: 0;
+}
+
+.vlans-add-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vlans-add-btn:hover {
+  opacity: 0.9;
+}
+
+.vlans-add-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.vlans-table {
+  width: 100%;
+  max-width: 900px;
+  border-collapse: collapse;
+}
+
+.vlans-table th,
+.vlans-table td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.vlans-table th {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vlans-input {
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.vlans-input-narrow {
+  max-width: 5.5rem;
+}
+
+.vlans-color-input {
+  width: 2.4rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg);
+  cursor: pointer;
+}
+
+.vlans-color-swatch {
+  display: inline-block;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-strong);
+}
+
+.vlans-actions {
+  display: flex;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.vlans-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.vlans-icon-btn:hover {
+  color: var(--color-text);
+  background: var(--color-bg-subtle);
+}
+
+.vlans-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.vlans-icon-btn-danger:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+.vlans-row-editing td {
+  background: var(--color-bg-subtle);
+}
+
+.vlans-empty {
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: 1.5rem;
+}
