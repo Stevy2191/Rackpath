@@ -11,6 +11,7 @@ const links = [
   { to: '/vlans', label: 'VLANs' },
   { to: '/racks', label: 'Racks' },
   { to: '/devices', label: 'Devices' },
+  { to: '/integrations', label: 'Integrations' },
 ];
 
 export default function Navbar() {

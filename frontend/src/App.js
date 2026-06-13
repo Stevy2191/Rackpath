@@ -6,6 +6,7 @@ import TopologyPage from './pages/Topology';
 import VlansPage from './pages/Vlans';
 import RacksPage from './pages/Racks';
 import DevicesPage from './pages/Devices';
+import IntegrationsPage from './pages/Integrations';
 import ScanPage from './pages/Scan';
 import LoginPage from './pages/Login';
 import ChangePasswordPage from './pages/ChangePassword';
@@ -78,6 +79,14 @@ function AppShell() {
             element={
               <RequireAuth>
                 <DevicesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/integrations"
+            element={
+              <RequireAuth>
+                <IntegrationsPage />
               </RequireAuth>
             }
           />

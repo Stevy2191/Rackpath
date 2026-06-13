@@ -19,6 +19,7 @@ const SCOPED_TABLES = [
   'racks',
   'devices',
   'project_vlans',
+  'project_integrations',
 ];
 
 // GET /api/projects - list all projects

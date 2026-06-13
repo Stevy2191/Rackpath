@@ -14,9 +14,11 @@ const rackSlotsRouter = require('./routes/rackSlots');
 const topologyRouter = require('./routes/topology');
 const scanRouter = require('./routes/scan');
 const vlansRouter = require('./routes/vlans');
+const integrationsRouter = require('./routes/integrations');
 const { requireAuth } = require('./auth/middleware');
 const { projectScope } = require('./middleware/projectScope');
 const { migrate } = require('./db/migrate');
+const { startAutoSync } = require('./integrations/autoSync');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -46,6 +48,7 @@ app.use('/api/rack-slots', rackSlotsRouter);
 app.use('/api/topology', topologyRouter);
 app.use('/api/scans', scanRouter);
 app.use('/api', vlansRouter);
+app.use('/api', integrationsRouter);
 
 // Fallback error handler
 app.use((err, req, res, next) => {
@@ -59,4 +62,5 @@ migrate()
     app.listen(PORT, () => {
       console.log(`Rackpath API listening on port ${PORT}`);
     });
+    startAutoSync();
   });

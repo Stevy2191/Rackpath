@@ -7,7 +7,11 @@ const router = express.Router();
 // GET /api/devices?unplaced=true - only devices with no linked topology node
 router.get('/', async (req, res, next) => {
   try {
-    let query = 'SELECT d.*, tn.id AS topology_node_id FROM devices d LEFT JOIN topology_nodes tn ON tn.device_id = d.id';
+    let query =
+      'SELECT d.*, tn.id AS topology_node_id, pi.platform AS source_integration_platform, pi.name AS source_integration_name ' +
+      'FROM devices d ' +
+      'LEFT JOIN topology_nodes tn ON tn.device_id = d.id ' +
+      'LEFT JOIN project_integrations pi ON pi.id = d.source_integration_id';
     const params = [];
     if (req.query.unplaced === 'true') {
       query += ' WHERE tn.id IS NULL AND d.project_id = ?';

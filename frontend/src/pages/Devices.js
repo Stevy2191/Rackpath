@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Network } from 'lucide-react';
 import client from '../api/client';
+import { platformInfo } from '../components/integrations/platforms';
 import './Devices.css';
 
 const emptyDevice = {
@@ -159,6 +160,19 @@ export default function DevicesPage() {
                   {device.topology_node_id != null && (
                     <Network size={14} className="device-topology-icon" title="Linked to a topology node" />
                   )}
+                  {device.source_integration_id != null &&
+                    (() => {
+                      const { icon: SourceIcon, label } = platformInfo(device.source_integration_platform);
+                      return (
+                        <SourceIcon
+                          size={14}
+                          className="device-source-icon"
+                          title={`Imported from ${label}${
+                            device.source_integration_name ? ` (${device.source_integration_name})` : ''
+                          }`}
+                        />
+                      );
+                    })()}
                 </span>
                 {device.type && <span className="device-type">{device.type}</span>}
               </button>

@@ -67,6 +67,15 @@
   color: #c9c9d8;
 }
 
+.device-source-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.device-list li.active .device-source-icon {
+  color: #c9c9d8;
+}
+
 .device-type {
   font-size: 0.75rem;
   color: var(--color-text-faint);
