@@ -52,6 +52,21 @@
   border-color: var(--color-accent-hover);
 }
 
+.device-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.device-topology-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.device-list li.active .device-topology-icon {
+  color: #c9c9d8;
+}
+
 .device-type {
   font-size: 0.75rem;
   color: var(--color-text-faint);
@@ -86,6 +101,14 @@
   border-radius: 4px;
   background: var(--color-bg-elevated);
   color: var(--color-text);
+}
+
+.device-form-date-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }
 
 .device-form button {

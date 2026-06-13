@@ -1,9 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { Network } from 'lucide-react';
 import client from '../api/client';
 import './Devices.css';
 
-const emptyDevice = { hostname: '', ip: '', mac: '', type: '', snmp_community: '', notes: '' };
+const emptyDevice = {
+  hostname: '',
+  ip: '',
+  mac: '',
+  type: '',
+  snmp_community: '',
+  notes: '',
+  make: '',
+  model: '',
+  serial_number: '',
+  purchase_date: '',
+  warranty_expiry: '',
+};
 const emptyPort = { port_name: '', port_number: '', cable_type: '', speed: '' };
 
 export default function DevicesPage() {
@@ -44,7 +57,16 @@ export default function DevicesPage() {
   useEffect(() => {
     loadPorts(selectedDeviceId);
     const device = devices.find((d) => d.id === selectedDeviceId);
-    setEditDevice(device ? { ...emptyDevice, ...device } : emptyDevice);
+    setEditDevice(
+      device
+        ? {
+            ...emptyDevice,
+            ...device,
+            purchase_date: device.purchase_date ? String(device.purchase_date).slice(0, 10) : '',
+            warranty_expiry: device.warranty_expiry ? String(device.warranty_expiry).slice(0, 10) : '',
+          }
+        : emptyDevice
+    );
     setSavedAt(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeviceId]);
@@ -132,7 +154,12 @@ export default function DevicesPage() {
           {devices.map((device) => (
             <li key={device.id} className={device.id === selectedDeviceId ? 'active' : ''}>
               <button className="device-select" onClick={() => setSelectedDeviceId(device.id)}>
-                <strong>{device.hostname || device.ip || `Device ${device.id}`}</strong>
+                <span className="device-name-row">
+                  <strong>{device.hostname || device.ip || `Device ${device.id}`}</strong>
+                  {device.topology_node_id != null && (
+                    <Network size={14} className="device-topology-icon" title="Linked to a topology node" />
+                  )}
+                </span>
                 {device.type && <span className="device-type">{device.type}</span>}
               </button>
               <button className="delete-btn" onClick={() => handleDeleteDevice(device.id)}>
@@ -169,6 +196,37 @@ export default function DevicesPage() {
             value={newDevice.snmp_community}
             onChange={(e) => setNewDevice({ ...newDevice, snmp_community: e.target.value })}
           />
+          <input
+            placeholder="Make"
+            value={newDevice.make}
+            onChange={(e) => setNewDevice({ ...newDevice, make: e.target.value })}
+          />
+          <input
+            placeholder="Model"
+            value={newDevice.model}
+            onChange={(e) => setNewDevice({ ...newDevice, model: e.target.value })}
+          />
+          <input
+            placeholder="Serial Number"
+            value={newDevice.serial_number}
+            onChange={(e) => setNewDevice({ ...newDevice, serial_number: e.target.value })}
+          />
+          <label className="device-form-date-label">
+            Purchase Date
+            <input
+              type="date"
+              value={newDevice.purchase_date}
+              onChange={(e) => setNewDevice({ ...newDevice, purchase_date: e.target.value })}
+            />
+          </label>
+          <label className="device-form-date-label">
+            Warranty Expiry
+            <input
+              type="date"
+              value={newDevice.warranty_expiry}
+              onChange={(e) => setNewDevice({ ...newDevice, warranty_expiry: e.target.value })}
+            />
+          </label>
           <textarea
             placeholder="Notes"
             value={newDevice.notes}
@@ -219,6 +277,43 @@ export default function DevicesPage() {
                 <input
                   value={editDevice.snmp_community || ''}
                   onChange={(e) => setEditDevice({ ...editDevice, snmp_community: e.target.value })}
+                />
+              </label>
+              <label>
+                Make
+                <input
+                  value={editDevice.make || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, make: e.target.value })}
+                />
+              </label>
+              <label>
+                Model
+                <input
+                  value={editDevice.model || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, model: e.target.value })}
+                />
+              </label>
+              <label>
+                Serial Number
+                <input
+                  value={editDevice.serial_number || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, serial_number: e.target.value })}
+                />
+              </label>
+              <label>
+                Purchase Date
+                <input
+                  type="date"
+                  value={editDevice.purchase_date || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, purchase_date: e.target.value })}
+                />
+              </label>
+              <label>
+                Warranty Expiry
+                <input
+                  type="date"
+                  value={editDevice.warranty_expiry || ''}
+                  onChange={(e) => setEditDevice({ ...editDevice, warranty_expiry: e.target.value })}
                 />
               </label>
               <label className="full-width">

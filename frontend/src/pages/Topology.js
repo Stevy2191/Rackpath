@@ -30,6 +30,7 @@ import DevicePicker, {
 import NodePropertiesPanel from '../components/topology/NodePropertiesPanel';
 import EdgePropertiesPanel from '../components/topology/EdgePropertiesPanel';
 import LinkConfigModal from '../components/topology/LinkConfigModal';
+import AddNodeModal from '../components/topology/AddNodeModal';
 import SubnetCalculator from '../components/topology/SubnetCalculator';
 import TopologyToolbar from '../components/topology/TopologyToolbar';
 import { getLayoutedElements } from '../utils/layout';
@@ -38,23 +39,25 @@ import './Topology.css';
 const nodeTypes = { device: DeviceNode, zone: ZoneNode, text: TextLabelNode };
 const edgeTypes = { connection: ConnectionEdge };
 
-function buildDeviceNode(device, callbacks) {
+function buildDeviceNode(node, callbacks) {
+  const linked = node.device_id != null;
   return {
-    id: `device-${device.id}`,
+    id: `device-${node.id}`,
     type: 'device',
-    position: { x: device.x || 0, y: device.y || 0 },
-    style: { width: device.width || 120, height: device.height || 80 },
+    position: { x: node.x || 0, y: node.y || 0 },
+    style: { width: node.width || 120, height: node.height || 80 },
     data: {
-      id: device.id,
-      hostname: device.hostname,
-      ip: device.ip,
-      mac: device.mac,
-      type: device.type,
-      snmp_community: device.snmp_community,
-      notes: device.notes,
-      icon_color: device.icon_color,
-      text_color: device.text_color,
-      updated_at: device.updated_at,
+      id: node.id,
+      deviceId: node.device_id || null,
+      hostname: linked ? node.hostname : node.label,
+      ip: linked ? node.ip : null,
+      mac: linked ? node.mac : null,
+      type: linked ? node.device_type : node.node_type,
+      snmp_community: linked ? node.snmp_community : null,
+      notes: linked ? node.notes : null,
+      icon_color: linked ? node.device_icon_color : node.node_icon_color,
+      text_color: linked ? node.device_text_color : node.node_text_color,
+      updated_at: node.updated_at,
       onResizeEnd: callbacks?.onDeviceResizeEnd,
     },
   };
@@ -113,8 +116,8 @@ function buildEdge(edge, showLabels, callbacks) {
   const lineStyle = edge.line_style || 'solid';
   return {
     id: `edge-${edge.id}`,
-    source: `device-${edge.source_device_id}`,
-    target: `device-${edge.target_device_id}`,
+    source: `device-${edge.source_node_id}`,
+    target: `device-${edge.target_node_id}`,
     sourceHandle: edge.source_handle || null,
     targetHandle: edge.target_handle || null,
     type: 'connection',
@@ -133,7 +136,7 @@ function buildEdge(edge, showLabels, callbacks) {
   };
 }
 
-function deviceIdFromNodeId(nodeId) {
+function nodeIdFromNodeId(nodeId) {
   return Number(nodeId.replace('device-', ''));
 }
 
@@ -187,6 +190,7 @@ function TopologyCanvas() {
   const edgeStyleClipboardRef = useRef(null);
   const [showEdgeLabels, setShowEdgeLabels] = useState(true);
   const [pendingConnection, setPendingConnection] = useState(null);
+  const [pendingNode, setPendingNode] = useState(null);
   const [editingEdge, setEditingEdge] = useState(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -201,7 +205,7 @@ function TopologyCanvas() {
 
   const handleDeviceResizeEnd = useCallback(
     (nodeId, params) => {
-      const deviceId = deviceIdFromNodeId(nodeId);
+      const id = nodeIdFromNodeId(nodeId);
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeId
@@ -217,7 +221,7 @@ function TopologyCanvas() {
       client
         .patch('/topology/layout', {
           positions: [
-            { device_id: deviceId, x: params.x, y: params.y, width: params.width, height: params.height },
+            { node_id: id, x: params.x, y: params.y, width: params.width, height: params.height },
           ],
         })
         .catch((err) => setError(err.message));
@@ -386,11 +390,12 @@ function TopologyCanvas() {
         if (change.type !== 'remove') return;
 
         if (change.id.startsWith('device-')) {
-          const deviceId = deviceIdFromNodeId(change.id);
+          const id = nodeIdFromNodeId(change.id);
           const node = nodes.find((n) => n.id === change.id);
-          client.delete(`/topology/nodes/${deviceId}`).catch((err) => setError(err.message));
-          if (node) {
-            setUnplacedDevices((devs) => [...devs, { ...node.data }]);
+          client.delete(`/topology/nodes/${id}`).catch((err) => setError(err.message));
+          if (node && node.data.deviceId) {
+            const { onResizeEnd, id: _nodeId, deviceId, ...deviceData } = node.data;
+            setUnplacedDevices((devs) => [...devs, { ...deviceData, id: deviceId }]);
           }
         } else if (change.id.startsWith('zone-')) {
           const zoneId = zoneIdFromNodeId(change.id);
@@ -448,8 +453,8 @@ function TopologyCanvas() {
         target: targetNodeId,
         sourceHandle: handles.sourceHandle,
         targetHandle: handles.targetHandle,
-        sourceDevice: { id: sourceNode.data.id, hostname: sourceNode.data.hostname },
-        targetDevice: { id: targetNode.data.id, hostname: targetNode.data.hostname },
+        sourceDevice: { id: sourceNode.data.deviceId, hostname: sourceNode.data.hostname },
+        targetDevice: { id: targetNode.data.deviceId, hostname: targetNode.data.hostname },
       });
     },
     [reactFlowInstance]
@@ -467,8 +472,8 @@ function TopologyCanvas() {
       if (!pendingConnection) return;
       try {
         const res = await client.post('/topology/edges', {
-          source_device_id: deviceIdFromNodeId(pendingConnection.source),
-          target_device_id: deviceIdFromNodeId(pendingConnection.target),
+          source_node_id: nodeIdFromNodeId(pendingConnection.source),
+          target_node_id: nodeIdFromNodeId(pendingConnection.target),
           source_handle: pendingConnection.sourceHandle,
           target_handle: pendingConnection.targetHandle,
           ...formValues,
@@ -549,8 +554,8 @@ function TopologyCanvas() {
       const edgeDbId = Number(oldEdge.id.replace('edge-', ''));
       client
         .patch(`/topology/edges/${edgeDbId}`, {
-          source_device_id: deviceIdFromNodeId(newConnection.source),
-          target_device_id: deviceIdFromNodeId(newConnection.target),
+          source_node_id: nodeIdFromNodeId(newConnection.source),
+          target_node_id: nodeIdFromNodeId(newConnection.target),
           source_handle: newConnection.sourceHandle ?? null,
           target_handle: newConnection.targetHandle ?? null,
         })
@@ -576,7 +581,7 @@ function TopologyCanvas() {
     if (node.type === 'device') {
       client
         .patch('/topology/layout', {
-          positions: [{ device_id: deviceIdFromNodeId(node.id), x: node.position.x, y: node.position.y }],
+          positions: [{ node_id: nodeIdFromNodeId(node.id), x: node.position.x, y: node.position.y }],
         })
         .catch((err) => setError(err.message));
     } else if (node.type === 'zone') {
@@ -615,8 +620,9 @@ function TopologyCanvas() {
   const onNodeDoubleClick = useCallback(
     (_event, node) => {
       // Double-click edits an element regardless of the active mode. Text and
-      // zone nodes handle their own inline editors; a device opens its page.
-      if (node.type === 'device') navigate(`/devices/${node.data.id}`);
+      // zone nodes handle their own inline editors; a device node opens the
+      // linked device's page (standalone nodes have nothing to navigate to).
+      if (node.type === 'device' && node.data.deviceId) navigate(`/devices/${node.data.deviceId}`);
     },
     [navigate]
   );
@@ -727,17 +733,29 @@ function TopologyCanvas() {
 
   const handleUpdateDevice = useCallback((deviceId, patch) => {
     setNodes((nds) =>
-      nds.map((n) => (n.id === `device-${deviceId}` ? { ...n, data: { ...n.data, ...patch } } : n))
+      nds.map((n) => (n.data.deviceId === deviceId ? { ...n, data: { ...n.data, ...patch } } : n))
     );
     client.patch(`/devices/${deviceId}`, patch).catch((err) => setError(err.message));
   }, []);
 
+  // Updates a standalone node's own label/type/colors (linked nodes are
+  // edited via handleUpdateDevice instead, which patches the device record).
+  const handleUpdateNode = useCallback((nodeId, patch) => {
+    const displayPatch = 'label' in patch ? { ...patch, hostname: patch.label } : patch;
+    setNodes((nds) =>
+      nds.map((n) => (n.data.id === nodeId ? { ...n, data: { ...n.data, ...displayPatch } } : n))
+    );
+    client.patch(`/topology/nodes/${nodeId}`, patch).catch((err) => setError(err.message));
+  }, []);
+
+  // Copying a node always creates a standalone diagram node from the
+  // resolved display values of the source node — it never duplicates a
+  // Device Inventory record or its interfaces.
   const handleCopyNode = useCallback(async () => {
     if (!selectedNode) return;
     try {
-      const deviceId = deviceIdFromNodeId(selectedNode.id);
       const res = await client.post('/topology/nodes', {
-        hostname: selectedNode.data.hostname ? `${selectedNode.data.hostname} (copy)` : null,
+        label: selectedNode.data.hostname ? `${selectedNode.data.hostname} (copy)` : null,
         type: selectedNode.data.type,
         icon_color: selectedNode.data.icon_color,
         text_color: selectedNode.data.text_color,
@@ -747,17 +765,6 @@ function TopologyCanvas() {
 
       const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
       setNodes((nds) => [...nds, newNode]);
-
-      const ifaceRes = await client.get(`/topology/nodes/${deviceId}/interfaces`);
-      await Promise.all(
-        (ifaceRes.data || []).map((iface) =>
-          client.post(`/topology/nodes/${res.data.id}/interfaces`, {
-            name: iface.name,
-            description: iface.description,
-          })
-        )
-      );
-
       setSelectedNodeId(newNode.id);
     } catch (err) {
       setError(err.message);
@@ -774,7 +781,7 @@ function TopologyCanvas() {
     client
       .patch('/topology/layout', {
         positions: layouted.map((n) => ({
-          device_id: deviceIdFromNodeId(n.id),
+          node_id: nodeIdFromNodeId(n.id),
           x: n.position.x,
           y: n.position.y,
         })),
@@ -797,10 +804,10 @@ function TopologyCanvas() {
       setUnplacedDevices((devs) => [
         ...devs,
         ...nodes
-          .filter((n) => n.type === 'device')
+          .filter((n) => n.type === 'device' && n.data.deviceId)
           .map((n) => {
-            const { onResizeEnd, ...deviceData } = n.data;
-            return deviceData;
+            const { onResizeEnd, id: _nodeId, deviceId, ...deviceData } = n.data;
+            return { ...deviceData, id: deviceId };
           }),
       ]);
       setNodes([]);
@@ -819,7 +826,7 @@ function TopologyCanvas() {
       if (deviceNodes.length > 0) {
         await client.patch('/topology/layout', {
           positions: deviceNodes.map((n) => ({
-            device_id: deviceIdFromNodeId(n.id),
+            node_id: nodeIdFromNodeId(n.id),
             x: n.position.x,
             y: n.position.y,
             width: n.style?.width,
@@ -924,40 +931,73 @@ function TopologyCanvas() {
       const discoveredId = event.dataTransfer.getData(DISCOVERED_DRAG_TYPE);
 
       if (manualData) {
-        const deviceInfo = JSON.parse(manualData);
-        try {
-          const res = await client.post('/topology/nodes', {
-            hostname: deviceInfo.label,
-            type: deviceInfo.type,
-            x: position.x,
-            y: position.y,
-          });
-          const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
-          setNodes((nds) => [...nds, newNode]);
-          setSelectedNodeId(newNode.id);
-        } catch (err) {
-          setError(err.message);
-        }
+        // Dragging a palette card doesn't immediately create a node — open the
+        // Add Node modal so the user can choose standalone vs. linked.
+        setPendingNode({ position, deviceInfo: JSON.parse(manualData) });
       } else if (discoveredId) {
         const deviceId = Number(discoveredId);
         const device = unplacedDevices.find((d) => d.id === deviceId);
         if (!device) return;
 
         try {
-          await client.patch('/topology/layout', {
-            positions: [{ device_id: deviceId, x: position.x, y: position.y }],
+          const res = await client.post('/topology/nodes', {
+            device_id: deviceId,
+            x: position.x,
+            y: position.y,
           });
-          setNodes((nds) => [
-            ...nds,
-            buildDeviceNode({ ...device, x: position.x, y: position.y }, { onDeviceResizeEnd: handleDeviceResizeEnd }),
-          ]);
+          const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
+          setNodes((nds) => [...nds, newNode]);
           setUnplacedDevices((devs) => devs.filter((d) => d.id !== deviceId));
+          setSelectedNodeId(newNode.id);
         } catch (err) {
           setError(err.message);
         }
       }
     },
     [reactFlowInstance, unplacedDevices, handleDeviceResizeEnd]
+  );
+
+  const handleAddNodeStandalone = useCallback(async () => {
+    if (!pendingNode) return;
+    const { position, deviceInfo } = pendingNode;
+    try {
+      const res = await client.post('/topology/nodes', {
+        label: deviceInfo.label,
+        type: deviceInfo.type,
+        x: position.x,
+        y: position.y,
+      });
+      const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
+      setNodes((nds) => [...nds, newNode]);
+      setSelectedNodeId(newNode.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPendingNode(null);
+    }
+  }, [pendingNode, handleDeviceResizeEnd]);
+
+  const handleAddNodeLink = useCallback(
+    async (deviceId) => {
+      if (!pendingNode) return;
+      const { position } = pendingNode;
+      try {
+        const res = await client.post('/topology/nodes', {
+          device_id: deviceId,
+          x: position.x,
+          y: position.y,
+        });
+        const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
+        setNodes((nds) => [...nds, newNode]);
+        setUnplacedDevices((devs) => devs.filter((d) => d.id !== deviceId));
+        setSelectedNodeId(newNode.id);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setPendingNode(null);
+      }
+    },
+    [pendingNode, handleDeviceResizeEnd]
   );
 
   // Inject the current interaction mode and per-node connection points into
@@ -972,7 +1012,7 @@ function TopologyCanvas() {
             ...n.data,
             mode,
             isLinkSource: n.id === linkSourceId,
-            connectionPoints: connectionPointsByDevice[n.data.id] || [],
+            connectionPoints: connectionPointsByDevice[n.data.deviceId] || [],
           },
         };
       }),
@@ -1060,6 +1100,7 @@ function TopologyCanvas() {
             node={selectedNode}
             onClose={() => setSelectedNodeId(null)}
             onUpdateDevice={handleUpdateDevice}
+            onUpdateNode={handleUpdateNode}
             onDelete={handleRemoveSelected}
             onCopy={handleCopyNode}
             onConnectionPointsChange={handleConnectionPointsChange}
@@ -1068,10 +1109,10 @@ function TopologyCanvas() {
           <EdgePropertiesPanel
             edge={selectedEdge}
             sourceHostname={
-              selectedEdgeSourceNode?.data?.hostname || (selectedEdgeSourceNode ? `Device ${selectedEdgeSourceNode.data.id}` : '')
+              selectedEdgeSourceNode?.data?.hostname || (selectedEdgeSourceNode ? `Node ${selectedEdgeSourceNode.data.id}` : '')
             }
             targetHostname={
-              selectedEdgeTargetNode?.data?.hostname || (selectedEdgeTargetNode ? `Device ${selectedEdgeTargetNode.data.id}` : '')
+              selectedEdgeTargetNode?.data?.hostname || (selectedEdgeTargetNode ? `Node ${selectedEdgeTargetNode.data.id}` : '')
             }
             onClose={() => setSelectedEdgeId(null)}
             onUpdate={handleUpdateEdge}
@@ -1083,6 +1124,16 @@ function TopologyCanvas() {
           {showSavedToast && <div className="topology-toast">Saved!</div>}
         </div>
       </div>
+
+      {pendingNode && (
+        <AddNodeModal
+          deviceInfo={pendingNode.deviceInfo}
+          devices={unplacedDevices}
+          onConfirmStandalone={handleAddNodeStandalone}
+          onConfirmLink={handleAddNodeLink}
+          onCancel={() => setPendingNode(null)}
+        />
+      )}
 
       {pendingConnection && (
         <LinkConfigModal
@@ -1096,8 +1147,8 @@ function TopologyCanvas() {
       {editingEdge && (
         <LinkConfigModal
           initialValues={editingEdge.data}
-          sourceDevice={{ id: editSourceNode?.data.id, hostname: editSourceNode?.data.hostname }}
-          targetDevice={{ id: editTargetNode?.data.id, hostname: editTargetNode?.data.hostname }}
+          sourceDevice={{ id: editSourceNode?.data.deviceId, hostname: editSourceNode?.data.hostname }}
+          targetDevice={{ id: editTargetNode?.data.deviceId, hostname: editTargetNode?.data.hostname }}
           onSubmit={handleEditConnectionSubmit}
           onCancel={() => setEditingEdge(null)}
         />

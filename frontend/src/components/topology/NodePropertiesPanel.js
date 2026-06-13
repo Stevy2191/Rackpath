@@ -41,6 +41,7 @@ export default function NodePropertiesPanel({
   node,
   onClose,
   onUpdateDevice,
+  onUpdateNode,
   onDelete,
   onCopy,
   onConnectionPointsChange,
@@ -66,20 +67,25 @@ export default function NodePropertiesPanel({
   }, [node]);
 
   const data = displayNode?.data;
-  const deviceId = data?.id;
+  const nodeId = data?.id;
+  const linkedDeviceId = data?.deviceId;
 
   useEffect(() => {
     setHostname(data?.hostname || '');
-    // Only re-sync local input state when the selected device changes, not
+    // Only re-sync local input state when the selected node changes, not
     // on every keystroke while editing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId]);
+  }, [nodeId]);
 
   useEffect(() => {
-    if (!deviceId) return;
+    if (!linkedDeviceId) {
+      setInterfaces([]);
+      setConnectionPoints([]);
+      return;
+    }
     let cancelled = false;
     client
-      .get(`/topology/nodes/${deviceId}/interfaces`)
+      .get(`/topology/nodes/${linkedDeviceId}/interfaces`)
       .then((res) => {
         if (!cancelled) setInterfaces(res.data || []);
       })
@@ -87,7 +93,7 @@ export default function NodePropertiesPanel({
         if (!cancelled) setInterfaces([]);
       });
     client
-      .get(`/topology/nodes/${deviceId}/connection-points`)
+      .get(`/topology/nodes/${linkedDeviceId}/connection-points`)
       .then((res) => {
         if (!cancelled) setConnectionPoints(res.data || []);
       })
@@ -97,7 +103,7 @@ export default function NodePropertiesPanel({
     return () => {
       cancelled = true;
     };
-  }, [deviceId]);
+  }, [linkedDeviceId]);
 
   if (!data) return <aside className="node-properties-panel" />;
 
@@ -113,12 +119,17 @@ export default function NodePropertiesPanel({
 
   const commitHostname = () => {
     const next = hostname.trim() || null;
-    if (next !== (data.hostname || null)) onUpdateDevice(deviceId, { hostname: next });
+    if (next === (data.hostname || null)) return;
+    if (linkedDeviceId) {
+      onUpdateDevice(linkedDeviceId, { hostname: next });
+    } else {
+      onUpdateNode(nodeId, { label: next });
+    }
   };
 
   const handleAddInterface = async () => {
     try {
-      const res = await client.post(`/topology/nodes/${deviceId}/interfaces`, {
+      const res = await client.post(`/topology/nodes/${linkedDeviceId}/interfaces`, {
         name: `eth${mainInterfaces.length}`,
         description: '',
       });
@@ -134,7 +145,7 @@ export default function NodePropertiesPanel({
 
   const commitInterface = async (iface) => {
     try {
-      await client.patch(`/topology/nodes/${deviceId}/interfaces/${iface.id}`, {
+      await client.patch(`/topology/nodes/${linkedDeviceId}/interfaces/${iface.id}`, {
         name: iface.name || '',
         vlan_id: iface.vlan_id ?? null,
         ip: iface.ip || null,
@@ -146,7 +157,7 @@ export default function NodePropertiesPanel({
 
   const handleAddSubInterface = async (parent) => {
     try {
-      const res = await client.post(`/topology/nodes/${deviceId}/interfaces`, {
+      const res = await client.post(`/topology/nodes/${linkedDeviceId}/interfaces`, {
         name: '',
         description: '',
         parent_id: parent.id,
@@ -160,7 +171,7 @@ export default function NodePropertiesPanel({
 
   const deleteInterface = async (id) => {
     try {
-      await client.delete(`/topology/nodes/${deviceId}/interfaces/${id}`);
+      await client.delete(`/topology/nodes/${linkedDeviceId}/interfaces/${id}`);
       // Drop the interface and any VLAN sub-interfaces parented to it.
       setInterfaces((prev) => prev.filter((i) => i.id !== id && i.parent_id !== id));
     } catch (err) {
@@ -170,12 +181,12 @@ export default function NodePropertiesPanel({
 
   const syncConnectionPoints = (points) => {
     setConnectionPoints(points);
-    onConnectionPointsChange?.(deviceId, points);
+    onConnectionPointsChange?.(linkedDeviceId, points);
   };
 
   const handleAddConnectionPoint = async () => {
     try {
-      const res = await client.post(`/topology/nodes/${deviceId}/connection-points`, {
+      const res = await client.post(`/topology/nodes/${linkedDeviceId}/connection-points`, {
         name: `Port ${connectionPoints.length + 1}`,
         position: 'top',
       });
@@ -191,7 +202,7 @@ export default function NodePropertiesPanel({
 
   const commitConnectionPoint = async (point) => {
     try {
-      await client.patch(`/topology/nodes/${deviceId}/connection-points/${point.id}`, {
+      await client.patch(`/topology/nodes/${linkedDeviceId}/connection-points/${point.id}`, {
         name: point.name || '',
         position: point.position,
       });
@@ -202,7 +213,7 @@ export default function NodePropertiesPanel({
 
   const deleteConnectionPoint = async (id) => {
     try {
-      await client.delete(`/topology/nodes/${deviceId}/connection-points/${id}`);
+      await client.delete(`/topology/nodes/${linkedDeviceId}/connection-points/${id}`);
       syncConnectionPoints(connectionPoints.filter((p) => p.id !== id));
     } catch (err) {
       setError(err.message);
@@ -227,7 +238,7 @@ export default function NodePropertiesPanel({
 
       <div className="node-properties-section">
         <label className="node-properties-label" htmlFor="node-prop-hostname">
-          Hostname
+          {linkedDeviceId ? 'Hostname' : 'Label'}
         </label>
         <input
           id="node-prop-hostname"
@@ -238,7 +249,7 @@ export default function NodePropertiesPanel({
           onKeyDown={(e) => {
             if (e.key === 'Enter') e.target.blur();
           }}
-          placeholder={`Device ${deviceId}`}
+          placeholder={linkedDeviceId ? `Device ${linkedDeviceId}` : `Node ${nodeId}`}
         />
       </div>
 
@@ -246,8 +257,12 @@ export default function NodePropertiesPanel({
         <span className="node-properties-label">Icon Color</span>
         <ColorSwatchPicker
           value={data.icon_color || null}
-          onChange={(hex) => onUpdateDevice(deviceId, { icon_color: hex })}
-          onReset={() => onUpdateDevice(deviceId, { icon_color: null })}
+          onChange={(hex) =>
+            linkedDeviceId ? onUpdateDevice(linkedDeviceId, { icon_color: hex }) : onUpdateNode(nodeId, { icon_color: hex })
+          }
+          onReset={() =>
+            linkedDeviceId ? onUpdateDevice(linkedDeviceId, { icon_color: null }) : onUpdateNode(nodeId, { icon_color: null })
+          }
         />
       </div>
 
@@ -255,11 +270,16 @@ export default function NodePropertiesPanel({
         <span className="node-properties-label">Text Color</span>
         <ColorSwatchPicker
           value={data.text_color || null}
-          onChange={(hex) => onUpdateDevice(deviceId, { text_color: hex })}
-          onReset={() => onUpdateDevice(deviceId, { text_color: null })}
+          onChange={(hex) =>
+            linkedDeviceId ? onUpdateDevice(linkedDeviceId, { text_color: hex }) : onUpdateNode(nodeId, { text_color: hex })
+          }
+          onReset={() =>
+            linkedDeviceId ? onUpdateDevice(linkedDeviceId, { text_color: null }) : onUpdateNode(nodeId, { text_color: null })
+          }
         />
       </div>
 
+      {linkedDeviceId && (
       <div className="node-properties-section">
         <div className="node-properties-section-header">
           <span className="node-properties-section-title">Interfaces</span>
@@ -365,7 +385,9 @@ export default function NodePropertiesPanel({
           ))}
         </ul>
       </div>
+      )}
 
+      {linkedDeviceId && (
       <div className="node-properties-section">
         <span className="node-properties-label">Connection Points</span>
         <ul className="node-properties-interfaces">
@@ -415,6 +437,7 @@ export default function NodePropertiesPanel({
         </button>
         {error && <div className="node-properties-error">{error}</div>}
       </div>
+      )}
 
       <div className="node-properties-section node-properties-actions">
         <span className="node-properties-label">Actions</span>

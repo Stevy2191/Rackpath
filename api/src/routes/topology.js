@@ -6,9 +6,12 @@ const pool = require('../db/pool');
 
 const router = express.Router();
 
-const NODE_FIELDS = `d.id, d.hostname, d.ip, d.mac, d.type, d.snmp_community, d.notes,
-              d.icon_color, d.text_color,
-              d.updated_at, tl.x, tl.y, tl.width, tl.height`;
+const NODE_FIELDS = `n.id, n.device_id, n.label, n.type AS node_type,
+              n.icon_color AS node_icon_color, n.text_color AS node_text_color,
+              n.x, n.y, n.width, n.height,
+              d.hostname, d.ip, d.mac, d.type AS device_type, d.snmp_community, d.notes,
+              d.icon_color AS device_icon_color, d.text_color AS device_text_color,
+              d.updated_at`;
 
 // Returns true if the error is MariaDB/MySQL's "table doesn't exist" error.
 // Lets older deployments (whose DB volume predates these tables) fall back
@@ -40,14 +43,14 @@ const iconUpload = multer({
   },
 });
 
-// GET /api/topology - devices that have been placed on the canvas, with position
+// GET /api/topology - canvas nodes (device-linked or standalone), with position
 router.get('/', async (req, res, next) => {
   try {
     const [nodes] = await pool.query(
       `SELECT ${NODE_FIELDS}
-       FROM devices d
-       INNER JOIN topology_layout tl ON tl.device_id = d.id
-       WHERE tl.project_id = ?`,
+       FROM topology_nodes n
+       LEFT JOIN devices d ON d.id = n.device_id
+       WHERE n.project_id = ?`,
       [req.projectId]
     );
 
@@ -57,13 +60,13 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// DELETE /api/topology/all - clear the canvas (all placed nodes, edges, zones, and labels)
+// DELETE /api/topology/all - clear the canvas (all nodes, edges, zones, and labels)
 router.delete('/all', async (req, res, next) => {
   try {
     await pool.query('DELETE FROM topology_edges WHERE project_id = ?', [req.projectId]);
     await pool.query('DELETE FROM topology_zones WHERE project_id = ?', [req.projectId]);
     await pool.query('DELETE FROM topology_labels WHERE project_id = ?', [req.projectId]);
-    await pool.query('DELETE FROM topology_layout WHERE project_id = ?', [req.projectId]);
+    await pool.query('DELETE FROM topology_nodes WHERE project_id = ?', [req.projectId]);
     res.status(204).send();
   } catch (err) {
     if (isTableMissing(err)) return res.status(204).send();
@@ -71,7 +74,7 @@ router.delete('/all', async (req, res, next) => {
   }
 });
 
-// PATCH /api/topology/layout - bulk upsert canvas positions
+// PATCH /api/topology/layout - bulk update canvas positions/sizes
 router.patch('/layout', async (req, res, next) => {
   try {
     const { positions } = req.body;
@@ -80,23 +83,21 @@ router.patch('/layout', async (req, res, next) => {
     }
 
     for (const pos of positions) {
-      const { device_id, x, y, width, height } = pos || {};
-      if (device_id === undefined || x === undefined || y === undefined) continue;
+      const { node_id, x, y, width, height } = pos || {};
+      if (node_id === undefined || x === undefined || y === undefined) continue;
 
       if (width !== undefined && height !== undefined) {
         await pool.query(
-          `INSERT INTO topology_layout (project_id, device_id, x, y, width, height)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y), width = VALUES(width), height = VALUES(height)`,
-          [req.projectId, device_id, x, y, width, height]
+          'UPDATE topology_nodes SET x = ?, y = ?, width = ?, height = ? WHERE id = ? AND project_id = ?',
+          [x, y, width, height, node_id, req.projectId]
         );
       } else {
-        await pool.query(
-          `INSERT INTO topology_layout (project_id, device_id, x, y)
-           VALUES (?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y)`,
-          [req.projectId, device_id, x, y]
-        );
+        await pool.query('UPDATE topology_nodes SET x = ?, y = ? WHERE id = ? AND project_id = ?', [
+          x,
+          y,
+          node_id,
+          req.projectId,
+        ]);
       }
     }
 
@@ -106,28 +107,49 @@ router.patch('/layout', async (req, res, next) => {
   }
 });
 
-// POST /api/topology/nodes - create a new device and place it on the canvas
+// POST /api/topology/nodes - add a node to the canvas, either linked to an
+// existing device or as a standalone documentation-only node.
 router.post('/nodes', async (req, res, next) => {
   try {
-    const { hostname, ip, type, x, y, icon_color, text_color } = req.body;
+    const { device_id, label, type, x, y, icon_color, text_color } = req.body;
+
+    if (device_id) {
+      const [devices] = await pool.query('SELECT id FROM devices WHERE id = ? AND project_id = ?', [
+        device_id,
+        req.projectId,
+      ]);
+      if (devices.length === 0) return res.status(404).json({ error: 'Device not found' });
+
+      const [existing] = await pool.query(
+        'SELECT id FROM topology_nodes WHERE device_id = ? AND project_id = ?',
+        [device_id, req.projectId]
+      );
+      if (existing.length > 0) {
+        return res.status(409).json({ error: 'Device is already placed on the canvas' });
+      }
+    }
 
     const [result] = await pool.query(
-      `INSERT INTO devices (project_id, hostname, ip, type, icon_color, text_color) VALUES (?, ?, ?, ?, ?, ?)`,
-      [req.projectId, hostname || null, ip || null, type || null, icon_color || null, text_color || null]
-    );
-    const deviceId = result.insertId;
-
-    await pool.query(
-      `INSERT INTO topology_layout (project_id, device_id, x, y) VALUES (?, ?, ?, ?)`,
-      [req.projectId, deviceId, x || 0, y || 0]
+      `INSERT INTO topology_nodes (project_id, device_id, label, type, icon_color, text_color, x, y)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.projectId,
+        device_id || null,
+        device_id ? null : label || null,
+        device_id ? null : type || null,
+        icon_color || null,
+        text_color || null,
+        x || 0,
+        y || 0,
+      ]
     );
 
     const [rows] = await pool.query(
       `SELECT ${NODE_FIELDS}
-       FROM devices d
-       INNER JOIN topology_layout tl ON tl.device_id = d.id
-       WHERE d.id = ?`,
-      [deviceId]
+       FROM topology_nodes n
+       LEFT JOIN devices d ON d.id = n.device_id
+       WHERE n.id = ?`,
+      [result.insertId]
     );
 
     res.status(201).json(rows[0]);
@@ -136,20 +158,56 @@ router.post('/nodes', async (req, res, next) => {
   }
 });
 
-// DELETE /api/topology/nodes/:id - remove a device from the canvas
+// PATCH /api/topology/nodes/:id - update a standalone node's own label/type/colors
+router.patch('/nodes/:id', async (req, res, next) => {
+  try {
+    const allowedFields = ['label', 'type', 'icon_color', 'text_color'];
+    const updates = [];
+    const values = [];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(req.body[field]);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(req.params.id, req.projectId);
+    const [result] = await pool.query(
+      `UPDATE topology_nodes SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`,
+      values
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Node not found' });
+
+    const [rows] = await pool.query(
+      `SELECT ${NODE_FIELDS}
+       FROM topology_nodes n
+       LEFT JOIN devices d ON d.id = n.device_id
+       WHERE n.id = ?`,
+      [req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/topology/nodes/:id - remove a node from the canvas. Does not
+// delete the linked device (if any) from the Device Inventory.
 router.delete('/nodes/:id', async (req, res, next) => {
   try {
-    const deviceId = req.params.id;
+    const nodeId = req.params.id;
 
     await pool.query(
-      'DELETE FROM topology_edges WHERE (source_device_id = ? OR target_device_id = ?) AND project_id = ?',
-      [deviceId, deviceId, req.projectId]
+      'DELETE FROM topology_edges WHERE (source_node_id = ? OR target_node_id = ?) AND project_id = ?',
+      [nodeId, nodeId, req.projectId]
     );
 
-    await pool.query('DELETE FROM topology_layout WHERE device_id = ? AND project_id = ?', [
-      deviceId,
-      req.projectId,
-    ]);
+    await pool.query('DELETE FROM topology_nodes WHERE id = ? AND project_id = ?', [nodeId, req.projectId]);
 
     res.status(204).send();
   } catch (err) {
@@ -359,8 +417,8 @@ router.get('/edges', async (req, res, next) => {
 router.post('/edges', async (req, res, next) => {
   try {
     const {
-      source_device_id,
-      target_device_id,
+      source_node_id,
+      target_node_id,
       source_handle,
       target_handle,
       source_interface,
@@ -370,17 +428,17 @@ router.post('/edges', async (req, res, next) => {
       cable_type,
       vlan,
     } = req.body;
-    if (!source_device_id || !target_device_id) {
-      return res.status(400).json({ error: 'source_device_id and target_device_id are required' });
+    if (!source_node_id || !target_node_id) {
+      return res.status(400).json({ error: 'source_node_id and target_node_id are required' });
     }
 
     const [result] = await pool.query(
-      `INSERT INTO topology_edges (project_id, source_device_id, target_device_id, source_handle, target_handle, source_interface, target_interface, label, speed, cable_type, vlan)
+      `INSERT INTO topology_edges (project_id, source_node_id, target_node_id, source_handle, target_handle, source_interface, target_interface, label, speed, cable_type, vlan)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId,
-        source_device_id,
-        target_device_id,
+        source_node_id,
+        target_node_id,
         source_handle || null,
         target_handle || null,
         source_interface || null,
@@ -403,8 +461,8 @@ router.post('/edges', async (req, res, next) => {
 router.patch('/edges/:id', async (req, res, next) => {
   try {
     const allowedFields = [
-      'source_device_id',
-      'target_device_id',
+      'source_node_id',
+      'target_node_id',
       'source_handle',
       'target_handle',
       'waypoint_x',

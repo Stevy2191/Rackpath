@@ -10,6 +10,7 @@ const DEFAULT_PROJECT_ID = 1;
 // CASCADE foreign keys are present in a given deployment.
 const SCOPED_TABLES = [
   'topology_edges',
+  'topology_nodes',
   'topology_zones',
   'topology_layout',
   'rack_slots',
