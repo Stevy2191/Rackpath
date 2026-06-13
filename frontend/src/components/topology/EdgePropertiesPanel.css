@@ -1,0 +1,217 @@
+.edge-properties-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 280px;
+  background: var(--color-bg-elevated);
+  border-left: 1px solid var(--color-border);
+  box-shadow: -2px 0 8px var(--color-shadow);
+  padding: 1rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 0.2s ease-out;
+}
+
+.edge-properties-panel.open {
+  transform: translateX(0);
+}
+
+.edge-properties-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.edge-properties-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+
+.edge-properties-type-select {
+  flex: 1;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.edge-properties-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edge-properties-close:hover {
+  color: var(--color-text);
+}
+
+.edge-properties-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.edge-properties-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.edge-properties-input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.edge-properties-input[readonly] {
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle);
+}
+
+.edge-properties-toggle-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.edge-properties-toggle {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edge-properties-toggle:hover {
+  background: var(--color-bg-subtle);
+}
+
+.edge-properties-toggle.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.edge-properties-swatch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.edge-properties-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.edge-properties-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-strong);
+  cursor: pointer;
+  padding: 0;
+}
+
+.edge-properties-swatch.selected {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.edge-properties-reset {
+  align-self: flex-start;
+  padding: 0.3rem 0.6rem;
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: 0.75rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.edge-properties-reset:hover {
+  color: var(--color-text);
+}
+
+.edge-properties-eye-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: 100%;
+}
+
+.edge-properties-eye-toggle:hover {
+  background: var(--color-bg-subtle);
+}
+
+.edge-properties-eye-toggle.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.edge-properties-actions {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+  gap: 0.5rem;
+}
+
+.edge-properties-actions-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.edge-properties-action-btn {
+  flex: 1;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.edge-properties-action-btn:hover {
+  background: var(--color-bg-subtle);
+}
+
+.edge-properties-delete {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+.edge-properties-delete:hover {
+  background: var(--color-danger-bg);
+}

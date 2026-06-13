@@ -27,6 +27,7 @@ import DevicePicker, {
   DISCOVERED_DRAG_TYPE,
 } from '../components/topology/DevicePicker';
 import NodePropertiesPanel from '../components/topology/NodePropertiesPanel';
+import EdgePropertiesPanel from '../components/topology/EdgePropertiesPanel';
 import LinkConfigModal from '../components/topology/LinkConfigModal';
 import SubnetCalculator from '../components/topology/SubnetCalculator';
 import TopologyToolbar from '../components/topology/TopologyToolbar';
@@ -97,6 +98,20 @@ function edgeLabelText(edge) {
   return edge.label || undefined;
 }
 
+// Stroke dash pattern for an edge's line style. "default" derives a pattern
+// from the cable type (fibre = dashed, wireless = dotted, otherwise solid).
+function edgeDashArray(edge) {
+  const lineStyle = edge.line_style || 'default';
+  if (lineStyle === 'solid') return undefined;
+  if (lineStyle === 'dashed') return '8 4';
+  if (lineStyle === 'dotted') return '2 3';
+
+  const cableType = (edge.cable_type || '').toLowerCase();
+  if (cableType.includes('fibre') || cableType.includes('fiber')) return '8 4';
+  if (cableType.includes('wireless')) return '2 3';
+  return undefined;
+}
+
 function buildEdge(edge, showLabels, callbacks) {
   return {
     id: `edge-${edge.id}`,
@@ -106,6 +121,8 @@ function buildEdge(edge, showLabels, callbacks) {
     targetHandle: edge.target_handle || null,
     type: 'connection',
     label: showLabels ? edgeLabelText(edge) : undefined,
+    animated: !!edge.animate,
+    style: { strokeDasharray: edgeDashArray(edge) },
     data: {
       ...edge,
       onEdit: callbacks?.onEdgeEdit,
@@ -163,6 +180,8 @@ function TopologyCanvas() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState(null);
+  const edgeStyleClipboardRef = useRef(null);
   const [showEdgeLabels, setShowEdgeLabels] = useState(true);
   const [pendingConnection, setPendingConnection] = useState(null);
   const [editingEdge, setEditingEdge] = useState(null);
@@ -470,6 +489,50 @@ function TopologyCanvas() {
     [editingEdge, showEdgeLabels, edgeCallbacks]
   );
 
+  // Persist a patch to an edge's link-properties-panel settings and update
+  // the canvas in place (recomputes label/line-style/animation from the
+  // merged data, same as the edit-connection submit handler).
+  const handleUpdateEdge = useCallback(
+    (edgeDbId, patch) => {
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === `edge-${edgeDbId}` ? buildEdge({ ...e.data, ...patch }, showEdgeLabels, edgeCallbacks) : e
+        )
+      );
+      client.patch(`/topology/edges/${edgeDbId}`, patch).catch((err) => setError(err.message));
+    },
+    [showEdgeLabels, edgeCallbacks]
+  );
+
+  // "Copy"/"Paste" on the link properties panel transfers style settings
+  // (type, label visibility/color, line style, animate, snapping) from one
+  // edge to another via an in-memory clipboard.
+  const handleCopyEdgeStyle = useCallback((edge) => {
+    const data = edge.data || {};
+    edgeStyleClipboardRef.current = {
+      cable_type: data.cable_type,
+      source_label_visible: data.source_label_visible,
+      target_label_visible: data.target_label_visible,
+      label_color: data.label_color,
+      line_style: data.line_style,
+      animate: data.animate,
+      snapping: data.snapping,
+    };
+  }, []);
+
+  const handlePasteEdgeStyle = useCallback(
+    (edgeDbId) => {
+      if (!edgeStyleClipboardRef.current) return;
+      handleUpdateEdge(edgeDbId, edgeStyleClipboardRef.current);
+    },
+    [handleUpdateEdge]
+  );
+
+  const onEdgeClick = useCallback((_event, edge) => {
+    setSelectedEdgeId(edge.id);
+    setSelectedNodeId(null);
+  }, []);
+
   const onEdgeUpdate = useCallback(
     (oldEdge, newConnection) => {
       const edgeDbId = Number(oldEdge.id.replace('edge-', ''));
@@ -530,7 +593,10 @@ function TopologyCanvas() {
         }
         return;
       }
-      if (mode === 'select') setSelectedNodeId(node.id);
+      if (mode === 'select') {
+        setSelectedNodeId(node.id);
+        setSelectedEdgeId(null);
+      }
     },
     [mode, linkSourceId, openLinkModal]
   );
@@ -610,6 +676,7 @@ function TopologyCanvas() {
         return;
       }
       setSelectedNodeId(null);
+      setSelectedEdgeId(null);
     },
     [mode, addLabelAt, addZoneAt, projectFromEvent]
   );
@@ -625,12 +692,23 @@ function TopologyCanvas() {
   }, []);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
+  const selectedEdge = edges.find((e) => e.id === selectedEdgeId) || null;
+  const selectedEdgeSourceNode = selectedEdge ? nodes.find((n) => n.id === selectedEdge.source) : null;
+  const selectedEdgeTargetNode = selectedEdge ? nodes.find((n) => n.id === selectedEdge.target) : null;
 
   const handleRemoveSelected = useCallback(() => {
     if (!selectedNodeId) return;
     reactFlowInstance.deleteElements({ nodes: [{ id: selectedNodeId }] });
     setSelectedNodeId(null);
   }, [selectedNodeId, reactFlowInstance]);
+
+  const handleDeleteSelectedEdge = useCallback(
+    (edgeId) => {
+      reactFlowInstance.deleteElements({ edges: [{ id: edgeId }] });
+      setSelectedEdgeId(null);
+    },
+    [reactFlowInstance]
+  );
 
   const handleUpdateDevice = useCallback((deviceId, patch) => {
     setNodes((nds) =>
@@ -936,6 +1014,7 @@ function TopologyCanvas() {
             onNodeDragStop={onNodeDragStop}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
+            onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             onDrop={onDrop}
             onDragOver={onDragOver}
@@ -969,6 +1048,21 @@ function TopologyCanvas() {
             onDelete={handleRemoveSelected}
             onCopy={handleCopyNode}
             onConnectionPointsChange={handleConnectionPointsChange}
+          />
+
+          <EdgePropertiesPanel
+            edge={selectedEdge}
+            sourceHostname={
+              selectedEdgeSourceNode?.data?.hostname || (selectedEdgeSourceNode ? `Device ${selectedEdgeSourceNode.data.id}` : '')
+            }
+            targetHostname={
+              selectedEdgeTargetNode?.data?.hostname || (selectedEdgeTargetNode ? `Device ${selectedEdgeTargetNode.data.id}` : '')
+            }
+            onClose={() => setSelectedEdgeId(null)}
+            onUpdate={handleUpdateEdge}
+            onDelete={handleDeleteSelectedEdge}
+            onCopy={handleCopyEdgeStyle}
+            onPaste={handlePasteEdgeStyle}
           />
 
           {showSavedToast && <div className="topology-toast">Saved!</div>}

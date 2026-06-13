@@ -411,9 +411,15 @@ router.patch('/edges/:id', async (req, res, next) => {
       'waypoint_y',
       'source_interface',
       'target_interface',
+      'source_label_visible',
+      'target_label_visible',
       'label',
+      'label_color',
       'speed',
       'cable_type',
+      'line_style',
+      'animate',
+      'snapping',
       'vlan',
     ];
     const updates = [];

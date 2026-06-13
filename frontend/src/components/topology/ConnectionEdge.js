@@ -12,6 +12,20 @@ function lerp(a, b, t) {
 // the node's hostname caption and clearly on the edge line.
 const PORT_LABEL_FRACTION = 0.28;
 
+// Grid size (in flow coordinates) a waypoint snaps to while dragging, when
+// the edge's "Link Snapping" setting is enabled.
+const SNAP_GRID = 10;
+
+// DB booleans round-trip as 0/1; treat anything falsy other than
+// undefined/null (the "unset, default visible" case) as hidden.
+function isLabelVisible(value) {
+  return !(value === false || value === 0 || value === '0');
+}
+
+function snapPoint(point) {
+  return { x: Math.round(point.x / SNAP_GRID) * SNAP_GRID, y: Math.round(point.y / SNAP_GRID) * SNAP_GRID };
+}
+
 export default function ConnectionEdge({
   id,
   sourceX,
@@ -74,7 +88,8 @@ export default function ConnectionEdge({
 
   const handlePointerMove = (e) => {
     if (e.buttons !== 1) return;
-    setPreview(screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+    const point = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    setPreview(data?.snapping ? snapPoint(point) : point);
   };
 
   const handlePointerUp = (e) => {
@@ -96,21 +111,23 @@ export default function ConnectionEdge({
     <>
       <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={edgeStyle} />
       <EdgeLabelRenderer>
-        {data?.source_interface && (
+        {data?.source_interface && isLabelVisible(data?.source_label_visible) && (
           <div
             className="connection-edge-interface-label"
             style={{
               transform: `translate(-50%, -50%) translate(${sourceLabelPos.x}px, ${sourceLabelPos.y}px)`,
+              color: data?.label_color || undefined,
             }}
           >
             {data.source_interface}
           </div>
         )}
-        {data?.target_interface && (
+        {data?.target_interface && isLabelVisible(data?.target_label_visible) && (
           <div
             className="connection-edge-interface-label"
             style={{
               transform: `translate(-50%, -50%) translate(${targetLabelPos.x}px, ${targetLabelPos.y}px)`,
+              color: data?.label_color || undefined,
             }}
           >
             {data.target_interface}

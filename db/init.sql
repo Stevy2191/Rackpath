@@ -234,9 +234,15 @@ CREATE TABLE IF NOT EXISTS topology_edges (
     waypoint_y          DOUBLE              NULL,
     source_interface    VARCHAR(128)        NULL,
     target_interface    VARCHAR(128)        NULL,
+    source_label_visible BOOLEAN            NOT NULL DEFAULT TRUE,
+    target_label_visible BOOLEAN            NOT NULL DEFAULT TRUE,
     label               VARCHAR(128)        NULL,
+    label_color         VARCHAR(20)         NULL,
     speed               VARCHAR(32)         NULL,
     cable_type          VARCHAR(64)         NULL,
+    line_style          VARCHAR(20)         NOT NULL DEFAULT 'default',
+    animate             BOOLEAN             NOT NULL DEFAULT FALSE,
+    snapping            BOOLEAN             NOT NULL DEFAULT FALSE,
     vlan                VARCHAR(32)         NULL,
     created_at          TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_topology_edges_source
@@ -266,6 +272,16 @@ ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS target_interface VARCHAR(128
 -- topology_edges table created before it existed.
 ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS waypoint_x DOUBLE NULL AFTER target_handle;
 ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS waypoint_y DOUBLE NULL AFTER waypoint_x;
+
+-- Upgrade path for existing deployments: add link-properties-panel columns
+-- (label visibility, label color, line style, animate, snapping) to a
+-- topology_edges table created before they existed.
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS source_label_visible BOOLEAN NOT NULL DEFAULT TRUE AFTER target_interface;
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS target_label_visible BOOLEAN NOT NULL DEFAULT TRUE AFTER source_label_visible;
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS label_color VARCHAR(20) NULL AFTER label;
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS line_style VARCHAR(20) NOT NULL DEFAULT 'default' AFTER cable_type;
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS animate BOOLEAN NOT NULL DEFAULT FALSE AFTER line_style;
+ALTER TABLE topology_edges ADD COLUMN IF NOT EXISTS snapping BOOLEAN NOT NULL DEFAULT FALSE AFTER animate;
 
 -- ---------------------------------------------------------------------------
 -- topology_node_interfaces - named interfaces shown in the topology node
