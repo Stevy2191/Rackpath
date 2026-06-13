@@ -138,6 +138,7 @@ export default function ConnectionEdge({
             className="connection-edge-label"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              color: data?.label_color || undefined,
             }}
           >
             {label}

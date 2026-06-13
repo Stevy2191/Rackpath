@@ -117,6 +117,7 @@ function buildEdge(edge, showLabels, callbacks) {
     type: 'connection',
     label: showLabels ? edgeLabelText(edge) : undefined,
     style: {
+      stroke: edge.label_color || undefined,
       strokeDasharray: edgeDashArray(lineStyle),
       animation: lineStyle === 'animated' ? 'connection-edge-flow 1s linear infinite' : undefined,
     },
