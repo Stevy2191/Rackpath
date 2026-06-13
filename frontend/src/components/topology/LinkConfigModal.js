@@ -20,24 +20,26 @@ function buildInterfaceOptions(interfaces) {
   return options;
 }
 
-function InterfaceSelect({ deviceLabel, interfaces, value, onChange }) {
+function InterfaceSelect({ deviceLabel, interfaces, value, onChange, listId }) {
   const options = buildInterfaceOptions(interfaces);
-  // Keep an already-saved value selectable even if it isn't in the list.
-  const finalOptions = value && !options.some((o) => o.value === value) ? [{ value, label: value }, ...options] : options;
 
   return (
     <label className="link-config-port">
       <span className="link-config-port-label" title={deviceLabel}>
         {deviceLabel}
       </span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">— select interface —</option>
-        {finalOptions.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
+      <input
+        type="text"
+        list={listId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="e.g. eth0"
+      />
+      <datalist id={listId}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value} label={o.label} />
         ))}
-      </select>
+      </datalist>
     </label>
   );
 }
@@ -91,12 +93,14 @@ export default function LinkConfigModal({ sourceDevice, targetDevice, initialVal
               interfaces={sourceIfaces}
               value={sourceInterface}
               onChange={setSourceInterface}
+              listId="link-config-source-ifaces"
             />
             <InterfaceSelect
               deviceLabel={targetName}
               interfaces={targetIfaces}
               value={targetInterface}
               onChange={setTargetInterface}
+              listId="link-config-target-ifaces"
             />
           </div>
 
