@@ -87,4 +87,69 @@ async function upsertVlan(db, projectId, vlan) {
   return true;
 }
 
-module.exports = { upsertDevice, upsertVlan };
+// Insert or update a camera discovered by a UniFi Protect sync, matched on
+// (project_id, mac). Cameras without a mac are always inserted as new rows
+// since there's nothing reliable to match them on.
+async function upsertCamera(db, projectId, integrationId, camera) {
+  const fields = {
+    name: camera.name || camera.mac || 'Camera',
+    model: camera.model || null,
+    mac: camera.mac || null,
+    ip_address: camera.ip_address || null,
+    rtsp_url: camera.rtsp_url || null,
+    rtsps_url: camera.rtsps_url || null,
+    stream_password: camera.stream_password || null,
+    resolution: camera.resolution || null,
+    status: camera.status || 'unknown',
+  };
+
+  if (fields.mac) {
+    const [existing] = await db.query('SELECT id FROM project_cameras WHERE project_id = ? AND mac = ?', [
+      projectId,
+      fields.mac,
+    ]);
+
+    if (existing.length > 0) {
+      await db.query(
+        `UPDATE project_cameras SET integration_id = ?, name = ?, model = ?, ip_address = ?,
+           rtsp_url = ?, rtsps_url = ?, stream_password = ?, resolution = ?, status = ?, last_seen = NOW()
+         WHERE id = ?`,
+        [
+          integrationId,
+          fields.name,
+          fields.model,
+          fields.ip_address,
+          fields.rtsp_url,
+          fields.rtsps_url,
+          fields.stream_password,
+          fields.resolution,
+          fields.status,
+          existing[0].id,
+        ]
+      );
+      return true;
+    }
+  }
+
+  await db.query(
+    `INSERT INTO project_cameras
+       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url, stream_password, resolution, status, last_seen)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+    [
+      projectId,
+      integrationId,
+      fields.name,
+      fields.model,
+      fields.mac,
+      fields.ip_address,
+      fields.rtsp_url,
+      fields.rtsps_url,
+      fields.stream_password,
+      fields.resolution,
+      fields.status,
+    ]
+  );
+  return true;
+}
+
+module.exports = { upsertDevice, upsertVlan, upsertCamera };

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Key } from 'lucide-react';
+import { Key, Camera } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import ProjectSwitcher from '../project/ProjectSwitcher';
@@ -13,6 +13,7 @@ const links = [
   { to: '/racks', label: 'Racks' },
   { to: '/devices', label: 'Devices' },
   { to: '/macros', label: 'Macros', icon: Key },
+  { to: '/cameras', label: 'Cameras', icon: Camera },
   { to: '/integrations', label: 'Integrations' },
 ];
 

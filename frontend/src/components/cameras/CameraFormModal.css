@@ -1,0 +1,27 @@
+.camera-masked-field {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.camera-masked-field input {
+  flex: 1;
+}
+
+.camera-masked-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.camera-masked-toggle:hover {
+  color: var(--color-text);
+}
