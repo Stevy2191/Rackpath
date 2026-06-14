@@ -1,7 +1,14 @@
 // Adapter for Ubiquiti UniFi Protect — imports cameras from a local UniFi OS
-// console (UDM/UDM-Pro/CloudKey) into project_cameras. Authenticates the same
-// way as the UniFi network adapter: an API key sent via the UniFi OS
-// X-API-KEY header, falling back to cookie-based username/password login.
+// console (UDM/UDM-Pro/CloudKey/UNVR) into project_cameras.
+//
+// UNVRs in particular have been seen to: serve `/proxy/protect/api/bootstrap`
+// with an HTTP 500, reject the standard X-API-KEY header on
+// `/proxy/protect/api/cameras` with a 401, and expose the cameras list under
+// a different path entirely (`/api/cameras` or `/protect/api/cameras`). To
+// cope with this every request tries each candidate auth method
+// (X-API-KEY header, then Authorization: Bearer, then cookie-based
+// username/password login) and, for the cameras sync, each candidate
+// endpoint path, logging which combination succeeds.
 //
 // RTSP/RTSPS stream URLs and stream passwords are sensitive — they must never
 // be written to console output. Response bodies from the cameras endpoint are
@@ -18,6 +25,16 @@ function makeClient(config) {
     validateStatus: () => true,
     timeout: 10000,
   });
+}
+
+// Built once per testConnection/syncData call and passed explicitly on every
+// request so self-signed certs are accepted regardless of how axios resolves
+// the instance-level agent (e.g. across redirects).
+function buildHttpsAgent(config) {
+  if (config.verify_ssl === false) {
+    return new https.Agent({ rejectUnauthorized: false });
+  }
+  return undefined;
 }
 
 function bodySnippet(data) {
@@ -45,18 +62,23 @@ function isHtmlResponse(data) {
   return trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
 }
 
-// Logs in via the UniFi OS endpoint, returning cookie/CSRF headers for
-// subsequent requests. Used when no API key is configured.
-async function cookieLogin(http, config) {
+// Logs in via the UniFi OS endpoint, returning cookie/CSRF/bearer headers for
+// subsequent requests. Used when no API key is configured, or as a fallback
+// when API-key auth is rejected.
+async function cookieLogin(http, config, httpsAgent) {
   const credentials = { username: config.username, password: config.password };
   const url = `${http.defaults.baseURL}/api/auth/login`;
   let res;
   try {
-    res = await http.post('/api/auth/login', credentials);
+    res = await http.post('/api/auth/login', credentials, { httpsAgent });
     console.log(`[unifi-protect] POST ${url} -> HTTP ${res.status}`);
   } catch (err) {
     logError(url, err);
     throw err;
+  }
+
+  if (res.status === 500) {
+    console.log(`[unifi-protect] response body (500): ${bodySnippet(res.data)}`);
   }
 
   if (res.status >= 400) {
@@ -70,23 +92,81 @@ async function cookieLogin(http, config) {
 
   const headers = { Cookie: cookie, 'Content-Type': 'application/json' };
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+  // Some UniFi OS versions return a bearer token in the login response body.
+  const token = res.data?.token || res.data?.access_token;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   return headers;
 }
 
-// Authenticates against the controller, preferring an API key (X-API-KEY
-// header) and falling back to a cookie-based session for username/password.
-async function authenticate(config) {
-  const http = makeClient(config);
+const AUTH_METHODS = ['api-key', 'bearer', 'cookie'];
 
-  if (config.api_key) {
-    return {
-      http,
-      headers: { 'X-API-KEY': config.api_key, 'Content-Type': 'application/json' },
-    };
+// Builds the request headers for a given auth method, returning null if that
+// method isn't usable with the configured credentials. Cookie auth is logged
+// in at most once per sync/test (cached on `cache`).
+async function authHeadersFor(method, http, config, httpsAgent, cache) {
+  switch (method) {
+    case 'api-key':
+      if (!config.api_key) return null;
+      return { 'X-API-KEY': config.api_key, 'Content-Type': 'application/json' };
+    case 'bearer':
+      if (!config.api_key) return null;
+      return { Authorization: `Bearer ${config.api_key}`, 'Content-Type': 'application/json' };
+    case 'cookie':
+      if (!config.username || !config.password) return null;
+      if (!cache.cookieHeaders) {
+        cache.cookieHeaders = await cookieLogin(http, config, httpsAgent);
+      }
+      return cache.cookieHeaders;
+    default:
+      return null;
   }
+}
 
-  const headers = await cookieLogin(http, config);
-  return { http, headers };
+// GETs `path`, trying each auth method in turn (starting with
+// `preferredMethod` if one is already known to work) until a non-401 response
+// is returned. Logs every attempt's status, the full body of any 500
+// response, and which auth method ultimately succeeded. Returns
+// `{ res, headers, method }` for the last response tried, or null if no auth
+// method was usable at all.
+async function requestWithAuthFallback(http, path, config, httpsAgent, cache, preferredMethod) {
+  const url = `${http.defaults.baseURL}${path}`;
+  const methods = preferredMethod ? [preferredMethod, ...AUTH_METHODS.filter((m) => m !== preferredMethod)] : AUTH_METHODS;
+
+  let last = null;
+  for (const method of methods) {
+    let headers;
+    try {
+      headers = await authHeadersFor(method, http, config, httpsAgent, cache);
+    } catch (err) {
+      console.log(`[unifi-protect] ${method} auth attempt for ${url} failed: ${err.message}`);
+      continue;
+    }
+    if (!headers) continue;
+
+    let res;
+    try {
+      res = await http.get(path, { headers, httpsAgent });
+    } catch (err) {
+      logError(url, err);
+      continue;
+    }
+
+    console.log(`[unifi-protect] GET ${url} (auth: ${method}) -> HTTP ${res.status}`);
+    if (res.status === 500) {
+      console.log(`[unifi-protect] response body (500): ${bodySnippet(res.data)}`);
+    }
+
+    last = { res, headers, method };
+    if (res.status !== 401) {
+      if (res.status === 200) {
+        console.log(`[unifi-protect] auth method "${method}" succeeded for ${url}`);
+      }
+      return last;
+    }
+  }
+  return last;
 }
 
 // Extracts the controller's host/IP from its base URL, used to build RTSP(S)
@@ -123,19 +203,40 @@ function isCameraOnline(cam) {
   return cam.state === 'CONNECTED';
 }
 
-async function testConnection(config) {
-  try {
-    const { http, headers } = await authenticate(config);
-    const url = `${http.defaults.baseURL}/proxy/protect/api/bootstrap`;
-    const res = await http.get('/proxy/protect/api/bootstrap', { headers });
-    console.log(`[unifi-protect] GET ${url} -> HTTP ${res.status}`);
-    console.log(`[unifi-protect] response body (first 500 chars): ${bodySnippet(res.data)}`);
+// UniFi Protect's cameras endpoint may return a bare array, or wrap it in
+// `{ cameras: [...] }` / `{ data: [...] }` depending on path/version.
+function extractCameras(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.cameras)) return data.cameras;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+}
 
-    if (isHtmlResponse(res.data) || res.status !== 200 || !Array.isArray(res.data?.cameras)) {
-      return { success: false, message: 'Could not reach Protect API — check URL and API key' };
+async function testConnection(config) {
+  const http = makeClient(config);
+  const httpsAgent = buildHttpsAgent(config);
+  const cache = {};
+
+  try {
+    const result = await requestWithAuthFallback(http, '/proxy/protect/api/cameras', config, httpsAgent, cache, null);
+
+    if (!result) {
+      return { success: false, message: 'Authentication failed — check API key' };
     }
 
-    const cameras = res.data.cameras;
+    const { res } = result;
+
+    if (res.status === 401) {
+      return { success: false, message: 'Authentication failed — check API key' };
+    }
+    if (res.status === 500 || isHtmlResponse(res.data)) {
+      return { success: false, message: 'Protect API not available on this device' };
+    }
+    if (res.status !== 200) {
+      return { success: false, message: `Unexpected response from Protect API (HTTP ${res.status})` };
+    }
+
+    const cameras = extractCameras(res.data);
     return { success: true, message: `Found ${cameras.length} camera${cameras.length === 1 ? '' : 's'}` };
   } catch (err) {
     console.log(`[unifi-protect] testConnection error: ${err.message}`);
@@ -143,20 +244,44 @@ async function testConnection(config) {
   }
 }
 
+const CAMERA_ENDPOINTS = ['/proxy/protect/api/cameras', '/api/cameras', '/protect/api/cameras'];
+
 async function syncData(config, projectId, db) {
   let camerasImported = 0;
+  const http = makeClient(config);
+  const httpsAgent = buildHttpsAgent(config);
+  const cache = {};
 
   try {
-    const { http, headers } = await authenticate(config);
-    const url = `${http.defaults.baseURL}/proxy/protect/api/cameras`;
-    const res = await http.get('/proxy/protect/api/cameras', { headers });
-    console.log(`[unifi-protect] GET ${url} -> HTTP ${res.status}`);
+    let found = null;
+    let last = null;
+    let preferredMethod = null;
 
-    if (res.status >= 400) {
-      throw new Error(`Cameras endpoint returned HTTP ${res.status}: ${bodySnippet(res.data)}`);
+    for (const path of CAMERA_ENDPOINTS) {
+      const result = await requestWithAuthFallback(http, path, config, httpsAgent, cache, preferredMethod);
+      if (!result) continue;
+
+      last = result;
+      if (result.method) preferredMethod = result.method;
+
+      if (result.res.status === 200 && !isHtmlResponse(result.res.data)) {
+        console.log(`[unifi-protect] using cameras endpoint ${path} (auth: ${result.method})`);
+        found = { ...result, path };
+        break;
+      }
     }
 
-    const cameras = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.data) ? res.data.data : [];
+    if (!found) {
+      if (last?.res.status === 401) {
+        throw new Error('Authentication failed — check API key');
+      }
+      if (last?.res.status === 500 || isHtmlResponse(last?.res.data)) {
+        throw new Error('Protect API not available on this device');
+      }
+      throw new Error('No cameras endpoint responded successfully — see API logs for details');
+    }
+
+    const cameras = extractCameras(found.res.data);
     console.log(`[unifi-protect] cameras endpoint returned ${cameras.length} camera(s)`);
 
     if (cameras.length > 0) {
