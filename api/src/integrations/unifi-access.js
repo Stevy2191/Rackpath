@@ -20,16 +20,6 @@ function makeClient(config) {
   });
 }
 
-function bodySnippet(data) {
-  let str;
-  try {
-    str = typeof data === 'string' ? data : JSON.stringify(data);
-  } catch {
-    str = String(data);
-  }
-  return (str || '').slice(0, 500);
-}
-
 function logError(url, err) {
   console.log(`[unifi-access] request to ${url} failed: ${err.message}`);
   if (err.response) {
@@ -75,19 +65,53 @@ async function cookieLogin(http, config) {
 
 // Authenticates against the controller, preferring an API key (X-API-KEY
 // header) and falling back to a cookie-based session for username/password.
+// Accept: application/json is required by the Access Integration API and
+// harmless for the legacy endpoints.
 async function authenticate(config) {
   const http = makeClient(config);
 
   if (config.api_key) {
     return {
       http,
-      headers: { 'X-API-KEY': config.api_key, 'Content-Type': 'application/json' },
+      headers: { 'X-API-KEY': config.api_key, Accept: 'application/json', 'Content-Type': 'application/json' },
     };
   }
 
   const headers = await cookieLogin(http, config);
-  return { http, headers };
+  return { http, headers: { ...headers, Accept: 'application/json' } };
 }
+
+// GETs each path in `paths` in order, stopping at the first HTTP 200 response
+// with a JSON body. Logs every attempt's URL/status and which endpoint
+// succeeded. Returns `{ res, path, attempts }`, with `res`/`path` null if
+// nothing succeeded.
+async function tryEndpoints(http, headers, paths) {
+  const attempts = [];
+
+  for (const path of paths) {
+    const url = `${http.defaults.baseURL}${path}`;
+    let res;
+    try {
+      res = await http.get(path, { headers });
+    } catch (err) {
+      logError(url, err);
+      attempts.push({ path, status: 'error' });
+      continue;
+    }
+
+    console.log(`[unifi-access] GET ${url} -> HTTP ${res.status}`);
+    attempts.push({ path, status: res.status });
+
+    if (res.status === 200 && typeof res.data === 'object' && res.data !== null) {
+      console.log(`[unifi-access] using endpoint ${path}`);
+      return { res, path, attempts };
+    }
+  }
+
+  return { res: null, path: null, attempts };
+}
+
+const DEVICE_ENDPOINTS = ['/proxy/access/integration/v1/devices', '/proxy/access/api/v2/device'];
 
 // UniFi Access wraps list responses as `{ code, msg, data: [...] }`.
 function extractList(data) {
@@ -247,12 +271,12 @@ function buildResourceIndex(items) {
 async function testConnection(config) {
   try {
     const { http, headers } = await authenticate(config);
-    const url = `${http.defaults.baseURL}/proxy/access/api/v2/device`;
-    const res = await http.get('/proxy/access/api/v2/device', { headers });
-    console.log(`[unifi-access] GET ${url} -> HTTP ${res.status}`);
-    console.log(`[unifi-access] response body (first 500 chars): ${bodySnippet(res.data)}`);
+    const { res, attempts } = await tryEndpoints(http, headers, DEVICE_ENDPOINTS);
 
-    if (isHtmlResponse(res.data) || res.status !== 200) {
+    if (!res) {
+      if (attempts.some((a) => a.status === 401)) {
+        return { success: false, message: 'Authentication failed — check API key' };
+      }
       return { success: false, message: NOT_INSTALLED_MESSAGE };
     }
 
@@ -269,21 +293,15 @@ async function syncData(config, projectId, db) {
 
   try {
     const { http, headers } = await authenticate(config);
-    const url = `${http.defaults.baseURL}/proxy/access/api/v2/device`;
-    const res = await http.get('/proxy/access/api/v2/device', { headers });
-    console.log(`[unifi-access] GET ${url} -> HTTP ${res.status}`);
-    console.log(`[unifi-access] response body (first 500 chars): ${bodySnippet(res.data)}`);
+    const { res, path, attempts } = await tryEndpoints(http, headers, DEVICE_ENDPOINTS);
 
-    if (isHtmlResponse(res.data)) {
-      return { devices_imported: 0, vlans_imported: 0, access_devices_imported: 0, status: 'failed', message: NOT_INSTALLED_MESSAGE };
-    }
-
-    if (res.status >= 400) {
-      throw new Error(`Device endpoint returned HTTP ${res.status}: ${bodySnippet(res.data)}`);
+    if (!res) {
+      const message = attempts.some((a) => a.status === 401) ? 'Authentication failed — check API key' : NOT_INSTALLED_MESSAGE;
+      return { devices_imported: 0, vlans_imported: 0, access_devices_imported: 0, status: 'failed', message };
     }
 
     const devices = extractList(res.data);
-    console.log(`[unifi-access] device endpoint returned ${devices.length} device(s)`);
+    console.log(`[unifi-access] device endpoint ${path} returned ${devices.length} device(s)`);
     if (devices.length > 0) {
       console.log(`[unifi-access] first device fields: ${Object.keys(devices[0]).join(', ')}`);
     }
