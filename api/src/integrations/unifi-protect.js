@@ -3,12 +3,14 @@
 //
 // Uses the official UniFi Protect Integration API
 // (/proxy/protect/integration/v1/*), authenticated with an API key sent via
-// the X-API-KEY header plus Accept: application/json. Some UNVR consoles
-// don't expose the integration API and instead serve cameras under the
-// legacy /protect/api/cameras or /proxy/protect/api/cameras paths, so every
-// request tries the integration endpoint first and falls back to those
-// legacy paths in order, logging the URL/status of every attempt and which
-// endpoint ultimately succeeds.
+// the X-API-KEY header plus Accept: application/json. The cameras endpoint
+// returns a bare JSON array of camera objects and does not include RTSP(S)
+// stream URLs — those are fetched per-camera via a separate
+// `.../cameras/{id}/rtsps-stream` call. Some UNVR consoles don't expose the
+// integration API and instead serve cameras under the legacy
+// /protect/api/cameras path, so every request tries the integration endpoint
+// first and falls back to that legacy path, logging the URL/status of every
+// attempt and which endpoint ultimately succeeds.
 //
 // RTSP/RTSPS stream URLs and stream passwords are sensitive — they must never
 // be written to console output. Response bodies from the cameras endpoint are
@@ -52,14 +54,6 @@ function logError(url, err) {
   if (err.response) {
     console.log(`[unifi-protect]   error response status: ${err.response.status}`);
   }
-}
-
-// A UniFi OS console with no Protect application (or a bad URL/API key)
-// serves the web UI's HTML shell instead of a JSON error.
-function isHtmlResponse(data) {
-  if (typeof data !== 'string') return false;
-  const trimmed = data.trim().toLowerCase();
-  return trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
 }
 
 // Logs in via the UniFi OS endpoint, returning cookie/CSRF/bearer headers for
@@ -201,32 +195,55 @@ function extractCameras(data) {
   return [];
 }
 
-const META_ENDPOINTS = ['/proxy/protect/integration/v1/meta/info', '/protect/api/cameras'];
+const CAMERA_ENDPOINTS = ['/proxy/protect/integration/v1/cameras', '/protect/api/cameras'];
 
-const CAMERA_ENDPOINTS = [
-  '/proxy/protect/integration/v1/cameras',
-  '/protect/api/cameras',
-  '/proxy/protect/api/cameras',
-];
+// Fetches the RTSPS stream URLs for a camera via the Integration API's
+// per-camera endpoint and returns the "high" quality URL, or null if the
+// request fails or the controller doesn't support it (e.g. the legacy
+// /protect/api/cameras fallback).
+async function fetchHighRtspsUrl(http, headers, httpsAgent, cameraId) {
+  const path = `/proxy/protect/integration/v1/cameras/${cameraId}/rtsps-stream`;
+  const url = `${http.defaults.baseURL}${path}`;
+
+  let res;
+  try {
+    res = await http.post(
+      path,
+      { qualities: ['high', 'medium', 'low'] },
+      { headers: { ...headers, 'Content-Type': 'application/json' }, httpsAgent }
+    );
+  } catch (err) {
+    logError(url, err);
+    return null;
+  }
+
+  console.log(`[unifi-protect] POST ${url} -> HTTP ${res.status}`);
+  if (res.status === 500) {
+    console.log(`[unifi-protect] response body (500): ${bodySnippet(res.data)}`);
+  }
+  if (res.status !== 200 || !res.data || typeof res.data !== 'object') return null;
+
+  return res.data.high || null;
+}
 
 async function testConnection(config) {
   const httpsAgent = buildHttpsAgent(config);
 
   try {
     const { http, headers } = await authenticate(config, httpsAgent);
-    const { res, path, attempts } = await tryEndpoints(http, headers, httpsAgent, META_ENDPOINTS);
+    const { res, path, attempts } = await tryEndpoints(http, headers, httpsAgent, CAMERA_ENDPOINTS);
 
     if (!res) {
       return { success: false, message: connectionFailureMessage(attempts) };
     }
 
-    if (path.endsWith('/cameras')) {
-      const cameras = extractCameras(res.data);
-      return { success: true, message: `Found ${cameras.length} camera${cameras.length === 1 ? '' : 's'}` };
+    const cameras = extractCameras(res.data);
+    console.log(`[unifi-protect] testConnection succeeded via ${path}`);
+    if (cameras.length > 0) {
+      console.log(`[unifi-protect] first camera keys: ${Object.keys(cameras[0]).join(', ')}`);
     }
 
-    const version = res.data?.applicationVersion ? ` v${res.data.applicationVersion}` : '';
-    return { success: true, message: `Connected to UniFi Protect${version}` };
+    return { success: true, message: `Connected — ${cameras.length} camera${cameras.length === 1 ? '' : 's'} found` };
   } catch (err) {
     console.log(`[unifi-protect] testConnection error: ${err.message}`);
     return { success: false, message: err.message };
@@ -265,24 +282,37 @@ async function syncData(config, projectId, db) {
       console.log(`[unifi-protect] first camera (sanitized): ${bodySnippet(sanitizedFirst)}`);
     }
 
-    console.log(`[unifi-protect] Found ${cameras.length} cameras before upsert`);
-    console.log(`[unifi-protect] upserting cameras for projectId=${projectId}, integrationId=${config.id}`);
-
     const host = controllerHost(config.base_url);
+    const usingIntegrationApi = path === '/proxy/protect/integration/v1/cameras';
+
+    console.log(`[unifi-protect] Upserting ${cameras.length} cameras for project ${projectId}`);
 
     for (const cam of cameras) {
-      const alias = cam.rtspAlias || cam.id;
       const online = isCameraOnline(cam);
+
+      let rtspUrl = null;
+      let rtspsUrl = null;
+      let streamPassword = null;
+
+      if (usingIntegrationApi) {
+        rtspUrl = host && cam.id ? `rtsp://${host}:7447/${cam.id}` : null;
+        rtspsUrl = await fetchHighRtspsUrl(http, headers, httpsAgent, cam.id);
+      } else {
+        const alias = cam.rtspAlias || cam.id;
+        rtspUrl = host && alias ? `rtsp://${host}:7447/${alias}` : null;
+        rtspsUrl = host && alias ? `rtsps://${host}:7441/${alias}` : null;
+        streamPassword = cam.streamSharing?.plainPassword || cam.streamSharing?.password || null;
+      }
 
       try {
         const ok = await upsertCamera(db, projectId, config.id, {
           name: cam.name || cam.marketName || cam.mac,
-          model: cam.marketName || cam.type || null,
+          model: cam.model || cam.marketName || cam.type || null,
           mac: cam.mac || null,
           ip_address: cam.host || null,
-          rtsp_url: host && alias ? `rtsp://${host}:7447/${alias}` : null,
-          rtsps_url: host && alias ? `rtsps://${host}:7441/${alias}` : null,
-          stream_password: cam.streamSharing?.plainPassword || cam.streamSharing?.password || null,
+          rtsp_url: rtspUrl,
+          rtsps_url: rtspsUrl,
+          stream_password: streamPassword,
           resolution: pickResolution(cam.channels),
           status: online == null ? 'unknown' : online ? 'online' : 'offline',
           last_seen: cam.lastSeen ? new Date(cam.lastSeen) : null,
@@ -294,7 +324,7 @@ async function syncData(config, projectId, db) {
       }
     }
 
-    console.log(`[unifi-protect] Imported ${camerasImported} of ${cameras.length} cameras after upsert`);
+    console.log(`[unifi-protect] Upserted ${camerasImported} of ${cameras.length} cameras for project ${projectId}`);
 
     return { devices_imported: 0, vlans_imported: 0, cameras_imported: camerasImported, status: 'success', message: null };
   } catch (err) {
