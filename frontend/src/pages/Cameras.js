@@ -25,8 +25,6 @@ export default function CamerasPage() {
   const [modalState, setModalState] = useState(null); // null | 'new' | camera object
   const [search, setSearch] = useState('');
   const [revealed, setRevealed] = useState(new Set());
-  const [editingPasswordId, setEditingPasswordId] = useState(null);
-  const [passwordDraft, setPasswordDraft] = useState('');
   const [protectIntegration, setProtectIntegration] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState(null);
@@ -98,23 +96,6 @@ export default function CamerasPage() {
     }
   };
 
-  const startEditPassword = (camera) => {
-    setEditingPasswordId(camera.id);
-    setPasswordDraft(camera.stream_password || '');
-  };
-
-  const commitPassword = async (camera) => {
-    setEditingPasswordId(null);
-    const next = passwordDraft.trim() || null;
-    if ((camera.stream_password || null) === next) return;
-    try {
-      const res = await client.put(`/cameras/${camera.id}`, { ...camera, stream_password: next });
-      setCameras((prev) => prev.map((c) => (c.id === camera.id ? res.data : c)));
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    }
-  };
-
   const handleSync = async () => {
     if (!protectIntegration) return;
     setSyncing(true);
@@ -180,36 +161,16 @@ export default function CamerasPage() {
   );
 
   const renderPasswordCell = (camera) => {
-    if (editingPasswordId === camera.id) {
-      return (
-        <td className="cameras-password-cell">
-          <input
-            autoFocus
-            className="cameras-location-input"
-            type="text"
-            value={passwordDraft}
-            onChange={(e) => setPasswordDraft(e.target.value)}
-            onBlur={() => commitPassword(camera)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.target.blur();
-            }}
-            autoComplete="off"
-          />
-        </td>
-      );
-    }
-
     const value = camera.stream_password;
     const isRevealed = revealed.has(`${camera.id}:stream_password`);
     return (
       <td className="cameras-rtsps-cell cameras-password-cell">
         <div className="cameras-rtsps-row">
           <span
-            className={`cameras-rtsps-value cameras-location-display${isRevealed ? ' cameras-rtsps-value-revealed' : ''}`}
-            onClick={() => startEditPassword(camera)}
-            title={value ? 'Click to edit' : 'Click to set'}
+            className={`cameras-rtsps-value${isRevealed ? ' cameras-rtsps-value-revealed' : ''}`}
+            title={value || undefined}
           >
-            {value ? (isRevealed ? value : '••••••••') : 'Set password'}
+            {value ? (isRevealed ? value : '••••••••') : '—'}
           </span>
           {value && (
             <>

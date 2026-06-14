@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Clipboard, Eye, EyeOff } from 'lucide-react';
 import '../topology/Modal.css';
 import './CameraFormModal.css';
 
@@ -18,6 +18,55 @@ export const emptyCamera = {
   location_notes: '',
   status: 'unknown',
 };
+
+// Stream passwords are populated by syncing from UniFi Protect and are
+// overwritten on every sync, so they're shown read-only with a copy button
+// rather than as an editable input.
+function ReadOnlyMaskedField({ label, value, note }) {
+  const [visible, setVisible] = useState(false);
+
+  const handleCopy = () => {
+    if (value) navigator.clipboard.writeText(value);
+  };
+
+  return (
+    <label>
+      {label}
+      <div className="camera-masked-field">
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value || ''}
+          readOnly
+          disabled={!value}
+          placeholder={value ? '' : '—'}
+        />
+        {value && (
+          <>
+            <button
+              type="button"
+              className="camera-masked-toggle"
+              onClick={() => setVisible((v) => !v)}
+              aria-label={visible ? 'Hide' : 'Show'}
+              title={visible ? 'Hide' : 'Show'}
+            >
+              {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+            <button
+              type="button"
+              className="camera-masked-toggle"
+              onClick={handleCopy}
+              aria-label="Copy"
+              title="Copy to clipboard"
+            >
+              <Clipboard size={14} />
+            </button>
+          </>
+        )}
+      </div>
+      {note && <span className="camera-field-note">{note}</span>}
+    </label>
+  );
+}
 
 function MaskedField({ label, value, onChange, placeholder }) {
   const [visible, setVisible] = useState(false);
@@ -121,7 +170,11 @@ export default function CameraFormModal({ initial, onSave, onClose }) {
             onChange={field('rtsps_url_low')}
             placeholder="rtsps://192.168.1.1:7441/alias?quality=low"
           />
-          <MaskedField label="Stream Password" value={draft.stream_password || ''} onChange={field('stream_password')} />
+          <ReadOnlyMaskedField
+            label="Stream Password"
+            value={draft.stream_password}
+            note="Synced from UniFi Protect — change the password in your Protect console"
+          />
           <label>
             Status
             <select value={draft.status || 'unknown'} onChange={field('status')}>
