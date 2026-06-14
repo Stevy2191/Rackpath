@@ -370,13 +370,15 @@ export default function DevicesPage() {
     }
   };
 
-  const handleAssignTag = async (deviceId, tagId) => {
-    console.log('[Devices] assigning tag', tagId, 'to device', deviceId);
+  const handleAssignTag = async (device, tagId) => {
+    const source = device.source || 'device';
+    console.log('[Devices] assigning tag', tagId, 'to', source, device.id);
+    const url = source === 'camera' ? `/cameras/${device.id}/tags` : `/devices/${device.id}/tags`;
     try {
-      const res = await client.post(`/devices/${deviceId}/tags`, { tag_id: tagId });
+      const res = await client.post(url, { tag_id: tagId });
       console.log('[Devices] assign tag response:', res.data);
       setDevices((prev) =>
-        prev.map((d) => (d.id === deviceId && d.source !== 'camera' ? { ...d, tags: res.data } : d))
+        prev.map((d) => (d.id === device.id && (d.source || 'device') === source ? { ...d, tags: res.data } : d))
       );
     } catch (err) {
       console.error('[Devices] assign tag failed:', err);
@@ -386,14 +388,18 @@ export default function DevicesPage() {
     }
   };
 
-  const handleRemoveTag = async (deviceId, tagId) => {
-    console.log('[Devices] removing tag', tagId, 'from device', deviceId);
+  const handleRemoveTag = async (device, tagId) => {
+    const source = device.source || 'device';
+    console.log('[Devices] removing tag', tagId, 'from', source, device.id);
+    const url = source === 'camera' ? `/cameras/${device.id}/tags/${tagId}` : `/devices/${device.id}/tags/${tagId}`;
     try {
-      await client.delete(`/devices/${deviceId}/tags/${tagId}`);
-      console.log('[Devices] remove tag succeeded for device', deviceId);
+      await client.delete(url);
+      console.log('[Devices] remove tag succeeded for', source, device.id);
       setDevices((prev) =>
         prev.map((d) =>
-          d.id === deviceId && d.source !== 'camera' ? { ...d, tags: (d.tags || []).filter((t) => t.id !== tagId) } : d
+          d.id === device.id && (d.source || 'device') === source
+            ? { ...d, tags: (d.tags || []).filter((t) => t.id !== tagId) }
+            : d
         )
       );
     } catch (err) {
@@ -901,23 +907,7 @@ export default function DevicesPage() {
                   {visibleColumns.tags && (
                     <td className="devices-tags-cell">
                       {isAccess ? (
-                        '—'
-                      ) : isCamera ? (
-                        <div className="device-tag-list">
-                          {deviceTags.length === 0 ? (
-                            '—'
-                          ) : (
-                            deviceTags.map((tag) => (
-                              <span
-                                key={tag.id}
-                                className="device-tag-pill"
-                                style={{ background: tag.color, color: pillTextColor(tag.color) }}
-                              >
-                                {tag.name}
-                              </span>
-                            ))
-                          )}
-                        </div>
+                        <div className="device-tag-list">—</div>
                       ) : (
                       <div className="device-tag-list">
                         {deviceTags.map((tag) => (
@@ -928,15 +918,15 @@ export default function DevicesPage() {
                               style={{ background: tag.color, color: pillTextColor(tag.color) }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const key = `${device.id}-${tag.id}`;
+                                const key = `${rowKey(device)}-${tag.id}`;
                                 setOpenTagPopover((prev) => (prev === key ? null : key));
                               }}
                             >
                               {tag.name}
                             </button>
-                            {openTagPopover === `${device.id}-${tag.id}` && (
+                            {openTagPopover === `${rowKey(device)}-${tag.id}` && (
                               <div className="device-tag-popover" onClick={(e) => e.stopPropagation()}>
-                                <button type="button" onClick={() => handleRemoveTag(device.id, tag.id)}>
+                                <button type="button" onClick={() => handleRemoveTag(device, tag.id)}>
                                   Remove tag
                                 </button>
                               </div>
@@ -950,12 +940,12 @@ export default function DevicesPage() {
                             title="Add tag"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setTagPickerDeviceId((prev) => (prev === device.id ? null : device.id));
+                              setTagPickerDeviceId((prev) => (prev === rowKey(device) ? null : rowKey(device)));
                             }}
                           >
                             <Plus size={12} />
                           </button>
-                          {tagPickerDeviceId === device.id && (
+                          {tagPickerDeviceId === rowKey(device) && (
                             <div className="device-tag-dropdown" onClick={(e) => e.stopPropagation()}>
                               {availableTags.length === 0 ? (
                                 <div className="device-tag-dropdown-empty">No more tags</div>
@@ -965,7 +955,7 @@ export default function DevicesPage() {
                                     key={t.id}
                                     type="button"
                                     className="device-tag-dropdown-item"
-                                    onClick={() => handleAssignTag(device.id, t.id)}
+                                    onClick={() => handleAssignTag(device, t.id)}
                                   >
                                     <span className="device-tag-dropdown-swatch" style={{ background: t.color }} />
                                     {t.name}

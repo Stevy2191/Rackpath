@@ -93,4 +93,76 @@ router.delete('/cameras/:id', async (req, res, next) => {
   }
 });
 
+// POST /api/cameras/:id/tags - assign a tag to a camera
+router.post('/cameras/:id/tags', async (req, res, next) => {
+  try {
+    const { tag_id } = req.body || {};
+    console.log('[cameras.assignTag] camera', req.params.id, 'tag_id', tag_id, 'project', req.projectId);
+    if (!tag_id) return res.status(400).json({ error: 'tag_id is required' });
+
+    const [cameraRows] = await pool.query('SELECT id FROM project_cameras WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
+    if (cameraRows.length === 0) {
+      console.log('[cameras.assignTag] camera not found:', req.params.id);
+      return res.status(404).json({ error: 'Camera not found' });
+    }
+
+    const [tagRows] = await pool.query('SELECT id FROM device_tags WHERE id = ? AND project_id = ?', [
+      tag_id,
+      req.projectId,
+    ]);
+    if (tagRows.length === 0) {
+      console.log('[cameras.assignTag] tag not found:', tag_id, 'for project', req.projectId);
+      return res.status(404).json({ error: 'Tag not found' });
+    }
+
+    const [insResult] = await pool.query('INSERT IGNORE INTO camera_tag_assignments (camera_id, tag_id) VALUES (?, ?)', [
+      req.params.id,
+      tag_id,
+    ]);
+    console.log('[cameras.assignTag] insert affectedRows:', insResult.affectedRows);
+
+    const [tags] = await pool.query(
+      `SELECT t.id, t.name, t.color
+       FROM camera_tag_assignments cta
+       JOIN device_tags t ON t.id = cta.tag_id
+       WHERE cta.camera_id = ?
+       ORDER BY t.name ASC`,
+      [req.params.id]
+    );
+    console.log('[cameras.assignTag] camera', req.params.id, 'tags now:', tags);
+    res.status(201).json(tags);
+  } catch (err) {
+    console.error('[cameras.assignTag] failed:', err);
+    next(err);
+  }
+});
+
+// DELETE /api/cameras/:id/tags/:tagId - remove a tag from a camera
+router.delete('/cameras/:id/tags/:tagId', async (req, res, next) => {
+  try {
+    console.log('[cameras.removeTag] camera', req.params.id, 'tag_id', req.params.tagId, 'project', req.projectId);
+    const [cameraRows] = await pool.query('SELECT id FROM project_cameras WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
+    if (cameraRows.length === 0) {
+      console.log('[cameras.removeTag] camera not found:', req.params.id);
+      return res.status(404).json({ error: 'Camera not found' });
+    }
+
+    const [delResult] = await pool.query('DELETE FROM camera_tag_assignments WHERE camera_id = ? AND tag_id = ?', [
+      req.params.id,
+      req.params.tagId,
+    ]);
+    console.log('[cameras.removeTag] delete affectedRows:', delResult.affectedRows);
+    res.status(204).send();
+  } catch (err) {
+    console.error('[cameras.removeTag] failed:', err);
+    next(err);
+  }
+});
+
 module.exports = router;
