@@ -77,6 +77,22 @@ function AppShell() {
             }
           />
           <Route
+            path="/devices/network"
+            element={
+              <RequireAuth>
+                <DevicesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/devices/cameras"
+            element={
+              <RequireAuth>
+                <CamerasPage />
+              </RequireAuth>
+            }
+          />
+          <Route
             path="/devices/:id"
             element={
               <RequireAuth>
@@ -92,14 +108,7 @@ function AppShell() {
               </RequireAuth>
             }
           />
-          <Route
-            path="/cameras"
-            element={
-              <RequireAuth>
-                <CamerasPage />
-              </RequireAuth>
-            }
-          />
+          <Route path="/cameras" element={<Navigate to="/devices/cameras" replace />} />
           <Route
             path="/integrations"
             element={

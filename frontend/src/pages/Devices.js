@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Columns3, Loader2, Network, Plus, Radio, Search, Tag, X } from 'lucide-react';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
@@ -45,6 +45,7 @@ const COLUMN_DEFS = [
   { key: 'serial_number', label: 'Serial Number' },
   { key: 'tags', label: 'Tags' },
   { key: 'credential', label: 'Credential' },
+  { key: 'last_seen', label: 'Last Seen' },
 ];
 
 const DEFAULT_VISIBLE_COLUMNS = {
@@ -57,9 +58,23 @@ const DEFAULT_VISIBLE_COLUMNS = {
   serial_number: false,
   tags: true,
   credential: true,
+  last_seen: true,
 };
 
 const PAGE_SIZE = 25;
+
+function deviceStatusClass(status) {
+  if (status === 'up') return 'devices-status-online';
+  if (status === 'down') return 'devices-status-offline';
+  return 'devices-status-unknown';
+}
+
+function formatLastSeen(value) {
+  if (!value) return 'Never';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Never';
+  return date.toLocaleString();
+}
 
 // Picks readable foreground text for a colored tag pill.
 function pillTextColor(hex) {
@@ -73,7 +88,13 @@ function pillTextColor(hex) {
 
 export default function DevicesPage() {
   const { id } = useParams();
+  const location = useLocation();
   const { currentProjectId } = useProject();
+
+  const isNetworkView = location.pathname === '/devices/network';
+  const typeFilterOptions = isNetworkView
+    ? TYPE_FILTER_OPTIONS.filter((opt) => opt.value !== 'camera')
+    : TYPE_FILTER_OPTIONS;
 
   const [devices, setDevices] = useState([]);
   const [tags, setTags] = useState([]);
@@ -410,15 +431,21 @@ export default function DevicesPage() {
 
   const filtersActive = !!(search || typeFilter || locationFilter || tagFilterIds.length);
 
-  const totalCount = devices.length;
+  const viewDevices = isNetworkView ? devices.filter((d) => d.type !== 'camera') : devices;
+
+  const totalCount = viewDevices.length;
   const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
-  const pageDevices = devices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageDevices = viewDevices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId);
 
   return (
     <div className="devices-page">
+      <div className="devices-page-header">
+        <h2>{isNetworkView ? 'Network Devices' : 'All Devices'}</h2>
+      </div>
+
       {error && <div className="page-error">{error}</div>}
 
       <div className="devices-toolbar">
@@ -433,7 +460,7 @@ export default function DevicesPage() {
           </div>
 
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-            {TYPE_FILTER_OPTIONS.map((opt) => (
+            {typeFilterOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -586,6 +613,7 @@ export default function DevicesPage() {
         <table className="devices-table">
           <thead>
             <tr>
+              <th>Status</th>
               <th>Hostname</th>
               {visibleColumns.ip && <th>IP Address</th>}
               {visibleColumns.mac && <th>MAC Address</th>}
@@ -596,6 +624,7 @@ export default function DevicesPage() {
               {visibleColumns.serial_number && <th>Serial Number</th>}
               {visibleColumns.tags && <th>Tags</th>}
               {visibleColumns.credential && <th>Credential</th>}
+              {visibleColumns.last_seen && <th>Last Seen</th>}
               <th>Scan</th>
               <th></th>
             </tr>
@@ -606,6 +635,12 @@ export default function DevicesPage() {
               const availableTags = tags.filter((t) => !deviceTags.some((dt) => dt.id === t.id));
               return (
                 <tr key={device.id} className={device.id === selectedDeviceId ? 'active' : ''}>
+                  <td>
+                    <span
+                      className={`devices-status-dot ${deviceStatusClass(device.status)}`}
+                      title={device.status || 'unknown'}
+                    />
+                  </td>
                   <td>
                     <button className="device-name-link" onClick={() => setSelectedDeviceId(device.id)}>
                       <span className="device-name-row">
@@ -723,6 +758,7 @@ export default function DevicesPage() {
                       </select>
                     </td>
                   )}
+                  {visibleColumns.last_seen && <td>{formatLastSeen(device.last_scanned_at)}</td>}
                   <td>
                     <button
                       type="button"

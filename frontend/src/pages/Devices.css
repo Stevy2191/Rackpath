@@ -8,6 +8,10 @@
   overflow-y: auto;
 }
 
+.devices-page-header h2 {
+  margin: 0;
+}
+
 /* Toolbar: filters on the left, page-level actions on the right */
 .devices-toolbar {
   display: flex;
@@ -214,6 +218,27 @@
 .device-source-icon {
   color: var(--color-text-muted);
   flex-shrink: 0;
+}
+
+/* Status dot */
+.devices-status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.devices-status-dot.devices-status-online {
+  background: #16a34a;
+}
+
+.devices-status-dot.devices-status-offline {
+  background: #dc2626;
+}
+
+.devices-status-dot.devices-status-unknown {
+  background: #6b7280;
 }
 
 .delete-btn {

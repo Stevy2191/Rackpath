@@ -198,19 +198,21 @@ export default function CamerasPage() {
 
       {error && <div className="page-error">{error}</div>}
 
+      <div className="cameras-count">{filtered.length} camera{filtered.length === 1 ? '' : 's'}</div>
+
       <div className="cameras-table-wrap">
         <table className="cameras-table">
           <thead>
             <tr>
+              <th>Status</th>
               <th>Name</th>
               <th>Model</th>
               <th>IP Address</th>
               <th>Resolution</th>
+              <th>Location Notes</th>
               <th>RTSP URL</th>
               <th>RTSPS URL</th>
               <th>Stream Password</th>
-              <th>Location Notes</th>
-              <th>Status</th>
               <th>Last Seen</th>
               <th></th>
             </tr>
@@ -218,11 +220,13 @@ export default function CamerasPage() {
           <tbody>
             {filtered.map((camera) => (
               <tr key={camera.id}>
+                <td>
+                  <span className={`cameras-status-dot cameras-status-${camera.status || 'unknown'}`} title={camera.status} />
+                </td>
                 <td>{camera.name}</td>
                 <td>{camera.model || '—'}</td>
                 <td>{camera.ip_address || '—'}</td>
                 <td>{camera.resolution || '—'}</td>
-                {SECRET_FIELDS.map((key) => renderSecretCell(camera, key))}
                 <td>
                   {editingLocationId === camera.id ? (
                     <input
@@ -241,9 +245,7 @@ export default function CamerasPage() {
                     </span>
                   )}
                 </td>
-                <td>
-                  <span className={`cameras-status-dot cameras-status-${camera.status || 'unknown'}`} title={camera.status} />
-                </td>
+                {SECRET_FIELDS.map((key) => renderSecretCell(camera, key))}
                 <td>{formatLastSeen(camera.last_seen)}</td>
                 <td className="cameras-actions">
                   <button

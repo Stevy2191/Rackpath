@@ -1,6 +1,6 @@
-import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { Key, Camera } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Key, ChevronDown } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import ProjectSwitcher from '../project/ProjectSwitcher';
@@ -11,15 +11,30 @@ const links = [
   { to: '/topology', label: 'Topology' },
   { to: '/vlans', label: 'VLANs' },
   { to: '/racks', label: 'Racks' },
-  { to: '/devices', label: 'Devices' },
+];
+
+const afterLinks = [
   { to: '/macros', label: 'Macros', icon: Key },
-  { to: '/cameras', label: 'Cameras', icon: Camera },
   { to: '/integrations', label: 'Integrations' },
+];
+
+const deviceLinks = [
+  { to: '/devices', label: 'All Devices' },
+  { to: '/devices/network', label: 'Network Devices' },
+  { to: '/devices/cameras', label: 'Cameras' },
 ];
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const location = useLocation();
+
+  const isDevicesPath = location.pathname.startsWith('/devices');
+  const [devicesOpen, setDevicesOpen] = useState(isDevicesPath);
+
+  useEffect(() => {
+    if (isDevicesPath) setDevicesOpen(true);
+  }, [isDevicesPath]);
 
   return (
     <nav className="navbar">
@@ -29,6 +44,43 @@ export default function Navbar() {
       </div>
       <div className="navbar-links">
         {links.map((link) => (
+          <NavLink
+            key={link.to}
+            to={link.to}
+            className={({ isActive }) => `navbar-link${isActive ? ' active' : ''}`}
+          >
+            {link.icon && <link.icon size={14} className="navbar-link-icon" />}
+            {link.label}
+          </NavLink>
+        ))}
+
+        <div className="navbar-dropdown">
+          <button
+            type="button"
+            className={`navbar-link navbar-dropdown-toggle${isDevicesPath ? ' active' : ''}`}
+            onClick={() => setDevicesOpen((v) => !v)}
+          >
+            Devices
+            <ChevronDown size={14} className={`navbar-dropdown-chevron${devicesOpen ? ' open' : ''}`} />
+          </button>
+          {devicesOpen && (
+            <div className="navbar-dropdown-menu">
+              {deviceLinks.map((link) => {
+                const active =
+                  link.to === '/devices'
+                    ? location.pathname === '/devices' || /^\/devices\/\d+$/.test(location.pathname)
+                    : location.pathname === link.to;
+                return (
+                  <Link key={link.to} to={link.to} className={`navbar-dropdown-item${active ? ' active' : ''}`}>
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {afterLinks.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
