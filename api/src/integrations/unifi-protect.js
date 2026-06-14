@@ -184,6 +184,36 @@ function isCameraOnline(cam) {
   return cam.state === 'CONNECTED';
 }
 
+// On the Integration API, `camera.name` is an object keyed by locale (e.g.
+// `{ default: "...", custom: "..." }`); the legacy /protect/api/cameras
+// endpoint returns a plain string.
+function cameraDisplayName(cam) {
+  const { name } = cam;
+  if (name && typeof name === 'object') {
+    return name.default || name.custom || Object.values(name)[0] || cam.mac || 'Unknown';
+  }
+  return name || cam.marketName || cam.mac || 'Unknown';
+}
+
+const VIDEO_MODE_RESOLUTIONS = {
+  default: '1080p',
+  highFps: '1080p High FPS',
+  sport: '1080p Sport',
+  slowShutter: '1080p Slow Shutter',
+};
+
+// The Integration API's cameras list doesn't include sensor resolution
+// directly, so approximate it from the model and video mode.
+function deriveResolution(cam) {
+  const modelKey = cam.modelKey || '';
+
+  if (/G5-Pro|G4-Pro/i.test(modelKey)) return '8MP';
+  if (cam.featureFlags?.supportFullHdSnapshot && /G4/i.test(modelKey)) return '4MP';
+  if (/G3/i.test(modelKey)) return '1080p';
+
+  return VIDEO_MODE_RESOLUTIONS[cam.videoMode] || null;
+}
+
 // UniFi Protect's cameras endpoint may return a bare array, or wrap it in
 // `{ cameras: [...] }` / `{ data: [...] }` / `{ data: { cameras: [...] } }`
 // depending on path/version.
@@ -224,6 +254,30 @@ async function fetchHighRtspsUrl(http, headers, httpsAgent, cameraId) {
   if (res.status !== 200 || !res.data || typeof res.data !== 'object') return null;
 
   return res.data.high || null;
+}
+
+// The Integration API's cameras list doesn't include the camera's IP, so
+// fetch the single-camera detail endpoint, which may. Returns the detail
+// object, or null if unavailable.
+async function fetchCameraDetail(http, headers, httpsAgent, cameraId) {
+  const path = `/proxy/protect/integration/v1/cameras/${cameraId}`;
+  const url = `${http.defaults.baseURL}${path}`;
+
+  let res;
+  try {
+    res = await http.get(path, { headers, httpsAgent });
+  } catch (err) {
+    logError(url, err);
+    return null;
+  }
+
+  console.log(`[unifi-protect] GET ${url} -> HTTP ${res.status}`);
+  if (res.status === 500) {
+    console.log(`[unifi-protect] response body (500): ${bodySnippet(res.data)}`);
+  }
+  if (res.status !== 200 || !res.data || typeof res.data !== 'object') return null;
+
+  return res.data;
 }
 
 async function testConnection(config) {
@@ -289,37 +343,50 @@ async function syncData(config, projectId, db) {
 
     for (const cam of cameras) {
       const online = isCameraOnline(cam);
+      const name = cameraDisplayName(cam);
 
       let rtspUrl = null;
       let rtspsUrl = null;
       let streamPassword = null;
+      let ipAddress = null;
+      let resolution = null;
+      let locationNotes = null;
 
       if (usingIntegrationApi) {
         rtspUrl = host && cam.id ? `rtsp://${host}:7447/${cam.id}` : null;
         rtspsUrl = await fetchHighRtspsUrl(http, headers, httpsAgent, cam.id);
+
+        const detail = await fetchCameraDetail(http, headers, httpsAgent, cam.id);
+        ipAddress = detail?.host || detail?.ip || null;
+
+        resolution = deriveResolution(cam);
+        locationNotes = `hasPackageCamera: ${!!cam.hasPackageCamera}`;
       } else {
         const alias = cam.rtspAlias || cam.id;
         rtspUrl = host && alias ? `rtsp://${host}:7447/${alias}` : null;
         rtspsUrl = host && alias ? `rtsps://${host}:7441/${alias}` : null;
         streamPassword = cam.streamSharing?.plainPassword || cam.streamSharing?.password || null;
+        ipAddress = cam.host || null;
+        resolution = pickResolution(cam.channels);
       }
 
       try {
         const ok = await upsertCamera(db, projectId, config.id, {
-          name: cam.name || cam.marketName || cam.mac,
-          model: cam.model || cam.marketName || cam.type || null,
+          name,
+          model: cam.modelKey || cam.model || cam.marketName || cam.type || null,
           mac: cam.mac || null,
-          ip_address: cam.host || null,
+          ip_address: ipAddress,
           rtsp_url: rtspUrl,
           rtsps_url: rtspsUrl,
           stream_password: streamPassword,
-          resolution: pickResolution(cam.channels),
+          resolution,
+          location_notes: locationNotes,
           status: online == null ? 'unknown' : online ? 'online' : 'offline',
           last_seen: cam.lastSeen ? new Date(cam.lastSeen) : null,
         });
         if (ok) camerasImported += 1;
       } catch (err) {
-        console.log(`[unifi-protect] failed to upsert camera ${cam.mac || cam.id || cam.name || '(unknown)'}: ${err.message}`);
+        console.log(`[unifi-protect] failed to upsert camera ${cam.mac || cam.id || name || '(unknown)'}: ${err.message}`);
         console.log(err.stack);
       }
     }

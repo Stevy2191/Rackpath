@@ -100,6 +100,7 @@ async function upsertCamera(db, projectId, integrationId, camera) {
     rtsps_url: camera.rtsps_url || null,
     stream_password: camera.stream_password || null,
     resolution: camera.resolution || null,
+    location_notes: camera.location_notes || null,
     status: camera.status || 'unknown',
     last_seen: camera.last_seen || new Date(),
   };
@@ -113,7 +114,7 @@ async function upsertCamera(db, projectId, integrationId, camera) {
     if (existing.length > 0) {
       await db.query(
         `UPDATE project_cameras SET integration_id = ?, name = ?, model = ?, ip_address = ?,
-           rtsp_url = ?, rtsps_url = ?, stream_password = ?, resolution = ?, status = ?, last_seen = ?
+           rtsp_url = ?, rtsps_url = ?, stream_password = ?, resolution = ?, location_notes = ?, status = ?, last_seen = ?
          WHERE id = ?`,
         [
           integrationId,
@@ -124,6 +125,7 @@ async function upsertCamera(db, projectId, integrationId, camera) {
           fields.rtsps_url,
           fields.stream_password,
           fields.resolution,
+          fields.location_notes,
           fields.status,
           fields.last_seen,
           existing[0].id,
@@ -135,8 +137,8 @@ async function upsertCamera(db, projectId, integrationId, camera) {
 
   await db.query(
     `INSERT INTO project_cameras
-       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url, stream_password, resolution, status, last_seen)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url, stream_password, resolution, location_notes, status, last_seen)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       projectId,
       integrationId,
@@ -148,6 +150,7 @@ async function upsertCamera(db, projectId, integrationId, camera) {
       fields.rtsps_url,
       fields.stream_password,
       fields.resolution,
+      fields.location_notes,
       fields.status,
       fields.last_seen,
     ]
