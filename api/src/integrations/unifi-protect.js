@@ -37,6 +37,14 @@ function logError(url, err) {
   }
 }
 
+// A UniFi OS console with no Protect application (or a bad URL/API key)
+// serves the web UI's HTML shell instead of a JSON error.
+function isHtmlResponse(data) {
+  if (typeof data !== 'string') return false;
+  const trimmed = data.trim().toLowerCase();
+  return trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
+}
+
 // Logs in via the UniFi OS endpoint, returning cookie/CSRF headers for
 // subsequent requests. Used when no API key is configured.
 async function cookieLogin(http, config) {
@@ -92,7 +100,8 @@ function controllerHost(baseUrl) {
 }
 
 // Picks the highest-resolution channel from a camera's `channels` array and
-// returns a "WIDTHxHEIGHT" label, falling back to the channel's own name.
+// returns a friendly label like "4K" or "1080p", falling back to the
+// channel's own name if it has no dimensions.
 function pickResolution(channels) {
   if (!Array.isArray(channels) || channels.length === 0) return null;
 
@@ -103,9 +112,10 @@ function pickResolution(channels) {
   }
   if (!best) return null;
 
-  const { channel } = best;
-  if (channel.width && channel.height) return `${channel.width}x${channel.height}`;
-  return channel.name || null;
+  const { height } = best.channel;
+  if (height >= 2160) return '4K';
+  if (height) return `${height}p`;
+  return best.channel.name || null;
 }
 
 function isCameraOnline(cam) {
@@ -119,12 +129,13 @@ async function testConnection(config) {
     const url = `${http.defaults.baseURL}/proxy/protect/api/bootstrap`;
     const res = await http.get('/proxy/protect/api/bootstrap', { headers });
     console.log(`[unifi-protect] GET ${url} -> HTTP ${res.status}`);
+    console.log(`[unifi-protect] response body (first 500 chars): ${bodySnippet(res.data)}`);
 
-    if (res.status !== 200) {
-      return { success: false, message: `Bootstrap endpoint returned HTTP ${res.status}` };
+    if (isHtmlResponse(res.data) || res.status !== 200 || !Array.isArray(res.data?.cameras)) {
+      return { success: false, message: 'Could not reach Protect API — check URL and API key' };
     }
 
-    const cameras = Array.isArray(res.data?.cameras) ? res.data.cameras : [];
+    const cameras = res.data.cameras;
     return { success: true, message: `Found ${cameras.length} camera${cameras.length === 1 ? '' : 's'}` };
   } catch (err) {
     console.log(`[unifi-protect] testConnection error: ${err.message}`);
@@ -149,11 +160,12 @@ async function syncData(config, projectId, db) {
     console.log(`[unifi-protect] cameras endpoint returned ${cameras.length} camera(s)`);
 
     if (cameras.length > 0) {
-      // Log the field structure of the first camera so future adapter work
-      // can see what's available, without leaking stream URLs/passwords.
-      const { streamSharing, rtspAlias, ...safe } = cameras[0];
+      // Log the response body and the field structure of the first camera so
+      // future adapter work can see what's available, without leaking stream
+      // URLs/passwords.
+      const sanitized = cameras.map(({ streamSharing, rtspAlias, ...rest }) => rest);
+      console.log(`[unifi-protect] response body (first 500 chars, sanitized): ${bodySnippet(sanitized)}`);
       console.log(`[unifi-protect] first camera fields: ${Object.keys(cameras[0]).join(', ')}`);
-      console.log(`[unifi-protect] first camera (sanitized): ${bodySnippet(safe)}`);
     }
 
     const host = controllerHost(config.base_url);
@@ -172,6 +184,7 @@ async function syncData(config, projectId, db) {
         stream_password: cam.streamSharing?.plainPassword || cam.streamSharing?.password || null,
         resolution: pickResolution(cam.channels),
         status: online == null ? 'unknown' : online ? 'online' : 'offline',
+        last_seen: cam.lastSeen ? new Date(cam.lastSeen) : null,
       });
       if (ok) camerasImported += 1;
     }

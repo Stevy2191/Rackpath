@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
 import AddIntegrationModal from '../components/integrations/AddIntegrationModal';
@@ -92,6 +92,8 @@ export default function IntegrationsPage() {
         <div className="integrations-grid">
           {integrations.map((integ) => {
             const { icon: Icon, label } = platformInfo(integ.platform);
+            const isProtectOnlyWarning =
+              integ.status === 'error' && (integ.status_message || '').includes('Protect-only device');
             return (
               <div key={integ.id} className="integration-card">
                 <div className="integration-card-header">
@@ -99,16 +101,24 @@ export default function IntegrationsPage() {
                     <Icon size={22} />
                   </span>
                   <span className="integration-card-name">{integ.name}</span>
-                  <span className={`integration-status-badge status-${integ.status}`}>
-                    {STATUS_LABELS[integ.status] || integ.status}
-                  </span>
+                  {isProtectOnlyWarning ? (
+                    <span className="integration-status-badge status-warning">
+                      <AlertTriangle size={12} /> Protect-only device
+                    </span>
+                  ) : (
+                    <span className={`integration-status-badge status-${integ.status}`}>
+                      {STATUS_LABELS[integ.status] || integ.status}
+                    </span>
+                  )}
                 </div>
                 <div className="integration-card-meta">
                   <span>{label}</span>
                   <span>Last synced: {formatLastSynced(integ.last_synced_at)}</span>
                 </div>
                 {integ.status === 'error' && integ.status_message && (
-                  <div className="integration-card-error">{integ.status_message}</div>
+                  <div className={isProtectOnlyWarning ? 'integration-card-warning' : 'integration-card-error'}>
+                    {integ.status_message}
+                  </div>
                 )}
                 <div className="integration-card-actions">
                   <button

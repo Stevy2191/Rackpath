@@ -36,8 +36,21 @@ function makeClient(config) {
 const CLOUD_URL_MESSAGE =
   'Cloud URL detected — please use your local controller IP address (e.g. https://192.168.1.1) with an API key generated from your local console';
 
+const PROTECT_ONLY_MESSAGE =
+  'This appears to be a Protect-only device. Please use the UniFi Protect integration type instead.';
+
 function isCloudUrl(baseUrl) {
   return /unifi\.ui\.com/i.test(baseUrl || '');
+}
+
+// UniFi OS consoles that only run Protect (no Network application, e.g. a
+// UNVR/NVR) serve the web UI's HTML shell for every /proxy/network/* request
+// instead of a JSON error, so a "successful" HTTP 200 response can still be
+// the wrong content entirely.
+function isHtmlResponse(data) {
+  if (typeof data !== 'string') return false;
+  const trimmed = data.trim().toLowerCase();
+  return trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
 }
 
 function bodySnippet(data) {
@@ -164,6 +177,12 @@ async function testConnection(config) {
     if (!found) {
       return { success: false, message: 'No endpoint responded successfully — see API logs for details' };
     }
+    if (isHtmlResponse(found.res.data)) {
+      console.log(
+        '[unifi] ERROR: Got HTML response instead of JSON — this device may be a Protect-only device (UNVR/NVR). Use the UniFi Protect integration type instead of UniFi.'
+      );
+      return { success: false, message: PROTECT_ONLY_MESSAGE };
+    }
     return { success: true };
   } catch (err) {
     console.log(`[unifi] testConnection error: ${err.message}`);
@@ -210,6 +229,13 @@ async function syncData(config, projectId, db) {
   try {
     const found = await tryEndpoints(http, headers, DEVICE_ENDPOINTS);
     if (!found) throw new Error('No device endpoint responded successfully');
+
+    if (isHtmlResponse(found.res.data)) {
+      console.log(
+        '[unifi] ERROR: Got HTML response instead of JSON — this device may be a Protect-only device (UNVR/NVR). Use the UniFi Protect integration type instead of UniFi.'
+      );
+      return { devices_imported: 0, vlans_imported: 0, status: 'failed', message: PROTECT_ONLY_MESSAGE };
+    }
 
     const devices = extractList(found.res.data);
     console.log(`[unifi] devices endpoint: ${found.path} (${devices.length} device(s))`);

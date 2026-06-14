@@ -93,6 +93,14 @@
   color: var(--color-text-muted);
 }
 
+.integration-status-badge.status-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: #f59e0b22;
+  color: #f59e0b;
+}
+
 .integration-card-meta {
   display: flex;
   flex-direction: column;
@@ -104,6 +112,11 @@
 .integration-card-error {
   font-size: 0.8rem;
   color: var(--color-danger);
+}
+
+.integration-card-warning {
+  font-size: 0.8rem;
+  color: #f59e0b;
 }
 
 .integration-card-actions {
