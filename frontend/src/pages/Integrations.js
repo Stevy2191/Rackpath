@@ -19,6 +19,27 @@ function formatLastSynced(value) {
   return date.toLocaleString();
 }
 
+// Builds a human-readable summary of what a sync imported. Camera and access
+// platforms don't sync devices/VLANs, so they get their own counts and never
+// show a (meaningless) "0 VLANs imported".
+function buildSyncSummary(platform, data) {
+  const devicesImported = data.devices_imported || 0;
+  const vlansImported = data.vlans_imported || 0;
+  const camerasImported = data.cameras_imported || 0;
+  const accessDevicesImported = data.access_devices_imported || 0;
+
+  if (platform === 'unifi-protect') {
+    return `${camerasImported} camera${camerasImported === 1 ? '' : 's'} imported`;
+  }
+  if (platform === 'unifi-access') {
+    return `${accessDevicesImported} device${accessDevicesImported === 1 ? '' : 's'} imported`;
+  }
+
+  const deviceText = `${devicesImported} device${devicesImported === 1 ? '' : 's'} imported`;
+  const vlanText = `${vlansImported} VLAN${vlansImported === 1 ? '' : 's'} imported`;
+  return `${deviceText}, ${vlanText}`;
+}
+
 export default function IntegrationsPage() {
   const { currentProjectId } = useProject();
   const [integrations, setIntegrations] = useState([]);
@@ -49,13 +70,11 @@ export default function IntegrationsPage() {
     setSyncingId(integration.id);
     try {
       const res = await client.post(`/integrations/${integration.id}/sync`);
-      const { devices_imported, vlans_imported, status, message } = res.data;
+      const { status, message, platform } = res.data;
       if (status === 'failed') {
         showToast({ type: 'error', text: message || 'Sync failed' });
       } else {
-        const deviceText = `${devices_imported} device${devices_imported === 1 ? '' : 's'} imported`;
-        const vlanText = `${vlans_imported} VLAN${vlans_imported === 1 ? '' : 's'} imported`;
-        showToast({ type: 'success', text: `Sync complete — ${deviceText}, ${vlanText}` });
+        showToast({ type: 'success', text: `Sync complete — ${buildSyncSummary(platform || integration.platform, res.data)}` });
       }
       load();
     } catch (err) {

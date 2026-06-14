@@ -183,7 +183,7 @@ router.post('/integrations/:id/sync', async (req, res, next) => {
     if (!row || row.project_id !== req.projectId) return res.status(404).json({ error: 'Integration not found' });
 
     const result = await syncIntegration(row);
-    res.json(result);
+    res.json({ ...result, platform: row.platform });
   } catch (err) {
     next(err);
   }
