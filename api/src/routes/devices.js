@@ -125,6 +125,7 @@ router.get('/', async (req, res, next) => {
         if (!tagsByDevice[tr.device_id]) tagsByDevice[tr.device_id] = [];
         tagsByDevice[tr.device_id].push({ id: tr.id, name: tr.name, color: tr.color });
       }
+      console.log('[devices.list] tag assignments by device:', tagsByDevice);
       for (const row of rows) {
         if (row.source === 'device') row.tags = tagsByDevice[row.id] || [];
       }
@@ -157,13 +158,15 @@ const BULK_DEVICE_STATUS_MAP = { online: 'up', offline: 'down', unknown: 'unknow
 // left untouched. `items` is an array of { id, source: 'device' | 'camera' }.
 router.post('/bulk-update', async (req, res, next) => {
   try {
-    const { items, location, tag_ids, credential_macro_id, status } = req.body || {};
+    const { items, location, tag_ids, tag_mode, credential_macro_id, status } = req.body || {};
+    console.log('[devices.bulk-update] request body:', JSON.stringify(req.body));
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items is required' });
     }
 
     const deviceIds = items.filter((i) => i && i.source !== 'camera').map((i) => Number(i.id));
     const cameraIds = items.filter((i) => i && i.source === 'camera').map((i) => Number(i.id));
+    console.log('[devices.bulk-update] deviceIds:', deviceIds, 'cameraIds:', cameraIds);
 
     if (deviceIds.length > 0) {
       const updates = [];
@@ -181,18 +184,35 @@ router.post('/bulk-update', async (req, res, next) => {
         values.push(BULK_DEVICE_STATUS_MAP[status] || status);
       }
       if (updates.length > 0) {
-        await pool.query(
+        console.log('[devices.bulk-update] updating devices columns:', updates, 'values:', values);
+        const [updateResult] = await pool.query(
           `UPDATE devices SET ${updates.join(', ')} WHERE project_id = ? AND id IN (${deviceIds.map(() => '?').join(', ')})`,
           [...values, req.projectId, ...deviceIds]
         );
+        console.log('[devices.bulk-update] devices update affectedRows:', updateResult.affectedRows);
       }
 
-      if (Array.isArray(tag_ids) && tag_ids.length > 0) {
-        const [validTagRows] = await pool.query(
-          `SELECT id FROM device_tags WHERE project_id = ? AND id IN (${tag_ids.map(() => '?').join(', ')})`,
-          [req.projectId, ...tag_ids]
-        );
-        const validTagIds = validTagRows.map((r) => r.id);
+      if (Array.isArray(tag_ids)) {
+        console.log('[devices.bulk-update] tag update requested, tag_mode:', tag_mode, 'tag_ids:', tag_ids);
+
+        let validTagIds = [];
+        if (tag_ids.length > 0) {
+          const [validTagRows] = await pool.query(
+            `SELECT id FROM device_tags WHERE project_id = ? AND id IN (${tag_ids.map(() => '?').join(', ')})`,
+            [req.projectId, ...tag_ids]
+          );
+          validTagIds = validTagRows.map((r) => r.id);
+          console.log('[devices.bulk-update] valid tag ids for project', req.projectId, ':', validTagIds);
+        }
+
+        if (tag_mode === 'replace') {
+          const [delResult] = await pool.query(
+            `DELETE FROM device_tag_assignments WHERE device_id IN (${deviceIds.map(() => '?').join(', ')})`,
+            deviceIds
+          );
+          console.log('[devices.bulk-update] replace mode: deleted existing tag assignments, affectedRows:', delResult.affectedRows);
+        }
+
         if (validTagIds.length > 0) {
           const pairs = [];
           const params = [];
@@ -202,7 +222,12 @@ router.post('/bulk-update', async (req, res, next) => {
               params.push(deviceId, tagId);
             }
           }
-          await pool.query(`INSERT IGNORE INTO device_tag_assignments (device_id, tag_id) VALUES ${pairs.join(', ')}`, params);
+          console.log('[devices.bulk-update] inserting tag assignments:', params);
+          const [insResult] = await pool.query(
+            `INSERT IGNORE INTO device_tag_assignments (device_id, tag_id) VALUES ${pairs.join(', ')}`,
+            params
+          );
+          console.log('[devices.bulk-update] tag assignment insert affectedRows:', insResult.affectedRows);
         }
       }
     }
@@ -219,15 +244,18 @@ router.post('/bulk-update', async (req, res, next) => {
         values.push(status || 'unknown');
       }
       if (updates.length > 0) {
-        await pool.query(
+        console.log('[devices.bulk-update] updating project_cameras columns:', updates, 'values:', values);
+        const [updateResult] = await pool.query(
           `UPDATE project_cameras SET ${updates.join(', ')} WHERE project_id = ? AND id IN (${cameraIds.map(() => '?').join(', ')})`,
           [...values, req.projectId, ...cameraIds]
         );
+        console.log('[devices.bulk-update] project_cameras update affectedRows:', updateResult.affectedRows);
       }
     }
 
     res.json({ updated: deviceIds.length + cameraIds.length });
   } catch (err) {
+    console.error('[devices.bulk-update] failed:', err);
     next(err);
   }
 });
@@ -408,24 +436,32 @@ router.delete('/:id', async (req, res, next) => {
 router.post('/:id/tags', async (req, res, next) => {
   try {
     const { tag_id } = req.body || {};
+    console.log('[devices.assignTag] device', req.params.id, 'tag_id', tag_id, 'project', req.projectId);
     if (!tag_id) return res.status(400).json({ error: 'tag_id is required' });
 
     const [deviceRows] = await pool.query('SELECT id FROM devices WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
-    if (deviceRows.length === 0) return res.status(404).json({ error: 'Device not found' });
+    if (deviceRows.length === 0) {
+      console.log('[devices.assignTag] device not found:', req.params.id);
+      return res.status(404).json({ error: 'Device not found' });
+    }
 
     const [tagRows] = await pool.query('SELECT id FROM device_tags WHERE id = ? AND project_id = ?', [
       tag_id,
       req.projectId,
     ]);
-    if (tagRows.length === 0) return res.status(404).json({ error: 'Tag not found' });
+    if (tagRows.length === 0) {
+      console.log('[devices.assignTag] tag not found:', tag_id, 'for project', req.projectId);
+      return res.status(404).json({ error: 'Tag not found' });
+    }
 
-    await pool.query('INSERT IGNORE INTO device_tag_assignments (device_id, tag_id) VALUES (?, ?)', [
+    const [insResult] = await pool.query('INSERT IGNORE INTO device_tag_assignments (device_id, tag_id) VALUES (?, ?)', [
       req.params.id,
       tag_id,
     ]);
+    console.log('[devices.assignTag] insert affectedRows:', insResult.affectedRows);
 
     const [tags] = await pool.query(
       `SELECT t.id, t.name, t.color
@@ -435,8 +471,10 @@ router.post('/:id/tags', async (req, res, next) => {
        ORDER BY t.name ASC`,
       [req.params.id]
     );
+    console.log('[devices.assignTag] device', req.params.id, 'tags now:', tags);
     res.status(201).json(tags);
   } catch (err) {
+    console.error('[devices.assignTag] failed:', err);
     next(err);
   }
 });
@@ -444,18 +482,24 @@ router.post('/:id/tags', async (req, res, next) => {
 // DELETE /api/devices/:id/tags/:tagId - remove a tag from a device
 router.delete('/:id/tags/:tagId', async (req, res, next) => {
   try {
+    console.log('[devices.removeTag] device', req.params.id, 'tag_id', req.params.tagId, 'project', req.projectId);
     const [deviceRows] = await pool.query('SELECT id FROM devices WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
-    if (deviceRows.length === 0) return res.status(404).json({ error: 'Device not found' });
+    if (deviceRows.length === 0) {
+      console.log('[devices.removeTag] device not found:', req.params.id);
+      return res.status(404).json({ error: 'Device not found' });
+    }
 
-    await pool.query('DELETE FROM device_tag_assignments WHERE device_id = ? AND tag_id = ?', [
+    const [delResult] = await pool.query('DELETE FROM device_tag_assignments WHERE device_id = ? AND tag_id = ?', [
       req.params.id,
       req.params.tagId,
     ]);
+    console.log('[devices.removeTag] delete affectedRows:', delResult.affectedRows);
     res.status(204).send();
   } catch (err) {
+    console.error('[devices.removeTag] failed:', err);
     next(err);
   }
 });

@@ -371,10 +371,15 @@ export default function DevicesPage() {
   };
 
   const handleAssignTag = async (deviceId, tagId) => {
+    console.log('[Devices] assigning tag', tagId, 'to device', deviceId);
     try {
       const res = await client.post(`/devices/${deviceId}/tags`, { tag_id: tagId });
-      setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, tags: res.data } : d)));
+      console.log('[Devices] assign tag response:', res.data);
+      setDevices((prev) =>
+        prev.map((d) => (d.id === deviceId && d.source !== 'camera' ? { ...d, tags: res.data } : d))
+      );
     } catch (err) {
+      console.error('[Devices] assign tag failed:', err);
       setError(err.response?.data?.error || err.message);
     } finally {
       setTagPickerDeviceId(null);
@@ -382,12 +387,17 @@ export default function DevicesPage() {
   };
 
   const handleRemoveTag = async (deviceId, tagId) => {
+    console.log('[Devices] removing tag', tagId, 'from device', deviceId);
     try {
       await client.delete(`/devices/${deviceId}/tags/${tagId}`);
+      console.log('[Devices] remove tag succeeded for device', deviceId);
       setDevices((prev) =>
-        prev.map((d) => (d.id === deviceId ? { ...d, tags: (d.tags || []).filter((t) => t.id !== tagId) } : d))
+        prev.map((d) =>
+          d.id === deviceId && d.source !== 'camera' ? { ...d, tags: (d.tags || []).filter((t) => t.id !== tagId) } : d
+        )
       );
     } catch (err) {
+      console.error('[Devices] remove tag failed:', err);
       setError(err.response?.data?.error || err.message);
     } finally {
       setOpenTagPopover(null);
@@ -452,7 +462,9 @@ export default function DevicesPage() {
 
   const handleBulkEditSave = async (fields) => {
     const items = selectedItems();
-    await client.post('/devices/bulk-update', { items, ...fields });
+    console.log('[Devices] bulk-update request:', { items, ...fields });
+    const res = await client.post('/devices/bulk-update', { items, ...fields });
+    console.log('[Devices] bulk-update response:', res.data);
     setSelectedIds(new Set());
     setShowBulkEdit(false);
     loadDevices(buildParams());

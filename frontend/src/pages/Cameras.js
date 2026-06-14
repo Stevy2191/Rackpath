@@ -138,7 +138,9 @@ export default function CamerasPage() {
 
   const handleBulkEditSave = async (fields) => {
     const items = Array.from(selectedIds).map((id) => ({ id, source: 'camera' }));
-    await client.post('/devices/bulk-update', { items, ...fields });
+    console.log('[Cameras] bulk-update request:', { items, ...fields });
+    const res = await client.post('/devices/bulk-update', { items, ...fields });
+    console.log('[Cameras] bulk-update response:', res.data);
     setSelectedIds(new Set());
     setShowBulkEdit(false);
     load();

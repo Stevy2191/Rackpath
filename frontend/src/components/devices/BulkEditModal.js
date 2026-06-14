@@ -15,6 +15,7 @@ function pillTextColor(hex) {
 export default function BulkEditModal({ count, tags = [], macros = [], showTags = true, showCredentialMacro = true, onSave, onClose }) {
   const [location, setLocation] = useState('');
   const [tagIds, setTagIds] = useState([]);
+  const [tagMode, setTagMode] = useState('add'); // 'add' = append to existing tags, 'replace' = set tags
   const [credentialMacro, setCredentialMacro] = useState('');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
@@ -28,9 +29,16 @@ export default function BulkEditModal({ count, tags = [], macros = [], showTags 
     e.preventDefault();
     const fields = {};
     if (location.trim()) fields.location = location.trim();
-    if (tagIds.length > 0) fields.tag_ids = tagIds;
+    // "Replace" mode is sent even with zero tags selected (clears all tags on
+    // the selected rows); "Add" mode is a no-op if nothing is selected.
+    if (tagIds.length > 0 || tagMode === 'replace') {
+      fields.tag_ids = tagIds;
+      fields.tag_mode = tagMode;
+    }
     if (credentialMacro !== '') fields.credential_macro_id = credentialMacro === 'none' ? null : Number(credentialMacro);
     if (status !== '') fields.status = status;
+
+    console.log('[BulkEditModal] submitting bulk edit fields:', fields);
 
     if (Object.keys(fields).length === 0) {
       onClose();
@@ -42,6 +50,7 @@ export default function BulkEditModal({ count, tags = [], macros = [], showTags 
     try {
       await onSave(fields);
     } catch (err) {
+      console.error('[BulkEditModal] bulk edit save failed:', err);
       setError(err.response?.data?.error || err.message);
       setSaving(false);
     }
@@ -67,7 +76,29 @@ export default function BulkEditModal({ count, tags = [], macros = [], showTags 
 
           {showTags && (
             <label>
-              Tags (added to all selected)
+              Tags
+              <div className="bulk-edit-tag-mode">
+                <label className="bulk-edit-radio">
+                  <input
+                    type="radio"
+                    name="tagMode"
+                    value="add"
+                    checked={tagMode === 'add'}
+                    onChange={() => setTagMode('add')}
+                  />
+                  Add to existing tags
+                </label>
+                <label className="bulk-edit-radio">
+                  <input
+                    type="radio"
+                    name="tagMode"
+                    value="replace"
+                    checked={tagMode === 'replace'}
+                    onChange={() => setTagMode('replace')}
+                  />
+                  Replace existing tags
+                </label>
+              </div>
               {tags.length === 0 ? (
                 <span className="bulk-edit-empty">No tags defined for this project</span>
               ) : (

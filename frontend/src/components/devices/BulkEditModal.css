@@ -4,6 +4,25 @@
   color: var(--color-text-muted);
 }
 
+.bulk-edit-tag-mode {
+  display: flex;
+  flex-direction: row;
+  gap: 1.25rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.bulk-edit-radio {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: normal;
+  font-size: 0.85rem;
+}
+
+.bulk-edit-radio input {
+  width: auto;
+}
+
 .bulk-edit-tag-list {
   display: flex;
   flex-wrap: wrap;
