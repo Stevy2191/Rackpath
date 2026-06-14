@@ -213,52 +213,32 @@ function buildChannelUrls(host, channel) {
   };
 }
 
-// Best-effort extraction of a camera's stream recovery code from the
-// bootstrap response. In the bootstrap API this value is called the
-// "recovery code" (shown in Protect under camera Settings -> Manage ->
-// Manual Recovery), not "streamPassword" — the exact field name varies by
-// firmware version, so several known/likely locations are tried, followed by
-// a scan of the camera's own keys for anything matching /recovery|code/i.
-function extractStreamPassword(nvr, cam) {
-  const candidates = [
-    ['camera.recoveryCode', cam?.recoveryCode],
-    ['camera.streamSharingSettings.recoveryCode', cam?.streamSharingSettings?.recoveryCode],
-    ['camera.streamSharingSettings.password', cam?.streamSharingSettings?.password],
-    ['camera.streamSharingSettings.token', cam?.streamSharingSettings?.token],
-    ['camera.manualRecoveryCode', cam?.manualRecoveryCode],
-    ['camera.accessKey', cam?.accessKey],
-    ['camera.authToken', cam?.authToken],
-    ['nvr.recoveryCode', nvr?.recoveryCode],
-    ['camera.streamSharing.plainPassword', cam?.streamSharing?.plainPassword],
-    ['camera.streamSharing.password', cam?.streamSharing?.password],
-    ['nvr.streamSharing.plainPassword', nvr?.streamSharing?.plainPassword],
-    ['nvr.streamSharing.password', nvr?.streamSharing?.password],
-  ];
+// GETs `path` and, on a 200 JSON response, logs its keys, a full sanitized
+// dump, and any credential-shaped fields (see logCredentialCandidates).
+// Returns res.data, or null if the request failed or didn't return JSON.
+// Used to investigate where (if anywhere) the Protect UI's "Manual Recovery"
+// code is exposed via the API.
+async function fetchAndLogJson(http, headers, httpsAgent, path, label) {
+  const url = `${http.defaults.baseURL}${path}`;
 
-  for (const [label, value] of candidates) {
-    if (typeof value === 'string' && value) {
-      console.log(`[unifi-protect] [bootstrap] recovery code found at ${label} (${value.length} chars)`);
-      return value;
-    }
+  let res;
+  try {
+    res = await http.get(path, { headers, httpsAgent });
+  } catch (err) {
+    logError(url, err);
+    return null;
   }
 
-  // Fallback: scan the camera's own keys for anything that looks like a
-  // recovery code/credential. Excludes keys matching /codec/i (e.g.
-  // "videoCodec") and requires the value to look like a credential
-  // (alphanumeric, >8 chars, not a URL/MAC) so codec names like "h264" and
-  // MAC-valued fields like "apMac" are never picked up.
-  if (cam && typeof cam === 'object') {
-    for (const [key, value] of Object.entries(cam)) {
-      if (/codec/i.test(key)) continue;
-      if (/recovery|code|key|pass|secret|token|auth/i.test(key) && looksLikeCredentialValue(value)) {
-        console.log(`[unifi-protect] [bootstrap] recovery code found via key scan at camera.${key} (${value.length} chars)`);
-        return value;
-      }
-    }
+  console.log(`[unifi-protect] [bootstrap] GET ${url} -> HTTP ${res.status}`);
+  if (res.status === 500) {
+    console.log(`[unifi-protect] [bootstrap] response body (500): ${bodySnippet(res.data)}`);
   }
+  if (res.status !== 200 || !res.data || typeof res.data !== 'object') return null;
 
-  console.log('[unifi-protect] [bootstrap] no recovery code found for camera');
-  return null;
+  console.log(`[unifi-protect] [bootstrap] ${label} keys: ${Object.keys(res.data).join(', ')}`);
+  console.log(`[unifi-protect] [bootstrap] ${label} (sanitized, full): ${JSON.stringify(sanitizeForLog(res.data))}`);
+  logCredentialCandidates(label, res.data);
+  return res.data;
 }
 
 function logError(url, err) {
@@ -594,31 +574,18 @@ async function syncDataBootstrap(config, projectId, db) {
       console.log(`[unifi-protect] [bootstrap] first camera keys: ${Object.keys(firstCam).join(', ')}`);
       console.log(`[unifi-protect] [bootstrap] first camera (sanitized, full): ${JSON.stringify(sanitizeForLog(firstCam))}`);
 
-      // Recovery-code investigation: check the fields known to hold it on
-      // some firmware versions, plus a generic scan for anything that looks
-      // like a credential (see extractStreamPassword/logCredentialCandidates).
-      console.log(`[unifi-protect] [bootstrap] first camera apMac: ${firstCam.apMac ?? '(none)'}`);
-      console.log(
-        `[unifi-protect] [bootstrap] first camera recoveryCode: ${
-          typeof firstCam.recoveryCode === 'string' ? `<string, ${firstCam.recoveryCode.length} chars>` : firstCam.recoveryCode ?? '(none)'
-        }`
-      );
-      console.log(
-        `[unifi-protect] [bootstrap] first camera streamSharingSettings (sanitized, full): ${JSON.stringify(
-          sanitizeForLog(firstCam.streamSharingSettings ?? null)
-        )}`
-      );
-      console.log(
-        `[unifi-protect] [bootstrap] first camera accessKey: ${
-          typeof firstCam.accessKey === 'string' ? `<string, ${firstCam.accessKey.length} chars>` : firstCam.accessKey ?? '(none)'
-        }`
-      );
-      console.log(
-        `[unifi-protect] [bootstrap] first camera authToken: ${
-          typeof firstCam.authToken === 'string' ? `<string, ${firstCam.authToken.length} chars>` : firstCam.authToken ?? '(none)'
-        }`
-      );
-      logCredentialCandidates('camera', firstCam);
+      // Manual Recovery code investigation: per the official type definitions
+      // (https://github.com/hjdhjd/unifi-protect/blob/main/src/protect-types.ts),
+      // ProtectCameraConfigInterface and ProtectNvrConfigInterface have no
+      // recoveryCode/streamPassword field, so it isn't present in the
+      // bootstrap response logged above. Probe a few other endpoints that
+      // might expose it, purely for diagnostics — the results aren't synced
+      // into stream_password (see note below).
+      await fetchAndLogJson(http, headers, httpsAgent, '/proxy/protect/api/nvr', 'nvr config (legacy API)');
+      if (firstCam.id) {
+        await fetchAndLogJson(http, headers, httpsAgent, `/proxy/protect/api/cameras/${firstCam.id}`, 'legacy camera detail');
+      }
+      await fetchAndLogJson(http, headers, httpsAgent, '/proxy/protect/api/stream/sharing', 'stream sharing');
     }
 
     console.log(`[unifi-protect] [bootstrap] Upserting ${cameras.length} cameras for project ${projectId}`);
@@ -639,13 +606,10 @@ async function syncDataBootstrap(config, projectId, db) {
       const mediumUrls = buildChannelUrls(host, mediumChannel);
       const lowUrls = buildChannelUrls(host, lowChannel);
 
-      const streamPassword = extractStreamPassword(bootstrap.nvr, cam);
-      console.log(
-        `[unifi-protect] [bootstrap] camera ${cam.mac || cam.id || name}: recovery code ${
-          streamPassword ? `found (${streamPassword.length} chars)` : 'not found'
-        }`
-      );
-
+      // stream_password (the Protect UI's Manual Recovery code) is not part
+      // of the bootstrap API and is not synced — see investigation logging
+      // above. It must be looked up manually in Protect under each camera's
+      // Settings -> Manage -> Manual Recovery.
       const payload = {
         name,
         model,
@@ -659,7 +623,6 @@ async function syncDataBootstrap(config, projectId, db) {
         status: online == null ? 'unknown' : online ? 'online' : 'offline',
         last_seen: cam.lastSeen ? new Date(cam.lastSeen) : null,
       };
-      if (streamPassword) payload.stream_password = streamPassword;
 
       try {
         const ok = await upsertCamera(db, projectId, config.id, payload);

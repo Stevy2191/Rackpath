@@ -112,13 +112,12 @@ async function upsertCamera(db, projectId, integrationId, camera) {
     ]);
 
     if (existing.length > 0) {
-      // location_notes is user-editable only and must never be overwritten by
-      // a sync. stream_password is sync-controlled (read-only in the UI) and
-      // is always overwritten with whatever Protect returns, even if that's
-      // nothing — a stale manually-entered password is worse than none.
+      // location_notes and stream_password are user-editable only (the
+      // latter is the Manual Recovery code, which isn't available via the
+      // Protect API) and must never be overwritten by a sync.
       await db.query(
         `UPDATE project_cameras SET integration_id = ?, name = ?, model = ?, ip_address = ?,
-           rtsp_url = ?, rtsps_url_high = ?, rtsps_url_medium = ?, rtsps_url_low = ?, resolution = ?, status = ?, last_seen = ?, stream_password = ?
+           rtsp_url = ?, rtsps_url_high = ?, rtsps_url_medium = ?, rtsps_url_low = ?, resolution = ?, status = ?, last_seen = ?
          WHERE id = ?`,
         [
           integrationId,
@@ -132,7 +131,6 @@ async function upsertCamera(db, projectId, integrationId, camera) {
           fields.resolution,
           fields.status,
           fields.last_seen,
-          camera.stream_password || null,
           existing[0].id,
         ]
       );
@@ -142,8 +140,8 @@ async function upsertCamera(db, projectId, integrationId, camera) {
 
   await db.query(
     `INSERT INTO project_cameras
-       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url_high, rtsps_url_medium, rtsps_url_low, resolution, status, last_seen, stream_password)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url_high, rtsps_url_medium, rtsps_url_low, resolution, status, last_seen)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       projectId,
       integrationId,
@@ -158,7 +156,6 @@ async function upsertCamera(db, projectId, integrationId, camera) {
       fields.resolution,
       fields.status,
       fields.last_seen,
-      camera.stream_password || null,
     ]
   );
   return true;

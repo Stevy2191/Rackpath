@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clipboard, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import '../topology/Modal.css';
 import './CameraFormModal.css';
 
@@ -12,61 +12,11 @@ export const emptyCamera = {
   rtsps_url_high: '',
   rtsps_url_medium: '',
   rtsps_url_low: '',
-  stream_password: '',
   username: '',
   resolution: '',
   location_notes: '',
   status: 'unknown',
 };
-
-// Stream passwords (recovery codes) are populated by syncing from UniFi
-// Protect and are overwritten on every sync, so they're shown read-only with
-// a copy button rather than as an editable input.
-function ReadOnlyMaskedField({ label, value, note, title }) {
-  const [visible, setVisible] = useState(false);
-
-  const handleCopy = () => {
-    if (value) navigator.clipboard.writeText(value);
-  };
-
-  return (
-    <label title={title}>
-      {label}
-      <div className="camera-masked-field">
-        <input
-          type={visible ? 'text' : 'password'}
-          value={value || ''}
-          readOnly
-          disabled={!value}
-          placeholder={value ? '' : '—'}
-        />
-        {value && (
-          <>
-            <button
-              type="button"
-              className="camera-masked-toggle"
-              onClick={() => setVisible((v) => !v)}
-              aria-label={visible ? 'Hide' : 'Show'}
-              title={visible ? 'Hide' : 'Show'}
-            >
-              {visible ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-            <button
-              type="button"
-              className="camera-masked-toggle"
-              onClick={handleCopy}
-              aria-label="Copy"
-              title="Copy to clipboard"
-            >
-              <Clipboard size={14} />
-            </button>
-          </>
-        )}
-      </div>
-      {note && <span className="camera-field-note">{note}</span>}
-    </label>
-  );
-}
 
 function MaskedField({ label, value, onChange, placeholder }) {
   const [visible, setVisible] = useState(false);
@@ -169,12 +119,6 @@ export default function CameraFormModal({ initial, onSave, onClose }) {
             value={draft.rtsps_url_low || ''}
             onChange={field('rtsps_url_low')}
             placeholder="rtsps://192.168.1.1:7441/alias?quality=low"
-          />
-          <ReadOnlyMaskedField
-            label="Recovery Code (from Protect)"
-            value={draft.stream_password}
-            note="Synced from UniFi Protect — change the recovery code in your Protect console"
-            title="This is the recovery code shown in Protect under camera Settings → Manage → Manual Recovery"
           />
           <label>
             Status

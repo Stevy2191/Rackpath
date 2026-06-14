@@ -94,6 +94,15 @@
   color: var(--color-text-muted);
 }
 
+.cameras-note {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-subtle, transparent);
+}
+
 .cameras-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--color-border);
@@ -174,10 +183,6 @@
   overflow-x: visible;
   white-space: normal;
   word-break: break-all;
-}
-
-.cameras-password-cell {
-  min-width: 160px;
 }
 
 .cameras-icon-btn {

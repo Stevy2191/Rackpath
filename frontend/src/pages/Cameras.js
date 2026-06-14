@@ -210,45 +210,6 @@ export default function CamerasPage() {
     </td>
   );
 
-  const renderPasswordCell = (camera) => {
-    const value = camera.stream_password;
-    const isRevealed = revealed.has(`${camera.id}:stream_password`);
-    return (
-      <td className="cameras-rtsps-cell cameras-password-cell">
-        <div className="cameras-rtsps-row">
-          <span
-            className={`cameras-rtsps-value${isRevealed ? ' cameras-rtsps-value-revealed' : ''}`}
-            title={value || undefined}
-          >
-            {value ? (isRevealed ? value : '••••••••') : '—'}
-          </span>
-          {value && (
-            <>
-              <button
-                type="button"
-                className="cameras-icon-btn"
-                onClick={() => toggleReveal(camera.id, 'stream_password')}
-                aria-label={isRevealed ? 'Hide' : 'Show'}
-                title={isRevealed ? 'Hide' : 'Show'}
-              >
-                {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-              <button
-                type="button"
-                className="cameras-icon-btn"
-                onClick={() => copyValue(value)}
-                aria-label="Copy"
-                title="Copy to clipboard"
-              >
-                <Clipboard size={14} />
-              </button>
-            </>
-          )}
-        </div>
-      </td>
-    );
-  };
-
   const filtered = cameras.filter((c) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
@@ -282,6 +243,10 @@ export default function CamerasPage() {
 
       {error && <div className="page-error">{error}</div>}
 
+      <div className="cameras-note">
+        Recovery codes are not available via the API — find them in Protect under each camera's Settings → Manage → Manual Recovery.
+      </div>
+
       <div className="cameras-count">{filtered.length} camera{filtered.length === 1 ? '' : 's'}</div>
 
       <BulkActionToolbar
@@ -307,9 +272,6 @@ export default function CamerasPage() {
               <th>Model</th>
               <th>IP Address</th>
               <th>RTSPS Streams</th>
-              <th title="This is the recovery code shown in Protect under camera Settings → Manage → Manual Recovery">
-                Recovery Code / Stream Password
-              </th>
               <th>Last Seen</th>
               <th></th>
             </tr>
@@ -327,7 +289,6 @@ export default function CamerasPage() {
                 <td>{camera.model || '—'}</td>
                 <td>{camera.ip_address || '—'}</td>
                 {renderRtspsCell(camera)}
-                {renderPasswordCell(camera)}
                 <td>{formatLastSeen(camera.last_seen)}</td>
                 <td className="cameras-actions">
                   <button
@@ -354,7 +315,7 @@ export default function CamerasPage() {
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="cameras-empty">
+                <td colSpan={8} className="cameras-empty">
                   {cameras.length === 0 ? 'No cameras yet. Click "+ Add Camera" to create one.' : 'No cameras match your search.'}
                 </td>
               </tr>
