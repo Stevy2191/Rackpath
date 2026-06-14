@@ -6,7 +6,7 @@ const router = express.Router();
 
 const SECRET = process.env.RACKPATH_JWT_SECRET;
 
-const PLATFORMS = ['unifi', 'unifi-protect', 'zabbix', 'librenms', 'netbox', 'snmp', 'custom'];
+const PLATFORMS = ['unifi', 'unifi-protect', 'unifi-access', 'zabbix', 'librenms', 'netbox', 'snmp', 'custom'];
 
 // Strip encrypted credential columns from a row before sending it to the
 // frontend, replacing them with booleans indicating whether a value is set.

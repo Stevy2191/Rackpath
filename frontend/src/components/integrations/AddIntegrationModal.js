@@ -44,7 +44,7 @@ function buildPayload(platform, form) {
     sync_interval_minutes: Number(form.sync_interval_minutes) || 60,
   };
 
-  if (platform === 'unifi' || platform === 'unifi-protect') {
+  if (platform === 'unifi' || platform === 'unifi-protect' || platform === 'unifi-access') {
     if (form.unifi_auth_method === 'password') {
       payload.username = form.username || null;
       if (form.password) payload.password = form.password;
@@ -146,7 +146,7 @@ export default function AddIntegrationModal({ integration, projectId, onClose, o
                   className="integration-platform-btn"
                   onClick={() => {
                     setPlatform(p.id);
-                    if (!integration && (p.id === 'unifi' || p.id === 'unifi-protect')) {
+                    if (!integration && (p.id === 'unifi' || p.id === 'unifi-protect' || p.id === 'unifi-access')) {
                       setForm((f) => ({ ...f, verify_ssl: false }));
                     }
                     setStep(2);
@@ -247,6 +247,64 @@ export default function AddIntegrationModal({ integration, projectId, onClose, o
           )}
 
           {platform === 'unifi-protect' && (
+            <>
+              <label>
+                Controller URL
+                <input value={form.base_url} onChange={set('base_url')} placeholder="https://192.168.1.1" required />
+              </label>
+
+              <div className="integration-radio-group">
+                <label className="integration-radio-label">
+                  <input
+                    type="radio"
+                    name="unifi_auth_method"
+                    value="api_key"
+                    checked={form.unifi_auth_method === 'api_key'}
+                    onChange={() => setForm((f) => ({ ...f, unifi_auth_method: 'api_key' }))}
+                  />
+                  API Key
+                </label>
+                <label className="integration-radio-label">
+                  <input
+                    type="radio"
+                    name="unifi_auth_method"
+                    value="password"
+                    checked={form.unifi_auth_method === 'password'}
+                    onChange={() => setForm((f) => ({ ...f, unifi_auth_method: 'password' }))}
+                  />
+                  Username &amp; Password
+                </label>
+              </div>
+              <p className="integration-helper-text">
+                API Key is recommended. Generate one in UniFi Console → Settings → Control Plane → API
+              </p>
+
+              {form.unifi_auth_method === 'api_key' ? (
+                <label>
+                  API Key
+                  <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
+                </label>
+              ) : (
+                <>
+                  <label>
+                    Username
+                    <input value={form.username} onChange={set('username')} />
+                  </label>
+                  <label>
+                    Password
+                    <input type="password" value={form.password} onChange={set('password')} placeholder={passwordPlaceholder} />
+                  </label>
+                </>
+              )}
+
+              <label className="integration-checkbox-label">
+                <input type="checkbox" checked={form.verify_ssl} onChange={set('verify_ssl')} />
+                Verify SSL
+              </label>
+            </>
+          )}
+
+          {platform === 'unifi-access' && (
             <>
               <label>
                 Controller URL

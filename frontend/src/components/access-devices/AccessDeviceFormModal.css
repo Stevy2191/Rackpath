@@ -1,0 +1,9 @@
+.access-device-checkbox-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem !important;
+}
+
+.access-device-checkbox-label input {
+  width: auto;
+}

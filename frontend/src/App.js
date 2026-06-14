@@ -8,6 +8,7 @@ import RacksPage from './pages/Racks';
 import DevicesPage from './pages/Devices';
 import MacrosPage from './pages/Macros';
 import CamerasPage from './pages/Cameras';
+import AccessDevicesPage from './pages/AccessDevices';
 import IntegrationsPage from './pages/Integrations';
 import ScanPage from './pages/Scan';
 import LoginPage from './pages/Login';
@@ -89,6 +90,14 @@ function AppShell() {
             element={
               <RequireAuth>
                 <CamerasPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/devices/access"
+            element={
+              <RequireAuth>
+                <AccessDevicesPage />
               </RequireAuth>
             }
           />

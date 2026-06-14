@@ -32,6 +32,7 @@ const TYPE_FILTER_OPTIONS = [
   { value: 'server', label: 'Server' },
   { value: 'firewall', label: 'Firewall' },
   { value: 'camera', label: 'Camera' },
+  { value: 'access', label: 'Access' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -93,10 +94,11 @@ export default function DevicesPage() {
 
   const isNetworkView = location.pathname === '/devices/network';
   const typeFilterOptions = isNetworkView
-    ? TYPE_FILTER_OPTIONS.filter((opt) => opt.value !== 'camera')
+    ? TYPE_FILTER_OPTIONS.filter((opt) => opt.value !== 'camera' && opt.value !== 'access')
     : TYPE_FILTER_OPTIONS;
 
   const [devices, setDevices] = useState([]);
+  const [accessDevices, setAccessDevices] = useState([]);
   const [tags, setTags] = useState([]);
   const [macros, setMacros] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -163,6 +165,14 @@ export default function DevicesPage() {
       .catch((err) => setError(err.response?.data?.error || err.message));
   };
 
+  const loadAccessDevices = () => {
+    if (!currentProjectId) return;
+    client
+      .get(`/projects/${currentProjectId}/access-devices`)
+      .then((res) => setAccessDevices(res.data || []))
+      .catch(() => setAccessDevices([]));
+  };
+
   const loadLocations = () => {
     client
       .get('/devices')
@@ -194,6 +204,7 @@ export default function DevicesPage() {
   useEffect(() => {
     loadTags();
     loadMacros();
+    loadAccessDevices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProjectId]);
 
@@ -258,6 +269,15 @@ export default function DevicesPage() {
       loadLocations();
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleDeleteAccessDevice = async (accessId) => {
+    try {
+      await client.delete(`/access-devices/${accessId}`);
+      setAccessDevices((prev) => prev.filter((a) => a.id !== accessId));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
     }
   };
 
@@ -431,7 +451,44 @@ export default function DevicesPage() {
 
   const filtersActive = !!(search || typeFilter || locationFilter || tagFilterIds.length);
 
-  const viewDevices = isNetworkView ? devices.filter((d) => d.type !== 'camera') : devices;
+  // Access devices live in a separate table, so they're fetched separately
+  // and merged into the All Devices view as read-only rows with an "Access"
+  // type badge — filters are applied client-side to match.
+  const accessDeviceRows = isNetworkView
+    ? []
+    : accessDevices
+        .filter((a) => {
+          if (typeFilter && typeFilter !== 'access') return false;
+          if (locationFilter && (a.location || '') !== locationFilter) return false;
+          if (tagFilterIds.length > 0) return false;
+          if (search.trim()) {
+            const q = search.trim().toLowerCase();
+            const haystack = [a.name, a.ip_address, a.mac, a.model, a.location];
+            if (!haystack.some((v) => (v || '').toLowerCase().includes(q))) return false;
+          }
+          return true;
+        })
+        .map((a) => ({
+          id: `access-${a.id}`,
+          _access: true,
+          _accessId: a.id,
+          hostname: a.name,
+          ip: a.ip_address,
+          mac: a.mac,
+          type: 'access',
+          location: a.location,
+          make: null,
+          model: a.model,
+          serial_number: null,
+          status: a.last_seen ? (a.online ? 'up' : 'down') : null,
+          last_scanned_at: a.last_seen,
+          tags: [],
+          credential_macro_id: null,
+          topology_node_id: null,
+          source_integration_id: null,
+        }));
+
+  const viewDevices = isNetworkView ? devices.filter((d) => d.type !== 'camera') : [...devices, ...accessDeviceRows];
 
   const totalCount = viewDevices.length;
   const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
@@ -633,6 +690,7 @@ export default function DevicesPage() {
             {pageDevices.map((device) => {
               const deviceTags = device.tags || [];
               const availableTags = tags.filter((t) => !deviceTags.some((dt) => dt.id === t.id));
+              const isAccess = !!device._access;
               return (
                 <tr key={device.id} className={device.id === selectedDeviceId ? 'active' : ''}>
                   <td>
@@ -642,40 +700,52 @@ export default function DevicesPage() {
                     />
                   </td>
                   <td>
-                    <button className="device-name-link" onClick={() => setSelectedDeviceId(device.id)}>
+                    {isAccess ? (
                       <span className="device-name-row">
-                        <strong>{device.hostname || device.ip || `Device ${device.id}`}</strong>
-                        {device.topology_node_id != null && (
-                          <Network size={14} className="device-topology-icon" title="Linked to a topology node" />
-                        )}
-                        {device.source_integration_id != null &&
-                          (() => {
-                            const { icon: SourceIcon, label } = platformInfo(device.source_integration_platform);
-                            return (
-                              <SourceIcon
-                                size={14}
-                                className="device-source-icon"
-                                title={`Imported from ${label}${
-                                  device.source_integration_name ? ` (${device.source_integration_name})` : ''
-                                }`}
-                              />
-                            );
-                          })()}
+                        <strong>{device.hostname || `Access Device ${device._accessId}`}</strong>
                       </span>
-                    </button>
+                    ) : (
+                      <button className="device-name-link" onClick={() => setSelectedDeviceId(device.id)}>
+                        <span className="device-name-row">
+                          <strong>{device.hostname || device.ip || `Device ${device.id}`}</strong>
+                          {device.topology_node_id != null && (
+                            <Network size={14} className="device-topology-icon" title="Linked to a topology node" />
+                          )}
+                          {device.source_integration_id != null &&
+                            (() => {
+                              const { icon: SourceIcon, label } = platformInfo(device.source_integration_platform);
+                              return (
+                                <SourceIcon
+                                  size={14}
+                                  className="device-source-icon"
+                                  title={`Imported from ${label}${
+                                    device.source_integration_name ? ` (${device.source_integration_name})` : ''
+                                  }`}
+                                />
+                              );
+                            })()}
+                        </span>
+                      </button>
+                    )}
                   </td>
                   {visibleColumns.ip && <td>{device.ip || ''}</td>}
                   {visibleColumns.mac && <td>{device.mac || ''}</td>}
-                  {visibleColumns.type && <td>{device.type || ''}</td>}
+                  {visibleColumns.type && (
+                    <td>{isAccess ? <span className="devices-type-badge">Access</span> : device.type || ''}</td>
+                  )}
                   {visibleColumns.location && (
                     <td>
-                      <input
-                        key={`loc-${device.id}-${device.location || ''}`}
-                        className="devices-location-input"
-                        defaultValue={device.location || ''}
-                        placeholder="—"
-                        onBlur={(e) => handleLocationCommit(device, e.target.value)}
-                      />
+                      {isAccess ? (
+                        device.location || '—'
+                      ) : (
+                        <input
+                          key={`loc-${device.id}-${device.location || ''}`}
+                          className="devices-location-input"
+                          defaultValue={device.location || ''}
+                          placeholder="—"
+                          onBlur={(e) => handleLocationCommit(device, e.target.value)}
+                        />
+                      )}
                     </td>
                   )}
                   {visibleColumns.make && <td>{device.make || ''}</td>}
@@ -683,6 +753,9 @@ export default function DevicesPage() {
                   {visibleColumns.serial_number && <td>{device.serial_number || ''}</td>}
                   {visibleColumns.tags && (
                     <td className="devices-tags-cell">
+                      {isAccess ? (
+                        '—'
+                      ) : (
                       <div className="device-tag-list">
                         {deviceTags.map((tag) => (
                           <span key={tag.id} className="device-tag-pill-wrap">
@@ -740,10 +813,14 @@ export default function DevicesPage() {
                           )}
                         </span>
                       </div>
+                      )}
                     </td>
                   )}
                   {visibleColumns.credential && (
                     <td>
+                      {isAccess ? (
+                        '—'
+                      ) : (
                       <select
                         className="devices-credential-select"
                         value={device.credential_macro_id || ''}
@@ -756,26 +833,32 @@ export default function DevicesPage() {
                           </option>
                         ))}
                       </select>
+                      )}
                     </td>
                   )}
                   {visibleColumns.last_seen && <td>{formatLastSeen(device.last_scanned_at)}</td>}
                   <td>
-                    <button
-                      type="button"
-                      className="devices-scan-btn"
-                      title={canScan(device) ? 'Run SNMP scan' : 'Requires an IP address and an SNMP credential macro'}
-                      disabled={!canScan(device) || scanningId === device.id}
-                      onClick={() => handleScan(device)}
-                    >
-                      {scanningId === device.id ? (
-                        <Loader2 size={14} className="devices-spin" />
-                      ) : (
-                        <Radio size={14} />
-                      )}
-                    </button>
+                    {!isAccess && (
+                      <button
+                        type="button"
+                        className="devices-scan-btn"
+                        title={canScan(device) ? 'Run SNMP scan' : 'Requires an IP address and an SNMP credential macro'}
+                        disabled={!canScan(device) || scanningId === device.id}
+                        onClick={() => handleScan(device)}
+                      >
+                        {scanningId === device.id ? (
+                          <Loader2 size={14} className="devices-spin" />
+                        ) : (
+                          <Radio size={14} />
+                        )}
+                      </button>
+                    )}
                   </td>
                   <td>
-                    <button className="delete-btn" onClick={() => handleDeleteDevice(device.id)}>
+                    <button
+                      className="delete-btn"
+                      onClick={() => (isAccess ? handleDeleteAccessDevice(device._accessId) : handleDeleteDevice(device.id))}
+                    >
                       Delete
                     </button>
                   </td>

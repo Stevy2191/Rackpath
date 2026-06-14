@@ -22,6 +22,7 @@ const deviceLinks = [
   { to: '/devices', label: 'All Devices' },
   { to: '/devices/network', label: 'Network Devices' },
   { to: '/devices/cameras', label: 'Cameras' },
+  { to: '/devices/access', label: 'Access Devices' },
 ];
 
 export default function Navbar() {

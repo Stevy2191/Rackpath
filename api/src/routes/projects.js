@@ -20,6 +20,7 @@ const SCOPED_TABLES = [
   'device_tags',
   'project_credential_macros',
   'project_cameras',
+  'project_access_devices',
   'devices',
   'project_vlans',
   'project_integrations',
