@@ -28,6 +28,7 @@ function buildConfig(row) {
     api_key: row.api_key_plain,
     verify_ssl: !!row.verify_ssl,
     config: row.config || null,
+    last_synced_at: row.last_synced_at,
   };
 }
 

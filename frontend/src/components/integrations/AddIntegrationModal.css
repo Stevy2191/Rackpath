@@ -44,6 +44,29 @@
   width: auto;
 }
 
+.integration-radio-group {
+  display: flex;
+  flex-direction: row !important;
+  gap: 1.25rem;
+}
+
+.integration-radio-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: normal;
+}
+
+.integration-radio-label input {
+  width: auto;
+}
+
+.integration-helper-text {
+  margin: -0.25rem 0 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
 .integration-form-error {
   font-size: 0.85rem;
   color: var(--color-danger);

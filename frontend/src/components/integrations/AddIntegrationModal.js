@@ -25,6 +25,7 @@ function initForm(integration) {
     password: '',
     api_key: '',
     verify_ssl: integration?.verify_ssl != null ? !!integration.verify_ssl : true,
+    unifi_auth_method: !integration || integration.has_api_key ? 'api_key' : 'password',
     auto_sync: integration ? !!integration.auto_sync : false,
     sync_interval_minutes: integration?.sync_interval_minutes || 60,
     devices_endpoint: config.devices_endpoint || '',
@@ -43,11 +44,23 @@ function buildPayload(platform, form) {
     sync_interval_minutes: Number(form.sync_interval_minutes) || 60,
   };
 
-  if (platform === 'unifi' || platform === 'zabbix') {
-    payload.username = form.username || null;
+  if (platform === 'unifi') {
+    if (form.unifi_auth_method === 'password') {
+      payload.username = form.username || null;
+      if (form.password) payload.password = form.password;
+      payload.api_key = null;
+    } else {
+      if (form.api_key) payload.api_key = form.api_key;
+      payload.username = null;
+      payload.password = null;
+    }
+  } else {
+    if (platform === 'zabbix') {
+      payload.username = form.username || null;
+    }
+    if (form.password) payload.password = form.password;
+    if (form.api_key) payload.api_key = form.api_key;
   }
-  if (form.password) payload.password = form.password;
-  if (form.api_key) payload.api_key = form.api_key;
 
   if (platform === 'snmp') {
     payload.config = { snmp_version: form.snmp_version };
@@ -133,6 +146,9 @@ export default function AddIntegrationModal({ integration, projectId, onClose, o
                   className="integration-platform-btn"
                   onClick={() => {
                     setPlatform(p.id);
+                    if (!integration && p.id === 'unifi') {
+                      setForm((f) => ({ ...f, verify_ssl: false }));
+                    }
                     setStep(2);
                   }}
                 >
@@ -178,14 +194,51 @@ export default function AddIntegrationModal({ integration, projectId, onClose, o
                 Controller URL
                 <input value={form.base_url} onChange={set('base_url')} placeholder="https://192.168.1.1" required />
               </label>
-              <label>
-                Username
-                <input value={form.username} onChange={set('username')} />
-              </label>
-              <label>
-                Password
-                <input type="password" value={form.password} onChange={set('password')} placeholder={passwordPlaceholder} />
-              </label>
+
+              <div className="integration-radio-group">
+                <label className="integration-radio-label">
+                  <input
+                    type="radio"
+                    name="unifi_auth_method"
+                    value="api_key"
+                    checked={form.unifi_auth_method === 'api_key'}
+                    onChange={() => setForm((f) => ({ ...f, unifi_auth_method: 'api_key' }))}
+                  />
+                  API Key
+                </label>
+                <label className="integration-radio-label">
+                  <input
+                    type="radio"
+                    name="unifi_auth_method"
+                    value="password"
+                    checked={form.unifi_auth_method === 'password'}
+                    onChange={() => setForm((f) => ({ ...f, unifi_auth_method: 'password' }))}
+                  />
+                  Username &amp; Password
+                </label>
+              </div>
+              <p className="integration-helper-text">
+                API Key is recommended. Generate one in UniFi Console → Settings → Control Plane → API
+              </p>
+
+              {form.unifi_auth_method === 'api_key' ? (
+                <label>
+                  API Key
+                  <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
+                </label>
+              ) : (
+                <>
+                  <label>
+                    Username
+                    <input value={form.username} onChange={set('username')} />
+                  </label>
+                  <label>
+                    Password
+                    <input type="password" value={form.password} onChange={set('password')} placeholder={passwordPlaceholder} />
+                  </label>
+                </>
+              )}
+
               <label className="integration-checkbox-label">
                 <input type="checkbox" checked={form.verify_ssl} onChange={set('verify_ssl')} />
                 Verify SSL

@@ -1,6 +1,6 @@
-// Adapter for Ubiquiti UniFi Network controllers — both UniFi OS (UDM /
-// Cloud Gateway, API behind /proxy/network) and the legacy standalone
-// controller (API at the root).
+// Adapter for Ubiquiti UniFi Network controllers — supports both UniFi OS API
+// key (Bearer token, UniFi OS 4.x+) and legacy cookie-based username/password
+// login for older standalone controllers.
 
 const axios = require('axios');
 const https = require('https');
@@ -25,10 +25,9 @@ function makeClient(config) {
 }
 
 // Logs in via the UniFi OS endpoint first, falling back to the legacy
-// controller login. Returns an authenticated session (cookie + optional CSRF
-// token) and whether the proxy prefix is needed for subsequent API calls.
-async function login(config) {
-  const http = makeClient(config);
+// controller login. Returns the cookie/CSRF headers and whether the proxy
+// prefix is needed for subsequent API calls.
+async function cookieLogin(http, config) {
   const credentials = { username: config.username, password: config.password };
 
   let res = await http.post('/api/auth/login', credentials);
@@ -48,25 +47,39 @@ async function login(config) {
   const cookie = setCookie.map((c) => c.split(';')[0]).join('; ');
   const csrfToken = res.headers['x-csrf-token'];
 
-  return { http, cookie, csrfToken, isUnifiOS };
+  const headers = { Cookie: cookie };
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+  return { headers, isUnifiOS };
 }
 
-function authHeaders(session) {
-  const headers = { Cookie: session.cookie };
-  if (session.csrfToken) headers['X-CSRF-Token'] = session.csrfToken;
-  return headers;
-}
+// Authenticates against the controller using whichever credentials are
+// configured. An API key (Bearer token) takes priority and talks to the
+// UniFi OS proxy directly; username/password falls back to a cookie-based
+// session, which also works against legacy standalone controllers.
+async function authenticate(config) {
+  const http = makeClient(config);
 
-function apiPrefix(session) {
-  return session.isUnifiOS ? '/proxy/network' : '';
+  if (config.api_key) {
+    return {
+      http,
+      headers: { Authorization: `Bearer ${config.api_key}` },
+      prefix: '/proxy/network',
+      isUnifiOS: true,
+    };
+  }
+
+  const { headers, isUnifiOS } = await cookieLogin(http, config);
+  return { http, headers, prefix: isUnifiOS ? '/proxy/network' : '', isUnifiOS };
 }
 
 async function testConnection(config) {
   try {
-    const session = await login(config);
-    const res = await session.http.get(`${apiPrefix(session)}/api/s/default/self`, {
-      headers: authHeaders(session),
-    });
+    const session = await authenticate(config);
+    const path = config.api_key
+      ? `${session.prefix}/v2/api/site/default/device`
+      : `${session.prefix}/api/s/default/self`;
+    const res = await session.http.get(path, { headers: session.headers });
     if (res.status >= 400) {
       return { success: false, message: `Connected but request failed (HTTP ${res.status})` };
     }
@@ -80,29 +93,54 @@ function mapDeviceType(type) {
   return UNIFI_TYPE_MAP[(type || '').toLowerCase()] || type || null;
 }
 
+// UniFi API responses come back as either a bare array, `{ data: [...] }`
+// (v1 REST) or `{ network_devices: [...] }` (v2). Handle all three.
+function extractList(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.network_devices)) return data.network_devices;
+  return [];
+}
+
+// v1 reports device state as a numeric `state` (1 = online). v2 reports a
+// `connectionState`/`status` string instead. Returns null if neither field
+// is present so callers can leave the device's status untouched.
+function isDeviceUp(dev) {
+  if (typeof dev.state === 'number') return dev.state === 1;
+  if (dev.connectionState) return dev.connectionState === 'CONNECTED';
+  if (dev.status) return dev.status === 'online' || dev.status === 'CONNECTED';
+  return null;
+}
+
 async function syncData(config, projectId, db) {
-  const session = await login(config);
-  const headers = authHeaders(session);
-  const prefix = apiPrefix(session);
+  const session = await authenticate(config);
+  const { http, headers, prefix, isUnifiOS } = session;
 
   let devicesImported = 0;
   let vlansImported = 0;
   const errors = [];
 
   try {
-    const res = await session.http.get(`${prefix}/api/s/default/stat/device`, { headers });
+    const devicePath = isUnifiOS ? `${prefix}/v2/api/site/default/device` : `${prefix}/api/s/default/stat/device`;
+    const res = await http.get(devicePath, { headers });
     if (res.status >= 400) throw new Error(`Failed to fetch devices (HTTP ${res.status})`);
-    const devices = res.data?.data || [];
+
+    if (!config.last_synced_at) {
+      console.log(`[unifi] device response from ${devicePath}:`, JSON.stringify(res.data, null, 2));
+    }
+
+    const devices = extractList(res.data);
 
     for (const dev of devices) {
+      const up = isDeviceUp(dev);
       const ok = await upsertDevice(db, projectId, config.id, {
-        hostname: dev.name || dev.model || dev.mac,
-        ip: dev.ip || null,
-        mac: dev.mac || null,
-        type: mapDeviceType(dev.type),
-        model: dev.model || null,
-        serial_number: dev.serial || dev.mac || null,
-        status: dev.state === 1 ? 'up' : 'down',
+        hostname: dev.name || dev.displayName || dev.model || dev.mac || dev.macAddress,
+        ip: dev.ip || dev.ipAddress || null,
+        mac: dev.mac || dev.macAddress || null,
+        type: mapDeviceType(dev.type || dev.deviceType),
+        model: dev.model || dev.modelDisplayName || null,
+        serial_number: dev.serial || dev.serialNumber || dev.mac || dev.macAddress || null,
+        status: up == null ? null : up ? 'up' : 'down',
       });
       if (ok) devicesImported += 1;
     }
@@ -111,9 +149,9 @@ async function syncData(config, projectId, db) {
   }
 
   try {
-    const res = await session.http.get(`${prefix}/api/s/default/rest/networkconf`, { headers });
+    const res = await http.get(`${prefix}/api/s/default/rest/networkconf`, { headers });
     if (res.status >= 400) throw new Error(`Failed to fetch networks (HTTP ${res.status})`);
-    const networks = res.data?.data || [];
+    const networks = extractList(res.data);
 
     for (const net of networks) {
       if (net.vlan == null) continue;
