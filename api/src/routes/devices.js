@@ -340,26 +340,44 @@ router.post('/:id/scan', async (req, res, next) => {
       'SELECT id FROM topology_nodes WHERE device_id = ? AND project_id = ?',
       [device.id, req.projectId]
     );
+
+    let topologyInterfaceCount = 0;
+    let topologyNodeHostname = null;
     if (nodeRows.length > 0) {
+      const ipByIfIndex = new Map();
+      for (const ipEntry of result.ips) {
+        if (ipEntry.ifIndex != null && ipEntry.address) {
+          ipByIfIndex.set(ipEntry.ifIndex, ipEntry.address);
+        }
+      }
+
       const [existingInterfaces] = await pool.query(
-        'SELECT id, name FROM topology_node_interfaces WHERE device_id = ? AND project_id = ?',
+        'SELECT id, name, ip FROM topology_node_interfaces WHERE device_id = ? AND project_id = ?',
         [device.id, req.projectId]
       );
-      const existingByName = new Map(existingInterfaces.map((row) => [row.name, row.id]));
+      const existingByName = new Map(existingInterfaces.map((row) => [row.name, row]));
 
       for (const iface of result.interfaces) {
-        if (existingByName.has(iface.name)) {
-          await pool.query('UPDATE topology_node_interfaces SET speed = ? WHERE id = ?', [
-            iface.speed,
-            existingByName.get(iface.name),
-          ]);
+        const discoveredIp = ipByIfIndex.get(iface.index) || null;
+        const existing = existingByName.get(iface.name);
+
+        if (existing) {
+          await pool.query(
+            'UPDATE topology_node_interfaces SET speed = ?, status = ?, description = ?, ip = ? WHERE id = ?',
+            [iface.speed, iface.operStatus, iface.name, discoveredIp || existing.ip, existing.id]
+          );
         } else {
           await pool.query(
-            'INSERT INTO topology_node_interfaces (project_id, device_id, name, speed) VALUES (?, ?, ?, ?)',
-            [req.projectId, device.id, iface.name, iface.speed]
+            `INSERT INTO topology_node_interfaces (project_id, device_id, parent_id, name, description, ip, speed, status)
+             VALUES (?, ?, NULL, ?, ?, ?, ?, ?)`,
+            [req.projectId, device.id, iface.name, iface.name, discoveredIp, iface.speed, iface.operStatus]
           );
         }
       }
+
+      topologyInterfaceCount = result.interfaces.length;
+      topologyNodeHostname =
+        blankHostname && result.sysName ? result.sysName : device.hostname || device.ip || `Device ${device.id}`;
     }
 
     res.json({
@@ -372,6 +390,8 @@ router.post('/:id/scan', async (req, res, next) => {
       ipCount: result.ips.length,
       interfaces: result.interfaces,
       ips: result.ips,
+      topologyInterfaceCount,
+      topologyNodeHostname,
     });
   } catch (err) {
     next(err);

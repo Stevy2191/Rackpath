@@ -81,6 +81,7 @@ export default function DevicesPage() {
   const [locations, setLocations] = useState([]);
   const [scanningId, setScanningId] = useState(null);
   const [scanResult, setScanResult] = useState(null); // { device, result }
+  const [toast, setToast] = useState(null);
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -126,6 +127,11 @@ export default function DevicesPage() {
       .get(`/projects/${currentProjectId}/device-tags`)
       .then((res) => setTags(res.data || []))
       .catch((err) => setError(err.response?.data?.error || err.message));
+  };
+
+  const showToast = (toastInfo) => {
+    setToast(toastInfo);
+    setTimeout(() => setToast(null), 6000);
   };
 
   const loadMacros = () => {
@@ -349,6 +355,14 @@ export default function DevicesPage() {
         prev.map((d) => (d.id === device.id ? { ...d, last_scanned_at: new Date().toISOString() } : d))
       );
       setScanResult({ device, result: res.data });
+      if (res.data.topologyInterfaceCount > 0) {
+        window.dispatchEvent(new CustomEvent('device-scan-complete', { detail: { deviceId: device.id } }));
+        const count = res.data.topologyInterfaceCount;
+        showToast({
+          type: 'success',
+          text: `Topology updated — ${count} interface${count === 1 ? '' : 's'} synced to ${res.data.topologyNodeHostname}`,
+        });
+      }
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally {
@@ -984,6 +998,8 @@ export default function DevicesPage() {
           onUpdateDevice={handleUpdateDeviceFromScan}
         />
       )}
+
+      {toast && <div className={`devices-toast devices-toast-${toast.type}`}>{toast.text}</div>}
     </div>
   );
 }

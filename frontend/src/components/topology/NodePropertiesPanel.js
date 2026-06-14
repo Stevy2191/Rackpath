@@ -77,6 +77,13 @@ export default function NodePropertiesPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId]);
 
+  const loadInterfaces = (deviceId) => {
+    client
+      .get(`/topology/nodes/${deviceId}/interfaces`)
+      .then((res) => setInterfaces(res.data || []))
+      .catch(() => setInterfaces([]));
+  };
+
   useEffect(() => {
     if (!linkedDeviceId) {
       setInterfaces([]);
@@ -103,6 +110,19 @@ export default function NodePropertiesPanel({
     return () => {
       cancelled = true;
     };
+  }, [linkedDeviceId]);
+
+  // When a device is scanned (from the Device Inventory page), refresh this
+  // panel's interface list in place if it's currently showing that device.
+  useEffect(() => {
+    if (!linkedDeviceId) return;
+    const handler = (e) => {
+      if (e.detail?.deviceId === linkedDeviceId) {
+        loadInterfaces(linkedDeviceId);
+      }
+    };
+    window.addEventListener('device-scan-complete', handler);
+    return () => window.removeEventListener('device-scan-complete', handler);
   }, [linkedDeviceId]);
 
   if (!data) return <aside className="node-properties-panel" />;
@@ -313,6 +333,11 @@ export default function NodePropertiesPanel({
                     title="Click to edit"
                   >
                     {iface.name || 'unnamed'}
+                  </span>
+                )}
+                {iface.status && (
+                  <span className={`node-properties-iface-status node-properties-iface-status-${iface.status}`}>
+                    {iface.status}
                   </span>
                 )}
                 <input

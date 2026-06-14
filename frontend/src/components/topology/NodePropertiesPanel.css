@@ -235,6 +235,31 @@
   box-sizing: border-box;
 }
 
+.node-properties-iface-status {
+  flex-shrink: 0;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.node-properties-iface-status-up {
+  background: rgba(22, 163, 74, 0.2);
+  color: #16a34a;
+}
+
+.node-properties-iface-status-down {
+  background: rgba(220, 38, 38, 0.2);
+  color: #dc2626;
+}
+
+.node-properties-iface-status-testing,
+.node-properties-iface-status-unknown {
+  background: rgba(107, 114, 128, 0.2);
+  color: #6b7280;
+}
+
 .node-properties-vlan-prefix {
   flex-shrink: 0;
   font-size: 0.7rem;
