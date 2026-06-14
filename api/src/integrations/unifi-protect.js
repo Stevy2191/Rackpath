@@ -18,8 +18,6 @@
 
 const axios = require('axios');
 const https = require('https');
-const { wrapper } = require('axios-cookiejar-support');
-const { CookieJar } = require('tough-cookie');
 const { upsertCamera } = require('./helpers');
 
 function makeClient(config) {
@@ -88,24 +86,12 @@ function sanitizeForLog(obj) {
   return obj;
 }
 
-// Creates a cookie-jar-backed axios client for the bootstrap auth flow, so
-// the TOKEN cookie returned by /api/auth/login is automatically attached to
-// subsequent requests.
-function makeBootstrapClient(config) {
-  return wrapper(
-    axios.create({
-      baseURL: config.base_url.replace(/\/+$/, ''),
-      httpsAgent: new https.Agent({ rejectUnauthorized: config.verify_ssl !== false }),
-      validateStatus: () => true,
-      timeout: 10000,
-      jar: new CookieJar(),
-    })
-  );
-}
-
-// Logs in via the UniFi OS endpoint using username/password, relying on the
-// client's cookie jar to capture the TOKEN cookie for subsequent requests.
-// Returns extra headers (X-CSRF-Token / Authorization) if present.
+// Logs in via the UniFi OS endpoint using username/password and manually
+// extracts the session token from the response, since axios-cookiejar-support
+// is incompatible with a custom httpsAgent (needed for self-signed certs).
+// The token is found either in a `TOKEN=` Set-Cookie entry, an Authorization
+// header, or the response body, and is sent back as a `Cookie: TOKEN=...`
+// header on subsequent requests. Returns extra headers (Cookie / X-CSRF-Token).
 async function bootstrapLogin(http, config, httpsAgent) {
   const url = `${http.defaults.baseURL}/api/auth/login`;
   let res;
@@ -130,16 +116,27 @@ async function bootstrapLogin(http, config, httpsAgent) {
     throw new Error(`UniFi Protect bootstrap login failed: ${message}`);
   }
 
-  const setCookie = res.headers['set-cookie'] || [];
-  const hasToken = setCookie.some((c) => /^TOKEN=/i.test(c));
-  console.log(`[unifi-protect] [bootstrap] login ${hasToken ? 'received' : 'did not receive'} a TOKEN cookie`);
+  const cookies = res.headers['set-cookie'];
+  const tokenCookie = cookies?.find((c) => c.startsWith('TOKEN='));
+  let token = tokenCookie?.split(';')[0]?.replace('TOKEN=', '');
 
-  const headers = {};
+  if (!token) {
+    const authHeader = res.headers['authorization'];
+    if (authHeader) token = authHeader.replace(/^Bearer\s+/i, '');
+  }
+  if (!token) {
+    token = res.data?.token || res.data?.access_token || null;
+  }
+
+  console.log(`[unifi-protect] [bootstrap] login ${token ? 'received' : 'did not receive'} a session token`);
+
+  if (!token) {
+    throw new Error('UniFi Protect bootstrap login did not return a session token');
+  }
+
+  const headers = { Cookie: `TOKEN=${token}` };
   const csrfToken = res.headers['x-csrf-token'];
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-
-  const token = res.data?.token || res.data?.access_token;
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   return headers;
 }
@@ -160,9 +157,7 @@ async function fetchBootstrap(http, headers, httpsAgent) {
   }
 
   console.log(`[unifi-protect] [bootstrap] GET ${url} -> HTTP ${res.status}`);
-  if (res.status === 500) {
-    console.log(`[unifi-protect] [bootstrap] response body (500): ${bodySnippet(res.data)}`);
-  }
+  console.log(`[unifi-protect] [bootstrap] response body (first 200 chars): ${bodySnippet(res.data).slice(0, 200)}`);
   if (res.status !== 200 || !res.data || typeof res.data !== 'object') return null;
 
   return res.data;
@@ -476,7 +471,7 @@ async function testConnectionBootstrap(config) {
   const httpsAgent = buildHttpsAgent(config);
 
   try {
-    const http = makeBootstrapClient(config);
+    const http = makeClient(config);
     const headers = await bootstrapLogin(http, config, httpsAgent);
     const bootstrap = await fetchBootstrap(http, headers, httpsAgent);
 
@@ -503,7 +498,7 @@ async function syncDataBootstrap(config, projectId, db) {
   const httpsAgent = buildHttpsAgent(config);
 
   try {
-    const http = makeBootstrapClient(config);
+    const http = makeClient(config);
     const headers = await bootstrapLogin(http, config, httpsAgent);
     const bootstrap = await fetchBootstrap(http, headers, httpsAgent);
 
@@ -518,6 +513,7 @@ async function syncDataBootstrap(config, projectId, db) {
       console.log(`[unifi-protect] [bootstrap] nvr keys: ${Object.keys(bootstrap.nvr).join(', ')}`);
     }
     if (cameras.length > 0) {
+      console.log(`[unifi-protect] [bootstrap] first camera keys: ${Object.keys(cameras[0]).join(', ')}`);
       console.log(`[unifi-protect] [bootstrap] first camera (sanitized): ${bodySnippet(sanitizeForLog(cameras[0]))}`);
     }
 
