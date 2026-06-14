@@ -3,6 +3,8 @@ import { Eye, EyeOff, Clipboard, Loader2, Pencil, RefreshCw, Trash2 } from 'luci
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
 import CameraFormModal from '../components/cameras/CameraFormModal';
+import BulkActionToolbar from '../components/devices/BulkActionToolbar';
+import BulkEditModal from '../components/devices/BulkEditModal';
 import './Cameras.css';
 
 function formatLastSeen(value) {
@@ -28,6 +30,8 @@ export default function CamerasPage() {
   const [protectIntegration, setProtectIntegration] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
 
   const load = () => {
     if (!currentProjectId) return;
@@ -94,6 +98,50 @@ export default function CamerasPage() {
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (rows) => {
+    const ids = rows.map((r) => r.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        ids.forEach((id) => next.delete(id));
+      } else {
+        ids.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} selected camera${selectedIds.size === 1 ? '' : 's'}?`)) return;
+    try {
+      const items = Array.from(selectedIds).map((id) => ({ id, source: 'camera' }));
+      await client.post('/devices/bulk-delete', { items });
+      setSelectedIds(new Set());
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleBulkEditSave = async (fields) => {
+    const items = Array.from(selectedIds).map((id) => ({ id, source: 'camera' }));
+    await client.post('/devices/bulk-update', { items, ...fields });
+    setSelectedIds(new Set());
+    setShowBulkEdit(false);
+    load();
   };
 
   const handleSync = async () => {
@@ -234,10 +282,24 @@ export default function CamerasPage() {
 
       <div className="cameras-count">{filtered.length} camera{filtered.length === 1 ? '' : 's'}</div>
 
+      <BulkActionToolbar
+        count={selectedIds.size}
+        onEdit={() => setShowBulkEdit(true)}
+        onDelete={handleBulkDelete}
+        onClear={() => setSelectedIds(new Set())}
+      />
+
       <div className="cameras-table-wrap">
         <table className="cameras-table">
           <thead>
             <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  checked={filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id))}
+                  onChange={() => toggleSelectAll(filtered)}
+                />
+              </th>
               <th>Status</th>
               <th>Name</th>
               <th>Model</th>
@@ -251,6 +313,9 @@ export default function CamerasPage() {
           <tbody>
             {filtered.map((camera) => (
               <tr key={camera.id}>
+                <td>
+                  <input type="checkbox" checked={selectedIds.has(camera.id)} onChange={() => toggleSelect(camera.id)} />
+                </td>
                 <td>
                   <span className={`cameras-status-dot cameras-status-${camera.status || 'unknown'}`} title={camera.status} />
                 </td>
@@ -285,7 +350,7 @@ export default function CamerasPage() {
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="cameras-empty">
+                <td colSpan={9} className="cameras-empty">
                   {cameras.length === 0 ? 'No cameras yet. Click "+ Add Camera" to create one.' : 'No cameras match your search.'}
                 </td>
               </tr>
@@ -296,6 +361,16 @@ export default function CamerasPage() {
 
       {modalState && (
         <CameraFormModal initial={modalState === 'new' ? null : modalState} onSave={handleSave} onClose={() => setModalState(null)} />
+      )}
+
+      {showBulkEdit && (
+        <BulkEditModal
+          count={selectedIds.size}
+          showTags={false}
+          showCredentialMacro={false}
+          onSave={handleBulkEditSave}
+          onClose={() => setShowBulkEdit(false)}
+        />
       )}
 
       {toast && <div className={`cameras-toast cameras-toast-${toast.type}`}>{toast.text}</div>}

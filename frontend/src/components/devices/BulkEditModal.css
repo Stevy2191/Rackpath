@@ -1,0 +1,16 @@
+.bulk-edit-hint {
+  margin: -0.5rem 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.bulk-edit-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.bulk-edit-empty {
+  font-size: 0.8rem;
+  color: var(--color-text-faint);
+}

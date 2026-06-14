@@ -18,55 +18,107 @@ function parseTagIds(tag) {
 // GET /api/devices - list devices in the current project
 // GET /api/devices?unplaced=true - only devices with no linked topology node
 // GET /api/devices?type=&location=&tag=&search= - filter results
+//
+// Combines rows from `devices` and `project_cameras` into a single list so
+// cameras show up in the All Devices view. Each row gets a `source` of
+// 'device' or 'camera' so the frontend knows which table it came from and
+// which edit modal to open. Filtering by type='camera' returns only camera
+// rows; any other type (or no type filter) includes `devices` rows, and an
+// empty type filter also includes cameras. Tag and "unplaced" filters only
+// apply to `devices`, since cameras have neither tags nor topology nodes.
 router.get('/', async (req, res, next) => {
   try {
-    let query =
-      'SELECT d.*, tn.id AS topology_node_id, pi.platform AS source_integration_platform, pi.name AS source_integration_name ' +
-      'FROM devices d ' +
-      'LEFT JOIN topology_nodes tn ON tn.device_id = d.id ' +
-      'LEFT JOIN project_integrations pi ON pi.id = d.source_integration_id';
-
-    const conditions = ['d.project_id = ?'];
-    const params = [req.projectId];
-
-    if (req.query.unplaced === 'true') {
-      conditions.push('tn.id IS NULL');
-    }
-    if (req.query.type) {
-      conditions.push('d.type = ?');
-      params.push(req.query.type);
-    }
-    if (req.query.location) {
-      conditions.push('d.location = ?');
-      params.push(req.query.location);
-    }
-    if (req.query.search) {
-      conditions.push('(d.hostname LIKE ? OR d.ip LIKE ? OR d.model LIKE ? OR d.serial_number LIKE ?)');
-      const like = `%${req.query.search}%`;
-      params.push(like, like, like, like);
-    }
-
+    const typeFilter = req.query.type || '';
     const tagIds = parseTagIds(req.query.tag);
-    if (tagIds.length > 0) {
-      conditions.push(
-        `d.id IN (SELECT device_id FROM device_tag_assignments WHERE tag_id IN (${tagIds.map(() => '?').join(', ')}))`
-      );
-      params.push(...tagIds);
+    const includeDevices = typeFilter !== 'camera';
+    const includeCameras =
+      (typeFilter === '' || typeFilter === 'camera') && tagIds.length === 0 && req.query.unplaced !== 'true';
+
+    let rows = [];
+
+    if (includeDevices) {
+      let query =
+        'SELECT d.*, tn.id AS topology_node_id, pi.platform AS source_integration_platform, pi.name AS source_integration_name ' +
+        'FROM devices d ' +
+        'LEFT JOIN topology_nodes tn ON tn.device_id = d.id ' +
+        'LEFT JOIN project_integrations pi ON pi.id = d.source_integration_id';
+
+      const conditions = ['d.project_id = ?'];
+      const params = [req.projectId];
+
+      if (req.query.unplaced === 'true') {
+        conditions.push('tn.id IS NULL');
+      }
+      if (typeFilter) {
+        conditions.push('d.type = ?');
+        params.push(typeFilter);
+      }
+      if (req.query.location) {
+        conditions.push('d.location = ?');
+        params.push(req.query.location);
+      }
+      if (req.query.search) {
+        conditions.push('(d.hostname LIKE ? OR d.ip LIKE ? OR d.model LIKE ? OR d.serial_number LIKE ?)');
+        const like = `%${req.query.search}%`;
+        params.push(like, like, like, like);
+      }
+      if (tagIds.length > 0) {
+        conditions.push(
+          `d.id IN (SELECT device_id FROM device_tag_assignments WHERE tag_id IN (${tagIds.map(() => '?').join(', ')}))`
+        );
+        params.push(...tagIds);
+      }
+
+      query += ` WHERE ${conditions.join(' AND ')}`;
+
+      const [deviceRows] = await pool.query(query, params);
+      for (const row of deviceRows) row.source = 'device';
+      rows = rows.concat(deviceRows);
     }
 
-    query += ` WHERE ${conditions.join(' AND ')} ORDER BY d.hostname, d.ip`;
+    if (includeCameras) {
+      let cameraQuery =
+        `SELECT pc.id, pc.name AS hostname, pc.ip_address AS ip, pc.mac, 'camera' AS type, pc.model, ` +
+        `pc.status, pc.location_notes AS location, pc.last_seen AS last_scanned_at, ` +
+        `pc.integration_id AS source_integration_id, pi.platform AS source_integration_platform, ` +
+        `pi.name AS source_integration_name ` +
+        'FROM project_cameras pc ' +
+        'LEFT JOIN project_integrations pi ON pi.id = pc.integration_id';
 
-    const [rows] = await pool.query(query, params);
+      const cameraConditions = ['pc.project_id = ?'];
+      const cameraParams = [req.projectId];
 
-    if (rows.length > 0) {
-      const ids = rows.map((r) => r.id);
+      if (req.query.location) {
+        cameraConditions.push('pc.location_notes = ?');
+        cameraParams.push(req.query.location);
+      }
+      if (req.query.search) {
+        cameraConditions.push('(pc.name LIKE ? OR pc.ip_address LIKE ? OR pc.model LIKE ?)');
+        const like = `%${req.query.search}%`;
+        cameraParams.push(like, like, like);
+      }
+
+      cameraQuery += ` WHERE ${cameraConditions.join(' AND ')}`;
+
+      const [cameraRows] = await pool.query(cameraQuery, cameraParams);
+      for (const row of cameraRows) {
+        row.source = 'camera';
+        row.topology_node_id = null;
+        row.credential_macro_id = null;
+        row.tags = [];
+      }
+      rows = rows.concat(cameraRows);
+    }
+
+    const deviceIds = rows.filter((r) => r.source === 'device').map((r) => r.id);
+    if (deviceIds.length > 0) {
       const [tagRows] = await pool.query(
         `SELECT dta.device_id, t.id, t.name, t.color
          FROM device_tag_assignments dta
          JOIN device_tags t ON t.id = dta.tag_id
-         WHERE dta.device_id IN (${ids.map(() => '?').join(', ')})
+         WHERE dta.device_id IN (${deviceIds.map(() => '?').join(', ')})
          ORDER BY t.name ASC`,
-        ids
+        deviceIds
       );
       const tagsByDevice = {};
       for (const tr of tagRows) {
@@ -74,11 +126,138 @@ router.get('/', async (req, res, next) => {
         tagsByDevice[tr.device_id].push({ id: tr.id, name: tr.name, color: tr.color });
       }
       for (const row of rows) {
-        row.tags = tagsByDevice[row.id] || [];
+        if (row.source === 'device') row.tags = tagsByDevice[row.id] || [];
       }
     }
 
+    rows.sort((a, b) => {
+      const ah = (a.hostname || '').toLowerCase();
+      const bh = (b.hostname || '').toLowerCase();
+      if (ah !== bh) return ah < bh ? -1 : 1;
+      const ai = (a.ip || '').toLowerCase();
+      const bi = (b.ip || '').toLowerCase();
+      if (ai !== bi) return ai < bi ? -1 : 1;
+      return 0;
+    });
+
     res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Maps the bulk-edit "Status" dropdown (online/offline/unknown, matching how
+// project_cameras stores status) onto the up/down/unknown vocabulary used by
+// the devices table and its SNMP/integration syncs.
+const BULK_DEVICE_STATUS_MAP = { online: 'up', offline: 'down', unknown: 'unknown' };
+
+// POST /api/devices/bulk-update - apply the same field changes to a batch of
+// devices and/or cameras (selected via checkboxes on the Devices/Cameras
+// pages). Only fields present in the body are applied; everything else is
+// left untouched. `items` is an array of { id, source: 'device' | 'camera' }.
+router.post('/bulk-update', async (req, res, next) => {
+  try {
+    const { items, location, tag_ids, credential_macro_id, status } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items is required' });
+    }
+
+    const deviceIds = items.filter((i) => i && i.source !== 'camera').map((i) => Number(i.id));
+    const cameraIds = items.filter((i) => i && i.source === 'camera').map((i) => Number(i.id));
+
+    if (deviceIds.length > 0) {
+      const updates = [];
+      const values = [];
+      if (location !== undefined) {
+        updates.push('location = ?');
+        values.push(location || null);
+      }
+      if (credential_macro_id !== undefined) {
+        updates.push('credential_macro_id = ?');
+        values.push(credential_macro_id || null);
+      }
+      if (status !== undefined) {
+        updates.push('status = ?');
+        values.push(BULK_DEVICE_STATUS_MAP[status] || status);
+      }
+      if (updates.length > 0) {
+        await pool.query(
+          `UPDATE devices SET ${updates.join(', ')} WHERE project_id = ? AND id IN (${deviceIds.map(() => '?').join(', ')})`,
+          [...values, req.projectId, ...deviceIds]
+        );
+      }
+
+      if (Array.isArray(tag_ids) && tag_ids.length > 0) {
+        const [validTagRows] = await pool.query(
+          `SELECT id FROM device_tags WHERE project_id = ? AND id IN (${tag_ids.map(() => '?').join(', ')})`,
+          [req.projectId, ...tag_ids]
+        );
+        const validTagIds = validTagRows.map((r) => r.id);
+        if (validTagIds.length > 0) {
+          const pairs = [];
+          const params = [];
+          for (const deviceId of deviceIds) {
+            for (const tagId of validTagIds) {
+              pairs.push('(?, ?)');
+              params.push(deviceId, tagId);
+            }
+          }
+          await pool.query(`INSERT IGNORE INTO device_tag_assignments (device_id, tag_id) VALUES ${pairs.join(', ')}`, params);
+        }
+      }
+    }
+
+    if (cameraIds.length > 0) {
+      const updates = [];
+      const values = [];
+      if (location !== undefined) {
+        updates.push('location_notes = ?');
+        values.push(location || null);
+      }
+      if (status !== undefined) {
+        updates.push('status = ?');
+        values.push(status || 'unknown');
+      }
+      if (updates.length > 0) {
+        await pool.query(
+          `UPDATE project_cameras SET ${updates.join(', ')} WHERE project_id = ? AND id IN (${cameraIds.map(() => '?').join(', ')})`,
+          [...values, req.projectId, ...cameraIds]
+        );
+      }
+    }
+
+    res.json({ updated: deviceIds.length + cameraIds.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/devices/bulk-delete - delete a batch of devices and/or cameras.
+// `items` is an array of { id, source: 'device' | 'camera' }.
+router.post('/bulk-delete', async (req, res, next) => {
+  try {
+    const { items } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items is required' });
+    }
+
+    const deviceIds = items.filter((i) => i && i.source !== 'camera').map((i) => Number(i.id));
+    const cameraIds = items.filter((i) => i && i.source === 'camera').map((i) => Number(i.id));
+
+    if (deviceIds.length > 0) {
+      await pool.query(`DELETE FROM devices WHERE project_id = ? AND id IN (${deviceIds.map(() => '?').join(', ')})`, [
+        req.projectId,
+        ...deviceIds,
+      ]);
+    }
+    if (cameraIds.length > 0) {
+      await pool.query(`DELETE FROM project_cameras WHERE project_id = ? AND id IN (${cameraIds.map(() => '?').join(', ')})`, [
+        req.projectId,
+        ...cameraIds,
+      ]);
+    }
+
+    res.status(204).send();
   } catch (err) {
     next(err);
   }

@@ -6,6 +6,9 @@ import { useProject } from '../project/ProjectContext';
 import { platformInfo } from '../components/integrations/platforms';
 import ManageTagsModal from '../components/devices/ManageTagsModal';
 import ScanResultModal from '../components/devices/ScanResultModal';
+import BulkActionToolbar from '../components/devices/BulkActionToolbar';
+import BulkEditModal from '../components/devices/BulkEditModal';
+import CameraFormModal from '../components/cameras/CameraFormModal';
 import './Devices.css';
 
 const emptyDevice = {
@@ -65,9 +68,15 @@ const DEFAULT_VISIBLE_COLUMNS = {
 const PAGE_SIZE = 25;
 
 function deviceStatusClass(status) {
-  if (status === 'up') return 'devices-status-online';
-  if (status === 'down') return 'devices-status-offline';
+  if (status === 'up' || status === 'online') return 'devices-status-online';
+  if (status === 'down' || status === 'offline') return 'devices-status-offline';
   return 'devices-status-unknown';
+}
+
+// Composite key used for bulk-selection, since `devices` and `project_cameras`
+// each have their own id sequence and a device and camera can share an id.
+function rowKey(row) {
+  return `${row.source || 'device'}:${row.id}`;
 }
 
 function formatLastSeen(value) {
@@ -99,6 +108,7 @@ export default function DevicesPage() {
 
   const [devices, setDevices] = useState([]);
   const [accessDevices, setAccessDevices] = useState([]);
+  const [cameras, setCameras] = useState([]);
   const [tags, setTags] = useState([]);
   const [macros, setMacros] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -118,6 +128,10 @@ export default function DevicesPage() {
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [tagPickerDeviceId, setTagPickerDeviceId] = useState(null);
   const [openTagPopover, setOpenTagPopover] = useState(null);
+
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [cameraModalState, setCameraModalState] = useState(null); // null | camera object
 
   const [selectedDeviceId, setSelectedDeviceId] = useState(id ? Number(id) : null);
   const [ports, setPorts] = useState([]);
@@ -173,6 +187,17 @@ export default function DevicesPage() {
       .catch(() => setAccessDevices([]));
   };
 
+  // Loads full camera records (including stream URLs/password) so the camera
+  // edit modal has everything it needs — the combined /devices response only
+  // includes the columns shared with the devices table.
+  const loadCameras = () => {
+    if (!currentProjectId) return;
+    client
+      .get(`/projects/${currentProjectId}/cameras`)
+      .then((res) => setCameras(res.data || []))
+      .catch(() => setCameras([]));
+  };
+
   const loadLocations = () => {
     client
       .get('/devices')
@@ -205,6 +230,7 @@ export default function DevicesPage() {
     loadTags();
     loadMacros();
     loadAccessDevices();
+    loadCameras();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProjectId]);
 
@@ -223,7 +249,7 @@ export default function DevicesPage() {
 
   useEffect(() => {
     loadPorts(selectedDeviceId);
-    const device = devices.find((d) => d.id === selectedDeviceId);
+    const device = devices.find((d) => d.id === selectedDeviceId && d.source !== 'camera');
     setEditDevice(
       device
         ? {
@@ -379,6 +405,85 @@ export default function DevicesPage() {
     }
   };
 
+  const toggleSelect = (key) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (rows) => {
+    const keys = rows.map(rowKey);
+    const allSelected = keys.length > 0 && keys.every((k) => selectedIds.has(k));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        keys.forEach((k) => next.delete(k));
+      } else {
+        keys.forEach((k) => next.add(k));
+      }
+      return next;
+    });
+  };
+
+  const selectedItems = () =>
+    Array.from(selectedIds).map((key) => {
+      const [source, idStr] = key.split(':');
+      return { id: Number(idStr), source };
+    });
+
+  const handleBulkDelete = async () => {
+    const items = selectedItems();
+    if (items.length === 0) return;
+    if (!window.confirm(`Delete ${items.length} selected device${items.length === 1 ? '' : 's'}?`)) return;
+    try {
+      await client.post('/devices/bulk-delete', { items });
+      setSelectedIds(new Set());
+      if (items.some((i) => i.source === 'device' && i.id === selectedDeviceId)) setSelectedDeviceId(null);
+      loadDevices(buildParams());
+      loadLocations();
+      loadCameras();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleBulkEditSave = async (fields) => {
+    const items = selectedItems();
+    await client.post('/devices/bulk-update', { items, ...fields });
+    setSelectedIds(new Set());
+    setShowBulkEdit(false);
+    loadDevices(buildParams());
+    loadLocations();
+    loadCameras();
+  };
+
+  const handleCameraRowClick = (device) => {
+    const camera = cameras.find((c) => c.id === device.id);
+    setCameraModalState(camera || null);
+  };
+
+  const handleSaveCamera = async (draft) => {
+    const res = await client.put(`/cameras/${cameraModalState.id}`, draft);
+    setCameras((prev) => prev.map((c) => (c.id === cameraModalState.id ? res.data : c)));
+    setCameraModalState(null);
+    loadDevices(buildParams());
+    loadLocations();
+  };
+
+  const handleDeleteCamera = async (cameraId) => {
+    try {
+      await client.delete(`/cameras/${cameraId}`);
+      setCameras((prev) => prev.filter((c) => c.id !== cameraId));
+      loadDevices(buildParams());
+      loadLocations();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
   const macroById = React.useMemo(() => new Map(macros.map((m) => [m.id, m])), [macros]);
 
   const canScan = (device) => {
@@ -495,7 +600,7 @@ export default function DevicesPage() {
   const currentPage = Math.min(page, pageCount);
   const pageDevices = viewDevices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const selectedDevice = devices.find((d) => d.id === selectedDeviceId);
+  const selectedDevice = devices.find((d) => d.id === selectedDeviceId && d.source !== 'camera');
 
   return (
     <div className="devices-page">
@@ -666,10 +771,24 @@ export default function DevicesPage() {
         Showing {pageDevices.length} of {totalCount} devices
       </div>
 
+      <BulkActionToolbar
+        count={selectedIds.size}
+        onEdit={() => setShowBulkEdit(true)}
+        onDelete={handleBulkDelete}
+        onClear={() => setSelectedIds(new Set())}
+      />
+
       <div className="devices-table-wrap">
         <table className="devices-table">
           <thead>
             <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  checked={pageDevices.some((d) => !d._access) && pageDevices.filter((d) => !d._access).every((d) => selectedIds.has(rowKey(d)))}
+                  onChange={() => toggleSelectAll(pageDevices.filter((d) => !d._access))}
+                />
+              </th>
               <th>Status</th>
               <th>Hostname</th>
               {visibleColumns.ip && <th>IP Address</th>}
@@ -691,8 +810,21 @@ export default function DevicesPage() {
               const deviceTags = device.tags || [];
               const availableTags = tags.filter((t) => !deviceTags.some((dt) => dt.id === t.id));
               const isAccess = !!device._access;
+              const isCamera = device.source === 'camera';
               return (
-                <tr key={device.id} className={device.id === selectedDeviceId ? 'active' : ''}>
+                <tr
+                  key={rowKey(device)}
+                  className={!isAccess && !isCamera && device.id === selectedDeviceId ? 'active' : ''}
+                >
+                  <td>
+                    {!isAccess && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(rowKey(device))}
+                        onChange={() => toggleSelect(rowKey(device))}
+                      />
+                    )}
+                  </td>
                   <td>
                     <span
                       className={`devices-status-dot ${deviceStatusClass(device.status)}`}
@@ -705,7 +837,10 @@ export default function DevicesPage() {
                         <strong>{device.hostname || `Access Device ${device._accessId}`}</strong>
                       </span>
                     ) : (
-                      <button className="device-name-link" onClick={() => setSelectedDeviceId(device.id)}>
+                      <button
+                        className="device-name-link"
+                        onClick={() => (isCamera ? handleCameraRowClick(device) : setSelectedDeviceId(device.id))}
+                      >
                         <span className="device-name-row">
                           <strong>{device.hostname || device.ip || `Device ${device.id}`}</strong>
                           {device.topology_node_id != null && (
@@ -735,7 +870,7 @@ export default function DevicesPage() {
                   )}
                   {visibleColumns.location && (
                     <td>
-                      {isAccess ? (
+                      {isAccess || isCamera ? (
                         device.location || '—'
                       ) : (
                         <input
@@ -753,7 +888,7 @@ export default function DevicesPage() {
                   {visibleColumns.serial_number && <td>{device.serial_number || ''}</td>}
                   {visibleColumns.tags && (
                     <td className="devices-tags-cell">
-                      {isAccess ? (
+                      {isAccess || isCamera ? (
                         '—'
                       ) : (
                       <div className="device-tag-list">
@@ -818,7 +953,7 @@ export default function DevicesPage() {
                   )}
                   {visibleColumns.credential && (
                     <td>
-                      {isAccess ? (
+                      {isAccess || isCamera ? (
                         '—'
                       ) : (
                       <select
@@ -838,7 +973,7 @@ export default function DevicesPage() {
                   )}
                   {visibleColumns.last_seen && <td>{formatLastSeen(device.last_scanned_at)}</td>}
                   <td>
-                    {!isAccess && (
+                    {!isAccess && !isCamera && (
                       <button
                         type="button"
                         className="devices-scan-btn"
@@ -857,7 +992,13 @@ export default function DevicesPage() {
                   <td>
                     <button
                       className="delete-btn"
-                      onClick={() => (isAccess ? handleDeleteAccessDevice(device._accessId) : handleDeleteDevice(device.id))}
+                      onClick={() =>
+                        isAccess
+                          ? handleDeleteAccessDevice(device._accessId)
+                          : isCamera
+                          ? handleDeleteCamera(device.id)
+                          : handleDeleteDevice(device.id)
+                      }
                     >
                       Delete
                     </button>
@@ -1039,7 +1180,7 @@ export default function DevicesPage() {
                     >
                       <option value="">-</option>
                       {devices
-                        .filter((d) => d.id !== selectedDeviceId)
+                        .filter((d) => d.source !== 'camera' && d.id !== selectedDeviceId)
                         .map((d) => (
                           <option key={d.id} value={d.id}>
                             {d.hostname || d.ip || `Device ${d.id}`}
@@ -1116,6 +1257,20 @@ export default function DevicesPage() {
           onClose={() => setScanResult(null)}
           onUpdateDevice={handleUpdateDeviceFromScan}
         />
+      )}
+
+      {showBulkEdit && (
+        <BulkEditModal
+          count={selectedIds.size}
+          tags={tags}
+          macros={macros}
+          onSave={handleBulkEditSave}
+          onClose={() => setShowBulkEdit(false)}
+        />
+      )}
+
+      {cameraModalState && (
+        <CameraFormModal initial={cameraModalState} onSave={handleSaveCamera} onClose={() => setCameraModalState(null)} />
       )}
 
       {toast && <div className={`devices-toast devices-toast-${toast.type}`}>{toast.text}</div>}
