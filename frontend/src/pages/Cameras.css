@@ -139,7 +139,6 @@
 
 .cameras-rtsps-cell {
   white-space: normal;
-  max-width: 280px;
 }
 
 .cameras-rtsps-row {
@@ -154,7 +153,9 @@
 }
 
 .cameras-rtsps-label {
-  flex-shrink: 0;
+  flex: 0 0 70px;
+  width: 70px;
+  box-sizing: border-box;
   display: inline-block;
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
@@ -170,19 +171,25 @@
 .cameras-rtsps-value {
   font-family: monospace;
   display: inline-block;
-  flex: 1;
+  flex: 0 0 200px;
+  width: 200px;
   min-width: 0;
-  max-width: 180px;
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-width: thin;
 }
 
 .cameras-rtsps-value-revealed {
-  max-width: none;
   overflow-x: visible;
   white-space: normal;
   word-break: break-all;
+}
+
+.cameras-icon-btn-spacer {
+  display: inline-block;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
 }
 
 .cameras-icon-btn {

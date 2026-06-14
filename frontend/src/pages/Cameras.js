@@ -182,7 +182,7 @@ export default function CamerasPage() {
             >
               {value ? (isRevealed ? value : '••••••••') : '—'}
             </span>
-            {value && (
+            {value ? (
               <>
                 <button
                   type="button"
@@ -202,6 +202,11 @@ export default function CamerasPage() {
                 >
                   <Clipboard size={14} />
                 </button>
+              </>
+            ) : (
+              <>
+                <span className="cameras-icon-btn-spacer" aria-hidden="true" />
+                <span className="cameras-icon-btn-spacer" aria-hidden="true" />
               </>
             )}
           </div>
