@@ -228,12 +228,13 @@ function extractCameras(data) {
 const CAMERA_ENDPOINTS = ['/proxy/protect/integration/v1/cameras', '/protect/api/cameras'];
 
 // Fetches the RTSPS stream URLs for a camera via the Integration API's
-// per-camera endpoint and returns the "high" quality URL, or null if the
-// request fails or the controller doesn't support it (e.g. the legacy
-// /protect/api/cameras fallback).
-async function fetchHighRtspsUrl(http, headers, httpsAgent, cameraId) {
+// per-camera endpoint and returns the high/medium/low quality URLs, or all
+// null if the request fails or the controller doesn't support it (e.g. the
+// legacy /protect/api/cameras fallback).
+async function fetchRtspsUrls(http, headers, httpsAgent, cameraId) {
   const path = `/proxy/protect/integration/v1/cameras/${cameraId}/rtsps-stream`;
   const url = `${http.defaults.baseURL}${path}`;
+  const none = { high: null, medium: null, low: null };
 
   let res;
   try {
@@ -244,16 +245,20 @@ async function fetchHighRtspsUrl(http, headers, httpsAgent, cameraId) {
     );
   } catch (err) {
     logError(url, err);
-    return null;
+    return none;
   }
 
   console.log(`[unifi-protect] POST ${url} -> HTTP ${res.status}`);
   if (res.status === 500) {
     console.log(`[unifi-protect] response body (500): ${bodySnippet(res.data)}`);
   }
-  if (res.status !== 200 || !res.data || typeof res.data !== 'object') return null;
+  if (res.status !== 200 || !res.data || typeof res.data !== 'object') return none;
 
-  return res.data.high || null;
+  return {
+    high: res.data.high || null,
+    medium: res.data.medium || null,
+    low: res.data.low || null,
+  };
 }
 
 // The Integration API's cameras list doesn't include the camera's IP, so
@@ -278,6 +283,30 @@ async function fetchCameraDetail(http, headers, httpsAgent, cameraId) {
   if (res.status !== 200 || !res.data || typeof res.data !== 'object') return null;
 
   return res.data;
+}
+
+// camera.modelKey on the Integration API list endpoint can come back as a
+// generic placeholder (e.g. "camera") rather than a real model identifier
+// like "UVC-G4-Pro". The per-camera detail endpoint may expose a better
+// field — prefer those, falling back to modelKey only as a last resort.
+function pickCameraModel(cam, detail) {
+  return (
+    detail?.type ||
+    detail?.hardwareRevision ||
+    detail?.marketName ||
+    detail?.model ||
+    cam.marketName ||
+    cam.type ||
+    cam.model ||
+    cam.modelKey ||
+    null
+  );
+}
+
+// The Integration API's cameras list doesn't include the camera's IP; try
+// the per-camera detail endpoint's likely IP fields in order of preference.
+function pickCameraIp(cam, detail) {
+  return detail?.host || detail?.ipAddress || detail?.ip || detail?.connectionHost || cam.host || null;
 }
 
 async function testConnection(config) {
@@ -341,46 +370,58 @@ async function syncData(config, projectId, db) {
 
     console.log(`[unifi-protect] Upserting ${cameras.length} cameras for project ${projectId}`);
 
-    for (const cam of cameras) {
+    for (let i = 0; i < cameras.length; i++) {
+      const cam = cameras[i];
       const online = isCameraOnline(cam);
       const name = cameraDisplayName(cam);
 
       let rtspUrl = null;
-      let rtspsUrl = null;
-      let streamPassword = null;
+      let rtspsHigh = null;
+      let rtspsMedium = null;
+      let rtspsLow = null;
       let ipAddress = null;
+      let model = null;
       let resolution = null;
-      let locationNotes = null;
 
       if (usingIntegrationApi) {
         rtspUrl = host && cam.id ? `rtsp://${host}:7447/${cam.id}` : null;
-        rtspsUrl = await fetchHighRtspsUrl(http, headers, httpsAgent, cam.id);
+
+        const rtspsUrls = await fetchRtspsUrls(http, headers, httpsAgent, cam.id);
+        rtspsHigh = rtspsUrls.high;
+        rtspsMedium = rtspsUrls.medium;
+        rtspsLow = rtspsUrls.low;
 
         const detail = await fetchCameraDetail(http, headers, httpsAgent, cam.id);
-        ipAddress = detail?.host || detail?.ip || null;
+        if (i === 0 && detail) {
+          // Log the first camera's detail fields (sanitized) so future
+          // adapter work can confirm where model/IP info actually lives.
+          const { streamSharing, rtspAlias, ...sanitizedDetail } = detail;
+          console.log(`[unifi-protect] first camera detail (sanitized): ${bodySnippet(sanitizedDetail)}`);
+        }
 
+        model = pickCameraModel(cam, detail);
+        ipAddress = pickCameraIp(cam, detail);
         resolution = deriveResolution(cam);
-        locationNotes = `hasPackageCamera: ${!!cam.hasPackageCamera}`;
       } else {
         const alias = cam.rtspAlias || cam.id;
         rtspUrl = host && alias ? `rtsp://${host}:7447/${alias}` : null;
-        rtspsUrl = host && alias ? `rtsps://${host}:7441/${alias}` : null;
-        streamPassword = cam.streamSharing?.plainPassword || cam.streamSharing?.password || null;
-        ipAddress = cam.host || null;
+        rtspsHigh = host && alias ? `rtsps://${host}:7441/${alias}` : null;
+        model = pickCameraModel(cam, null);
+        ipAddress = pickCameraIp(cam, null);
         resolution = pickResolution(cam.channels);
       }
 
       try {
         const ok = await upsertCamera(db, projectId, config.id, {
           name,
-          model: cam.modelKey || cam.model || cam.marketName || cam.type || null,
+          model,
           mac: cam.mac || null,
           ip_address: ipAddress,
           rtsp_url: rtspUrl,
-          rtsps_url: rtspsUrl,
-          stream_password: streamPassword,
+          rtsps_url_high: rtspsHigh,
+          rtsps_url_medium: rtspsMedium,
+          rtsps_url_low: rtspsLow,
           resolution,
-          location_notes: locationNotes,
           status: online == null ? 'unknown' : online ? 'online' : 'offline',
           last_seen: cam.lastSeen ? new Date(cam.lastSeen) : null,
         });

@@ -12,7 +12,11 @@ function formatLastSeen(value) {
   return date.toLocaleString();
 }
 
-const SECRET_FIELDS = ['rtsp_url', 'rtsps_url', 'stream_password'];
+const RTSPS_FIELDS = [
+  { key: 'rtsps_url_high', label: 'High' },
+  { key: 'rtsps_url_medium', label: 'Medium' },
+  { key: 'rtsps_url_low', label: 'Low' },
+];
 
 export default function CamerasPage() {
   const { currentProjectId } = useProject();
@@ -21,8 +25,9 @@ export default function CamerasPage() {
   const [modalState, setModalState] = useState(null); // null | 'new' | camera object
   const [search, setSearch] = useState('');
   const [revealed, setRevealed] = useState(new Set());
-  const [editingLocationId, setEditingLocationId] = useState(null);
-  const [locationDraft, setLocationDraft] = useState('');
+  const [editingPasswordId, setEditingPasswordId] = useState(null);
+  const [passwordDraft, setPasswordDraft] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [protectIntegration, setProtectIntegration] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState(null);
@@ -94,17 +99,18 @@ export default function CamerasPage() {
     }
   };
 
-  const startEditLocation = (camera) => {
-    setEditingLocationId(camera.id);
-    setLocationDraft(camera.location_notes || '');
+  const startEditPassword = (camera) => {
+    setEditingPasswordId(camera.id);
+    setPasswordDraft(camera.stream_password || '');
+    setPasswordVisible(false);
   };
 
-  const commitLocation = async (camera) => {
-    setEditingLocationId(null);
-    const next = locationDraft.trim() || null;
-    if ((camera.location_notes || null) === next) return;
+  const commitPassword = async (camera) => {
+    setEditingPasswordId(null);
+    const next = passwordDraft.trim() || null;
+    if ((camera.stream_password || null) === next) return;
     try {
-      const res = await client.put(`/cameras/${camera.id}`, { ...camera, location_notes: next });
+      const res = await client.put(`/cameras/${camera.id}`, { ...camera, stream_password: next });
       setCameras((prev) => prev.map((c) => (c.id === camera.id ? res.data : c)));
     } catch (err) {
       setError(err.response?.data?.error || err.message);
@@ -133,37 +139,76 @@ export default function CamerasPage() {
     }
   };
 
-  const renderSecretCell = (camera, key) => {
-    const value = camera[key];
-    const isRevealed = revealed.has(`${camera.id}:${key}`);
-    return (
-      <td key={key} className="cameras-secret-cell">
-        <span className="cameras-secret-value">{value ? (isRevealed ? value : '••••••••') : '—'}</span>
-        {value && (
-          <>
-            <button
-              type="button"
-              className="cameras-icon-btn"
-              onClick={() => toggleReveal(camera.id, key)}
-              aria-label={isRevealed ? 'Hide' : 'Show'}
-              title={isRevealed ? 'Hide' : 'Show'}
-            >
-              {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-            <button
-              type="button"
-              className="cameras-icon-btn"
-              onClick={() => copyValue(value)}
-              aria-label="Copy"
-              title="Copy to clipboard"
-            >
-              <Clipboard size={14} />
-            </button>
-          </>
-        )}
-      </td>
-    );
-  };
+  const renderRtspsCell = (camera) => (
+    <td className="cameras-rtsps-cell">
+      {RTSPS_FIELDS.map(({ key, label }) => {
+        const value = camera[key];
+        const isRevealed = revealed.has(`${camera.id}:${key}`);
+        return (
+          <div className="cameras-rtsps-row" key={key}>
+            <span className="cameras-rtsps-label">{label}</span>
+            <span className="cameras-secret-value">{value ? (isRevealed ? value : '••••••••') : '—'}</span>
+            {value && (
+              <>
+                <button
+                  type="button"
+                  className="cameras-icon-btn"
+                  onClick={() => toggleReveal(camera.id, key)}
+                  aria-label={isRevealed ? 'Hide' : 'Show'}
+                  title={isRevealed ? 'Hide' : 'Show'}
+                >
+                  {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+                <button
+                  type="button"
+                  className="cameras-icon-btn"
+                  onClick={() => copyValue(value)}
+                  aria-label="Copy"
+                  title="Copy to clipboard"
+                >
+                  <Clipboard size={14} />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </td>
+  );
+
+  const renderPasswordCell = (camera) => (
+    <td className="cameras-password-cell">
+      {editingPasswordId === camera.id ? (
+        <div className="cameras-password-field">
+          <input
+            autoFocus
+            className="cameras-location-input"
+            type={passwordVisible ? 'text' : 'password'}
+            value={passwordDraft}
+            onChange={(e) => setPasswordDraft(e.target.value)}
+            onBlur={() => commitPassword(camera)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.target.blur();
+            }}
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            className="cameras-icon-btn"
+            onClick={() => setPasswordVisible((v) => !v)}
+            aria-label={passwordVisible ? 'Hide' : 'Show'}
+            title={passwordVisible ? 'Hide' : 'Show'}
+          >
+            {passwordVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+      ) : (
+        <span className="cameras-location-display" onClick={() => startEditPassword(camera)} title="Click to edit">
+          {camera.stream_password ? '••••••••' : 'Set password'}
+        </span>
+      )}
+    </td>
+  );
 
   const filtered = cameras.filter((c) => {
     if (!search.trim()) return true;
@@ -208,10 +253,7 @@ export default function CamerasPage() {
               <th>Name</th>
               <th>Model</th>
               <th>IP Address</th>
-              <th>Resolution</th>
-              <th>Location Notes</th>
-              <th>RTSP URL</th>
-              <th>RTSPS URL</th>
+              <th>RTSPS Streams</th>
               <th>Stream Password</th>
               <th>Last Seen</th>
               <th></th>
@@ -226,26 +268,8 @@ export default function CamerasPage() {
                 <td>{camera.name}</td>
                 <td>{camera.model || '—'}</td>
                 <td>{camera.ip_address || '—'}</td>
-                <td>{camera.resolution || '—'}</td>
-                <td>
-                  {editingLocationId === camera.id ? (
-                    <input
-                      autoFocus
-                      className="cameras-location-input"
-                      value={locationDraft}
-                      onChange={(e) => setLocationDraft(e.target.value)}
-                      onBlur={() => commitLocation(camera)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') e.target.blur();
-                      }}
-                    />
-                  ) : (
-                    <span className="cameras-location-display" onClick={() => startEditLocation(camera)} title="Click to edit">
-                      {camera.location_notes || '—'}
-                    </span>
-                  )}
-                </td>
-                {SECRET_FIELDS.map((key) => renderSecretCell(camera, key))}
+                {renderRtspsCell(camera)}
+                {renderPasswordCell(camera)}
                 <td>{formatLastSeen(camera.last_seen)}</td>
                 <td className="cameras-actions">
                   <button
@@ -272,7 +296,7 @@ export default function CamerasPage() {
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={11} className="cameras-empty">
+                <td colSpan={8} className="cameras-empty">
                   {cameras.length === 0 ? 'No cameras yet. Click "+ Add Camera" to create one.' : 'No cameras match your search.'}
                 </td>
               </tr>

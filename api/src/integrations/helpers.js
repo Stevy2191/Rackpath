@@ -97,10 +97,10 @@ async function upsertCamera(db, projectId, integrationId, camera) {
     mac: camera.mac || null,
     ip_address: camera.ip_address || null,
     rtsp_url: camera.rtsp_url || null,
-    rtsps_url: camera.rtsps_url || null,
-    stream_password: camera.stream_password || null,
+    rtsps_url_high: camera.rtsps_url_high || null,
+    rtsps_url_medium: camera.rtsps_url_medium || null,
+    rtsps_url_low: camera.rtsps_url_low || null,
     resolution: camera.resolution || null,
-    location_notes: camera.location_notes || null,
     status: camera.status || 'unknown',
     last_seen: camera.last_seen || new Date(),
   };
@@ -112,9 +112,11 @@ async function upsertCamera(db, projectId, integrationId, camera) {
     ]);
 
     if (existing.length > 0) {
+      // location_notes and stream_password are user-editable only and must
+      // never be overwritten by a sync.
       await db.query(
         `UPDATE project_cameras SET integration_id = ?, name = ?, model = ?, ip_address = ?,
-           rtsp_url = ?, rtsps_url = ?, stream_password = ?, resolution = ?, location_notes = ?, status = ?, last_seen = ?
+           rtsp_url = ?, rtsps_url_high = ?, rtsps_url_medium = ?, rtsps_url_low = ?, resolution = ?, status = ?, last_seen = ?
          WHERE id = ?`,
         [
           integrationId,
@@ -122,10 +124,10 @@ async function upsertCamera(db, projectId, integrationId, camera) {
           fields.model,
           fields.ip_address,
           fields.rtsp_url,
-          fields.rtsps_url,
-          fields.stream_password,
+          fields.rtsps_url_high,
+          fields.rtsps_url_medium,
+          fields.rtsps_url_low,
           fields.resolution,
-          fields.location_notes,
           fields.status,
           fields.last_seen,
           existing[0].id,
@@ -137,7 +139,7 @@ async function upsertCamera(db, projectId, integrationId, camera) {
 
   await db.query(
     `INSERT INTO project_cameras
-       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url, stream_password, resolution, location_notes, status, last_seen)
+       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url_high, rtsps_url_medium, rtsps_url_low, resolution, status, last_seen)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       projectId,
@@ -147,10 +149,10 @@ async function upsertCamera(db, projectId, integrationId, camera) {
       fields.mac,
       fields.ip_address,
       fields.rtsp_url,
-      fields.rtsps_url,
-      fields.stream_password,
+      fields.rtsps_url_high,
+      fields.rtsps_url_medium,
+      fields.rtsps_url_low,
       fields.resolution,
-      fields.location_notes,
       fields.status,
       fields.last_seen,
     ]

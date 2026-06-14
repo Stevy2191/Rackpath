@@ -9,7 +9,9 @@ export const emptyCamera = {
   mac: '',
   ip_address: '',
   rtsp_url: '',
-  rtsps_url: '',
+  rtsps_url_high: '',
+  rtsps_url_medium: '',
+  rtsps_url_low: '',
   stream_password: '',
   username: '',
   resolution: '',
@@ -102,10 +104,22 @@ export default function CameraFormModal({ initial, onSave, onClose }) {
           </label>
           <MaskedField label="RTSP URL" value={draft.rtsp_url || ''} onChange={field('rtsp_url')} placeholder="rtsp://192.168.1.1:7447/alias" />
           <MaskedField
-            label="RTSPS URL"
-            value={draft.rtsps_url || ''}
-            onChange={field('rtsps_url')}
-            placeholder="rtsps://192.168.1.1:7441/alias"
+            label="RTSPS URL (High)"
+            value={draft.rtsps_url_high || ''}
+            onChange={field('rtsps_url_high')}
+            placeholder="rtsps://192.168.1.1:7441/alias?quality=high"
+          />
+          <MaskedField
+            label="RTSPS URL (Medium)"
+            value={draft.rtsps_url_medium || ''}
+            onChange={field('rtsps_url_medium')}
+            placeholder="rtsps://192.168.1.1:7441/alias?quality=medium"
+          />
+          <MaskedField
+            label="RTSPS URL (Low)"
+            value={draft.rtsps_url_low || ''}
+            onChange={field('rtsps_url_low')}
+            placeholder="rtsps://192.168.1.1:7441/alias?quality=low"
           />
           <MaskedField label="Stream Password" value={draft.stream_password || ''} onChange={field('stream_password')} />
           <label>
