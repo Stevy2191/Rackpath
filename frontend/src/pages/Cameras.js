@@ -252,7 +252,7 @@ export default function CamerasPage() {
   const filtered = cameras.filter((c) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return [c.name, c.model, c.ip_address, c.location_notes].some((v) => (v || '').toLowerCase().includes(q));
+    return [c.name, c.model, c.ip_address].some((v) => (v || '').toLowerCase().includes(q));
   });
 
   return (
@@ -276,7 +276,7 @@ export default function CamerasPage() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, model, IP, or location..."
+          placeholder="Search by name, model, or IP..."
         />
       </div>
 

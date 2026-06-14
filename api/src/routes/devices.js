@@ -131,6 +131,27 @@ router.get('/', async (req, res, next) => {
       }
     }
 
+    const cameraIds = rows.filter((r) => r.source === 'camera').map((r) => r.id);
+    if (cameraIds.length > 0) {
+      const [camTagRows] = await pool.query(
+        `SELECT cta.camera_id, t.id, t.name, t.color
+         FROM camera_tag_assignments cta
+         JOIN device_tags t ON t.id = cta.tag_id
+         WHERE cta.camera_id IN (${cameraIds.map(() => '?').join(', ')})
+         ORDER BY t.name ASC`,
+        cameraIds
+      );
+      const tagsByCamera = {};
+      for (const tr of camTagRows) {
+        if (!tagsByCamera[tr.camera_id]) tagsByCamera[tr.camera_id] = [];
+        tagsByCamera[tr.camera_id].push({ id: tr.id, name: tr.name, color: tr.color });
+      }
+      console.log('[devices.list] tag assignments by camera:', tagsByCamera);
+      for (const row of rows) {
+        if (row.source === 'camera') row.tags = tagsByCamera[row.id] || [];
+      }
+    }
+
     rows.sort((a, b) => {
       const ah = (a.hostname || '').toLowerCase();
       const bh = (b.hostname || '').toLowerCase();
@@ -206,11 +227,15 @@ router.post('/bulk-update', async (req, res, next) => {
         }
 
         if (tag_mode === 'replace') {
-          const [delResult] = await pool.query(
-            `DELETE FROM device_tag_assignments WHERE device_id IN (${deviceIds.map(() => '?').join(', ')})`,
-            deviceIds
-          );
-          console.log('[devices.bulk-update] replace mode: deleted existing tag assignments, affectedRows:', delResult.affectedRows);
+          const delSql = `DELETE FROM device_tag_assignments WHERE device_id IN (${deviceIds.map(() => '?').join(', ')})`;
+          console.log('[devices.bulk-update] replace mode SQL:', delSql, 'params:', deviceIds);
+          try {
+            const [delResult] = await pool.query(delSql, deviceIds);
+            console.log('[devices.bulk-update] replace mode: deleted existing tag assignments, affectedRows:', delResult.affectedRows);
+          } catch (err) {
+            console.error('[devices.bulk-update] device tag assignment delete failed:', err);
+            throw err;
+          }
         }
 
         if (validTagIds.length > 0) {
@@ -222,12 +247,15 @@ router.post('/bulk-update', async (req, res, next) => {
               params.push(deviceId, tagId);
             }
           }
-          console.log('[devices.bulk-update] inserting tag assignments:', params);
-          const [insResult] = await pool.query(
-            `INSERT IGNORE INTO device_tag_assignments (device_id, tag_id) VALUES ${pairs.join(', ')}`,
-            params
-          );
-          console.log('[devices.bulk-update] tag assignment insert affectedRows:', insResult.affectedRows);
+          const insSql = `INSERT IGNORE INTO device_tag_assignments (device_id, tag_id) VALUES ${pairs.join(', ')}`;
+          console.log('[devices.bulk-update] device tag assignment insert SQL:', insSql, 'params:', params);
+          try {
+            const [insResult] = await pool.query(insSql, params);
+            console.log('[devices.bulk-update] tag assignment insert affectedRows:', insResult.affectedRows);
+          } catch (err) {
+            console.error('[devices.bulk-update] device tag assignment insert failed:', err);
+            throw err;
+          }
         }
       }
     }
@@ -250,6 +278,52 @@ router.post('/bulk-update', async (req, res, next) => {
           [...values, req.projectId, ...cameraIds]
         );
         console.log('[devices.bulk-update] project_cameras update affectedRows:', updateResult.affectedRows);
+      }
+
+      if (Array.isArray(tag_ids)) {
+        console.log('[devices.bulk-update] camera tag update requested, tag_mode:', tag_mode, 'tag_ids:', tag_ids);
+
+        let validTagIds = [];
+        if (tag_ids.length > 0) {
+          const [validTagRows] = await pool.query(
+            `SELECT id FROM device_tags WHERE project_id = ? AND id IN (${tag_ids.map(() => '?').join(', ')})`,
+            [req.projectId, ...tag_ids]
+          );
+          validTagIds = validTagRows.map((r) => r.id);
+          console.log('[devices.bulk-update] valid tag ids for project', req.projectId, '(cameras):', validTagIds);
+        }
+
+        if (tag_mode === 'replace') {
+          const delSql = `DELETE FROM camera_tag_assignments WHERE camera_id IN (${cameraIds.map(() => '?').join(', ')})`;
+          console.log('[devices.bulk-update] camera replace mode SQL:', delSql, 'params:', cameraIds);
+          try {
+            const [delResult] = await pool.query(delSql, cameraIds);
+            console.log('[devices.bulk-update] camera replace mode: deleted existing tag assignments, affectedRows:', delResult.affectedRows);
+          } catch (err) {
+            console.error('[devices.bulk-update] camera tag assignment delete failed:', err);
+            throw err;
+          }
+        }
+
+        if (validTagIds.length > 0) {
+          const pairs = [];
+          const params = [];
+          for (const cameraId of cameraIds) {
+            for (const tagId of validTagIds) {
+              pairs.push('(?, ?)');
+              params.push(cameraId, tagId);
+            }
+          }
+          const insSql = `INSERT IGNORE INTO camera_tag_assignments (camera_id, tag_id) VALUES ${pairs.join(', ')}`;
+          console.log('[devices.bulk-update] camera tag assignment insert SQL:', insSql, 'params:', params);
+          try {
+            const [insResult] = await pool.query(insSql, params);
+            console.log('[devices.bulk-update] camera tag assignment insert affectedRows:', insResult.affectedRows);
+          } catch (err) {
+            console.error('[devices.bulk-update] camera tag assignment insert failed:', err);
+            throw err;
+          }
+        }
       }
     }
 

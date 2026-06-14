@@ -900,8 +900,24 @@ export default function DevicesPage() {
                   {visibleColumns.serial_number && <td>{device.serial_number || ''}</td>}
                   {visibleColumns.tags && (
                     <td className="devices-tags-cell">
-                      {isAccess || isCamera ? (
+                      {isAccess ? (
                         '—'
+                      ) : isCamera ? (
+                        <div className="device-tag-list">
+                          {deviceTags.length === 0 ? (
+                            '—'
+                          ) : (
+                            deviceTags.map((tag) => (
+                              <span
+                                key={tag.id}
+                                className="device-tag-pill"
+                                style={{ background: tag.color, color: pillTextColor(tag.color) }}
+                              >
+                                {tag.name}
+                              </span>
+                            ))
+                          )}
+                        </div>
                       ) : (
                       <div className="device-tag-list">
                         {deviceTags.map((tag) => (
