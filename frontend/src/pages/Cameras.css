@@ -128,28 +128,16 @@
   background: var(--color-bg-subtle);
 }
 
-.cameras-secret-cell {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.cameras-secret-value {
-  font-family: monospace;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .cameras-rtsps-cell {
   white-space: normal;
+  max-width: 280px;
 }
 
 .cameras-rtsps-row {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.15rem 0;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
 }
 
 .cameras-rtsps-row:not(:last-child) {
@@ -158,12 +146,27 @@
 
 .cameras-rtsps-label {
   flex-shrink: 0;
-  width: 56px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: var(--color-bg-subtle);
   color: var(--color-text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.cameras-rtsps-value {
+  font-family: monospace;
+  display: inline-block;
+  flex: 1;
+  min-width: 0;
+  max-width: 180px;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: thin;
 }
 
 .cameras-password-cell {

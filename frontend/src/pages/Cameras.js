@@ -147,7 +147,9 @@ export default function CamerasPage() {
         return (
           <div className="cameras-rtsps-row" key={key}>
             <span className="cameras-rtsps-label">{label}</span>
-            <span className="cameras-secret-value">{value ? (isRevealed ? value : '••••••••') : '—'}</span>
+            <span className="cameras-rtsps-value" title={value || undefined}>
+              {value ? (isRevealed ? value : '••••••••') : '—'}
+            </span>
             {value && (
               <>
                 <button

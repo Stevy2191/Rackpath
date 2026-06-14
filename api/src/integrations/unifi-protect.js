@@ -49,6 +49,19 @@ function bodySnippet(data) {
   return (str || '').slice(0, 500);
 }
 
+// Replaces stream URL values with a short, non-sensitive placeholder
+// (length only) so the shape of an rtsps-stream response can be logged for
+// debugging without leaking playable RTSPS URLs.
+function redactStreamUrl(value) {
+  if (typeof value === 'string') return `<string, ${value.length} chars>`;
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = redactStreamUrl(v);
+    return out;
+  }
+  return value;
+}
+
 function logError(url, err) {
   console.log(`[unifi-protect] request to ${url} failed: ${err.message}`);
   if (err.response) {
@@ -227,11 +240,24 @@ function extractCameras(data) {
 
 const CAMERA_ENDPOINTS = ['/proxy/protect/integration/v1/cameras', '/protect/api/cameras'];
 
+// Some controllers return each quality as a bare URL string; others nest it
+// in an object (e.g. `{ url: "rtsps://..." }`). Handle both.
+function extractStreamUrl(value) {
+  if (typeof value === 'string') return value || null;
+  if (value && typeof value === 'object') {
+    return value.url || value.rtspsUrl || value.uri || value.streamUrl || null;
+  }
+  return null;
+}
+
 // Fetches the RTSPS stream URLs for a camera via the Integration API's
 // per-camera endpoint and returns the high/medium/low quality URLs, or all
 // null if the request fails or the controller doesn't support it (e.g. the
-// legacy /protect/api/cameras fallback).
-async function fetchRtspsUrls(http, headers, httpsAgent, cameraId) {
+// legacy /protect/api/cameras fallback). When `logResponse` is true, logs the
+// shape of the response (key names and value lengths only — never the actual
+// URLs) so the high/medium/low fields can be confirmed without leaking
+// playable stream URLs.
+async function fetchRtspsUrls(http, headers, httpsAgent, cameraId, logResponse = false) {
   const path = `/proxy/protect/integration/v1/cameras/${cameraId}/rtsps-stream`;
   const url = `${http.defaults.baseURL}${path}`;
   const none = { high: null, medium: null, low: null };
@@ -254,10 +280,15 @@ async function fetchRtspsUrls(http, headers, httpsAgent, cameraId) {
   }
   if (res.status !== 200 || !res.data || typeof res.data !== 'object') return none;
 
+  if (logResponse) {
+    console.log(`[unifi-protect] rtsps-stream response keys: ${Object.keys(res.data).join(', ')}`);
+    console.log(`[unifi-protect] rtsps-stream response shape (redacted): ${bodySnippet(redactStreamUrl(res.data))}`);
+  }
+
   return {
-    high: res.data.high || null,
-    medium: res.data.medium || null,
-    low: res.data.low || null,
+    high: extractStreamUrl(res.data.high),
+    medium: extractStreamUrl(res.data.medium),
+    low: extractStreamUrl(res.data.low),
   };
 }
 
@@ -386,7 +417,7 @@ async function syncData(config, projectId, db) {
       if (usingIntegrationApi) {
         rtspUrl = host && cam.id ? `rtsp://${host}:7447/${cam.id}` : null;
 
-        const rtspsUrls = await fetchRtspsUrls(http, headers, httpsAgent, cam.id);
+        const rtspsUrls = await fetchRtspsUrls(http, headers, httpsAgent, cam.id, i === 0);
         rtspsHigh = rtspsUrls.high;
         rtspsMedium = rtspsUrls.medium;
         rtspsLow = rtspsUrls.low;
