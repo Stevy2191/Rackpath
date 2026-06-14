@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Key, ChevronDown } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
@@ -32,10 +32,24 @@ export default function Navbar() {
 
   const isDevicesPath = location.pathname.startsWith('/devices');
   const [devicesOpen, setDevicesOpen] = useState(isDevicesPath);
+  const devicesDropdownRef = useRef(null);
 
   useEffect(() => {
     if (isDevicesPath) setDevicesOpen(true);
   }, [isDevicesPath]);
+
+  useEffect(() => {
+    if (!devicesOpen) return;
+
+    const handleClickOutside = (event) => {
+      if (devicesDropdownRef.current && !devicesDropdownRef.current.contains(event.target)) {
+        setDevicesOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [devicesOpen]);
 
   return (
     <nav className="navbar">
@@ -55,7 +69,7 @@ export default function Navbar() {
           </NavLink>
         ))}
 
-        <div className="navbar-dropdown">
+        <div className="navbar-dropdown" ref={devicesDropdownRef}>
           <button
             type="button"
             className={`navbar-link navbar-dropdown-toggle${isDevicesPath ? ' active' : ''}`}

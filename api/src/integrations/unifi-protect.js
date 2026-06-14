@@ -191,11 +191,13 @@ function isCameraOnline(cam) {
 }
 
 // UniFi Protect's cameras endpoint may return a bare array, or wrap it in
-// `{ cameras: [...] }` / `{ data: [...] }` depending on path/version.
+// `{ cameras: [...] }` / `{ data: [...] }` / `{ data: { cameras: [...] } }`
+// depending on path/version.
 function extractCameras(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.cameras)) return data.cameras;
   if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.data?.cameras)) return data.data.cameras;
   return [];
 }
 
@@ -243,15 +245,28 @@ async function syncData(config, projectId, db) {
       throw new Error(connectionFailureMessage(attempts));
     }
 
+    const url = `${http.defaults.baseURL}${path}`;
+    const dataType = Array.isArray(res.data)
+      ? `array (length ${res.data.length})`
+      : res.data && typeof res.data === 'object'
+        ? `object with keys: ${Object.keys(res.data).join(', ')}`
+        : typeof res.data;
+    console.log(`[unifi-protect] cameras endpoint succeeded: ${url}`);
+    console.log(`[unifi-protect] response data type: ${dataType}`);
+
     const cameras = extractCameras(res.data);
-    console.log(`[unifi-protect] cameras endpoint ${path} returned ${cameras.length} camera(s)`);
+    console.log(`[unifi-protect] cameras endpoint ${path} returned ${cameras.length} camera(s) before filtering`);
 
     if (cameras.length > 0) {
+      console.log(`[unifi-protect] first camera keys: ${Object.keys(cameras[0]).join(', ')}`);
       // Log the first camera's fields so future adapter work can see the
       // real shape, without leaking stream URLs/passwords.
       const { streamSharing, rtspAlias, ...sanitizedFirst } = cameras[0];
       console.log(`[unifi-protect] first camera (sanitized): ${bodySnippet(sanitizedFirst)}`);
     }
+
+    console.log(`[unifi-protect] Found ${cameras.length} cameras before upsert`);
+    console.log(`[unifi-protect] upserting cameras for projectId=${projectId}, integrationId=${config.id}`);
 
     const host = controllerHost(config.base_url);
 
@@ -259,20 +274,27 @@ async function syncData(config, projectId, db) {
       const alias = cam.rtspAlias || cam.id;
       const online = isCameraOnline(cam);
 
-      const ok = await upsertCamera(db, projectId, config.id, {
-        name: cam.name || cam.marketName || cam.mac,
-        model: cam.marketName || cam.type || null,
-        mac: cam.mac || null,
-        ip_address: cam.host || null,
-        rtsp_url: host && alias ? `rtsp://${host}:7447/${alias}` : null,
-        rtsps_url: host && alias ? `rtsps://${host}:7441/${alias}` : null,
-        stream_password: cam.streamSharing?.plainPassword || cam.streamSharing?.password || null,
-        resolution: pickResolution(cam.channels),
-        status: online == null ? 'unknown' : online ? 'online' : 'offline',
-        last_seen: cam.lastSeen ? new Date(cam.lastSeen) : null,
-      });
-      if (ok) camerasImported += 1;
+      try {
+        const ok = await upsertCamera(db, projectId, config.id, {
+          name: cam.name || cam.marketName || cam.mac,
+          model: cam.marketName || cam.type || null,
+          mac: cam.mac || null,
+          ip_address: cam.host || null,
+          rtsp_url: host && alias ? `rtsp://${host}:7447/${alias}` : null,
+          rtsps_url: host && alias ? `rtsps://${host}:7441/${alias}` : null,
+          stream_password: cam.streamSharing?.plainPassword || cam.streamSharing?.password || null,
+          resolution: pickResolution(cam.channels),
+          status: online == null ? 'unknown' : online ? 'online' : 'offline',
+          last_seen: cam.lastSeen ? new Date(cam.lastSeen) : null,
+        });
+        if (ok) camerasImported += 1;
+      } catch (err) {
+        console.log(`[unifi-protect] failed to upsert camera ${cam.mac || cam.id || cam.name || '(unknown)'}: ${err.message}`);
+        console.log(err.stack);
+      }
     }
+
+    console.log(`[unifi-protect] Imported ${camerasImported} of ${cameras.length} cameras after upsert`);
 
     return { devices_imported: 0, vlans_imported: 0, cameras_imported: camerasImported, status: 'success', message: null };
   } catch (err) {
