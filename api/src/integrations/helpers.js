@@ -112,35 +112,35 @@ async function upsertCamera(db, projectId, integrationId, camera) {
     ]);
 
     if (existing.length > 0) {
-      // location_notes and stream_password are user-editable only and must
-      // never be overwritten by a sync.
-      await db.query(
-        `UPDATE project_cameras SET integration_id = ?, name = ?, model = ?, ip_address = ?,
-           rtsp_url = ?, rtsps_url_high = ?, rtsps_url_medium = ?, rtsps_url_low = ?, resolution = ?, status = ?, last_seen = ?
-         WHERE id = ?`,
-        [
-          integrationId,
-          fields.name,
-          fields.model,
-          fields.ip_address,
-          fields.rtsp_url,
-          fields.rtsps_url_high,
-          fields.rtsps_url_medium,
-          fields.rtsps_url_low,
-          fields.resolution,
-          fields.status,
-          fields.last_seen,
-          existing[0].id,
-        ]
-      );
+      // location_notes is user-editable only and must never be overwritten by
+      // a sync. stream_password is also user-editable, but a sync that
+      // discovered a real credential (e.g. via the bootstrap API) may
+      // overwrite it — only included in the SET clause when provided.
+      const setClauses = [
+        'integration_id = ?', 'name = ?', 'model = ?', 'ip_address = ?',
+        'rtsp_url = ?', 'rtsps_url_high = ?', 'rtsps_url_medium = ?', 'rtsps_url_low = ?',
+        'resolution = ?', 'status = ?', 'last_seen = ?',
+      ];
+      const values = [
+        integrationId, fields.name, fields.model, fields.ip_address,
+        fields.rtsp_url, fields.rtsps_url_high, fields.rtsps_url_medium, fields.rtsps_url_low,
+        fields.resolution, fields.status, fields.last_seen,
+      ];
+      if (camera.stream_password !== undefined) {
+        setClauses.push('stream_password = ?');
+        values.push(camera.stream_password || null);
+      }
+      values.push(existing[0].id);
+
+      await db.query(`UPDATE project_cameras SET ${setClauses.join(', ')} WHERE id = ?`, values);
       return true;
     }
   }
 
   await db.query(
     `INSERT INTO project_cameras
-       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url_high, rtsps_url_medium, rtsps_url_low, resolution, status, last_seen)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (project_id, integration_id, name, model, mac, ip_address, rtsp_url, rtsps_url_high, rtsps_url_medium, rtsps_url_low, resolution, status, last_seen, stream_password)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       projectId,
       integrationId,
@@ -155,6 +155,7 @@ async function upsertCamera(db, projectId, integrationId, camera) {
       fields.resolution,
       fields.status,
       fields.last_seen,
+      camera.stream_password || null,
     ]
   );
   return true;

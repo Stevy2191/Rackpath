@@ -275,17 +275,21 @@ export default function AddIntegrationModal({ integration, projectId, onClose, o
                   Username &amp; Password
                 </label>
               </div>
-              <p className="integration-helper-text">
-                API Key is recommended. Generate one in UniFi Console → Settings → Control Plane → API
-              </p>
-
               {form.unifi_auth_method === 'api_key' ? (
-                <label>
-                  API Key
-                  <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
-                </label>
+                <>
+                  <p className="integration-helper-text">
+                    Official API — limited data, no stream passwords. Generate a key in UniFi Console → Settings → Control Plane → API
+                  </p>
+                  <label>
+                    API Key
+                    <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
+                  </label>
+                </>
               ) : (
                 <>
+                  <p className="integration-helper-text">
+                    Recommended — provides full camera details and stream credentials via the bootstrap API
+                  </p>
                   <label>
                     Username
                     <input value={form.username} onChange={set('username')} />

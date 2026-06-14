@@ -18,6 +18,8 @@
 
 const axios = require('axios');
 const https = require('https');
+const { wrapper } = require('axios-cookiejar-support');
+const { CookieJar } = require('tough-cookie');
 const { upsertCamera } = require('./helpers');
 
 function makeClient(config) {
@@ -60,6 +62,133 @@ function redactStreamUrl(value) {
     return out;
   }
   return value;
+}
+
+// True when the integration is configured for the unofficial bootstrap API
+// (username/password, no API key) rather than the official Integration API.
+function usesBootstrapApi(config) {
+  return !config.api_key && !!config.username && !!config.password;
+}
+
+// Recursively redacts values whose key name suggests sensitive data
+// (passwords, tokens, secrets, credentials, RTSP(S) URLs, API keys) so
+// arbitrary objects (e.g. the bootstrap response's nvr/camera objects) can be
+// logged for debugging without leaking credentials or playable stream URLs.
+const SENSITIVE_KEY_PATTERN = /password|token|secret|credential|rtsp|apikey|api_key/i;
+
+function sanitizeForLog(obj) {
+  if (Array.isArray(obj)) return obj.map(sanitizeForLog);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      out[k] = SENSITIVE_KEY_PATTERN.test(k) ? redactStreamUrl(v) : sanitizeForLog(v);
+    }
+    return out;
+  }
+  return obj;
+}
+
+// Creates a cookie-jar-backed axios client for the bootstrap auth flow, so
+// the TOKEN cookie returned by /api/auth/login is automatically attached to
+// subsequent requests.
+function makeBootstrapClient(config) {
+  return wrapper(
+    axios.create({
+      baseURL: config.base_url.replace(/\/+$/, ''),
+      httpsAgent: new https.Agent({ rejectUnauthorized: config.verify_ssl !== false }),
+      validateStatus: () => true,
+      timeout: 10000,
+      jar: new CookieJar(),
+    })
+  );
+}
+
+// Logs in via the UniFi OS endpoint using username/password, relying on the
+// client's cookie jar to capture the TOKEN cookie for subsequent requests.
+// Returns extra headers (X-CSRF-Token / Authorization) if present.
+async function bootstrapLogin(http, config, httpsAgent) {
+  const url = `${http.defaults.baseURL}/api/auth/login`;
+  let res;
+  try {
+    res = await http.post(
+      '/api/auth/login',
+      { username: config.username, password: config.password },
+      { headers: { 'Content-Type': 'application/json' }, httpsAgent }
+    );
+    console.log(`[unifi-protect] [bootstrap] POST ${url} -> HTTP ${res.status}`);
+  } catch (err) {
+    logError(url, err);
+    throw err;
+  }
+
+  if (res.status === 500) {
+    console.log(`[unifi-protect] [bootstrap] response body (500): ${bodySnippet(res.data)}`);
+  }
+
+  if (res.status >= 400) {
+    const message = res.data?.meta?.msg || res.data?.message || `HTTP ${res.status}`;
+    throw new Error(`UniFi Protect bootstrap login failed: ${message}`);
+  }
+
+  const setCookie = res.headers['set-cookie'] || [];
+  const hasToken = setCookie.some((c) => /^TOKEN=/i.test(c));
+  console.log(`[unifi-protect] [bootstrap] login ${hasToken ? 'received' : 'did not receive'} a TOKEN cookie`);
+
+  const headers = {};
+  const csrfToken = res.headers['x-csrf-token'];
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+  const token = res.data?.token || res.data?.access_token;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  return headers;
+}
+
+// GETs the bootstrap endpoint, which returns the full NVR config (including
+// the cameras array with channels, host/IP, and feature flags). Returns
+// `res.data`, or null if unavailable.
+async function fetchBootstrap(http, headers, httpsAgent) {
+  const path = '/proxy/protect/api/bootstrap';
+  const url = `${http.defaults.baseURL}${path}`;
+
+  let res;
+  try {
+    res = await http.get(path, { headers, httpsAgent });
+  } catch (err) {
+    logError(url, err);
+    return null;
+  }
+
+  console.log(`[unifi-protect] [bootstrap] GET ${url} -> HTTP ${res.status}`);
+  if (res.status === 500) {
+    console.log(`[unifi-protect] [bootstrap] response body (500): ${bodySnippet(res.data)}`);
+  }
+  if (res.status !== 200 || !res.data || typeof res.data !== 'object') return null;
+
+  return res.data;
+}
+
+// Builds RTSP/RTSPS URLs for a bootstrap channel from its rtspAlias, or null
+// if the channel has no alias (e.g. RTSP disabled) or the host is unknown.
+function buildChannelUrls(host, channel) {
+  if (!host || !channel?.rtspAlias) return { rtsp: null, rtsps: null };
+  return {
+    rtsp: `rtsp://${host}:7447/${channel.rtspAlias}`,
+    rtsps: `rtsps://${host}:7441/${channel.rtspAlias}`,
+  };
+}
+
+// Best-effort extraction of a camera's stream-sharing password from the
+// bootstrap response. The exact field name varies by firmware version, so
+// several known/likely locations are tried.
+function extractStreamPassword(nvr, cam) {
+  return (
+    cam?.streamSharing?.plainPassword ||
+    cam?.streamSharing?.password ||
+    nvr?.streamSharing?.plainPassword ||
+    nvr?.streamSharing?.password ||
+    null
+  );
 }
 
 function logError(url, err) {
@@ -340,7 +469,124 @@ function pickCameraIp(cam, detail) {
   return detail?.host || detail?.ipAddress || detail?.ip || detail?.connectionHost || cam.host || null;
 }
 
+// Tests connectivity for the unofficial bootstrap API: logs in with
+// username/password and fetches the bootstrap config, reporting the number
+// of cameras found.
+async function testConnectionBootstrap(config) {
+  const httpsAgent = buildHttpsAgent(config);
+
+  try {
+    const http = makeBootstrapClient(config);
+    const headers = await bootstrapLogin(http, config, httpsAgent);
+    const bootstrap = await fetchBootstrap(http, headers, httpsAgent);
+
+    if (!bootstrap) {
+      return { success: false, message: 'Bootstrap endpoint not available — check URL and credentials' };
+    }
+
+    const cameras = Array.isArray(bootstrap.cameras) ? bootstrap.cameras : [];
+    console.log(`[unifi-protect] [bootstrap] testConnection succeeded — ${cameras.length} camera(s) found`);
+
+    return { success: true, message: `Connected — ${cameras.length} camera${cameras.length === 1 ? '' : 's'} found` };
+  } catch (err) {
+    console.log(`[unifi-protect] [bootstrap] testConnection error: ${err.message}`);
+    return { success: false, message: err.message };
+  }
+}
+
+// Syncs cameras via the unofficial bootstrap API
+// (/proxy/protect/api/bootstrap), which returns full camera details
+// including channels (for RTSP(S) URLs) and, on some firmware versions,
+// stream-sharing credentials.
+async function syncDataBootstrap(config, projectId, db) {
+  let camerasImported = 0;
+  const httpsAgent = buildHttpsAgent(config);
+
+  try {
+    const http = makeBootstrapClient(config);
+    const headers = await bootstrapLogin(http, config, httpsAgent);
+    const bootstrap = await fetchBootstrap(http, headers, httpsAgent);
+
+    if (!bootstrap) {
+      throw new Error('Bootstrap endpoint not available — check URL and credentials');
+    }
+
+    const cameras = Array.isArray(bootstrap.cameras) ? bootstrap.cameras : [];
+    console.log(`[unifi-protect] [bootstrap] bootstrap returned ${cameras.length} camera(s)`);
+
+    if (bootstrap.nvr && typeof bootstrap.nvr === 'object') {
+      console.log(`[unifi-protect] [bootstrap] nvr keys: ${Object.keys(bootstrap.nvr).join(', ')}`);
+    }
+    if (cameras.length > 0) {
+      console.log(`[unifi-protect] [bootstrap] first camera (sanitized): ${bodySnippet(sanitizeForLog(cameras[0]))}`);
+    }
+
+    console.log(`[unifi-protect] [bootstrap] Upserting ${cameras.length} cameras for project ${projectId}`);
+
+    for (const cam of cameras) {
+      const online = isCameraOnline(cam);
+      const name = cameraDisplayName(cam);
+      const model = cam.type || cam.marketName || cam.modelKey || null;
+      const host = cam.host || null;
+
+      const channels = Array.isArray(cam.channels) ? cam.channels : [];
+      const sortedChannels = [...channels].sort(
+        (a, b) => (b.width || 0) * (b.height || 0) - (a.width || 0) * (a.height || 0)
+      );
+      const [highChannel, mediumChannel, lowChannel] = sortedChannels;
+
+      const highUrls = buildChannelUrls(host, highChannel);
+      const mediumUrls = buildChannelUrls(host, mediumChannel);
+      const lowUrls = buildChannelUrls(host, lowChannel);
+
+      const streamPassword = extractStreamPassword(bootstrap.nvr, cam);
+
+      const payload = {
+        name,
+        model,
+        mac: cam.mac || null,
+        ip_address: host,
+        rtsp_url: highUrls.rtsp,
+        rtsps_url_high: highUrls.rtsps,
+        rtsps_url_medium: mediumUrls.rtsps,
+        rtsps_url_low: lowUrls.rtsps,
+        resolution: pickResolution(channels),
+        status: online == null ? 'unknown' : online ? 'online' : 'offline',
+        last_seen: cam.lastSeen ? new Date(cam.lastSeen) : null,
+      };
+      if (streamPassword) payload.stream_password = streamPassword;
+
+      try {
+        const ok = await upsertCamera(db, projectId, config.id, payload);
+        if (ok) camerasImported += 1;
+      } catch (err) {
+        console.log(`[unifi-protect] [bootstrap] failed to upsert camera ${cam.mac || cam.id || name || '(unknown)'}: ${err.message}`);
+        console.log(err.stack);
+      }
+    }
+
+    console.log(`[unifi-protect] [bootstrap] Upserted ${camerasImported} of ${cameras.length} cameras for project ${projectId}`);
+
+    return { devices_imported: 0, vlans_imported: 0, cameras_imported: camerasImported, status: 'success', message: null };
+  } catch (err) {
+    console.log(`[unifi-protect] [bootstrap] camera sync error: ${err.message}`);
+    return {
+      devices_imported: 0,
+      vlans_imported: 0,
+      cameras_imported: camerasImported,
+      status: camerasImported ? 'partial' : 'failed',
+      message: err.message,
+    };
+  }
+}
+
 async function testConnection(config) {
+  if (usesBootstrapApi(config)) {
+    console.log('[unifi-protect] using unofficial bootstrap API (username/password)');
+    return testConnectionBootstrap(config);
+  }
+  console.log('[unifi-protect] using official Integration API (API key)');
+
   const httpsAgent = buildHttpsAgent(config);
 
   try {
@@ -365,6 +611,12 @@ async function testConnection(config) {
 }
 
 async function syncData(config, projectId, db) {
+  if (usesBootstrapApi(config)) {
+    console.log('[unifi-protect] using unofficial bootstrap API (username/password)');
+    return syncDataBootstrap(config, projectId, db);
+  }
+  console.log('[unifi-protect] using official Integration API (API key)');
+
   let camerasImported = 0;
   const httpsAgent = buildHttpsAgent(config);
 
