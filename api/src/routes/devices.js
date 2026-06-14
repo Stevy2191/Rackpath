@@ -3,8 +3,19 @@ const pool = require('../db/pool');
 
 const router = express.Router();
 
-// GET /api/devices - list all devices in the current project
+// Normalizes the `tag` query param, which may arrive as a single value, a
+// comma-separated string, or (with `tag=1&tag=2`) an array.
+function parseTagIds(tag) {
+  return []
+    .concat(tag || [])
+    .flatMap((value) => String(value).split(','))
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value));
+}
+
+// GET /api/devices - list devices in the current project
 // GET /api/devices?unplaced=true - only devices with no linked topology node
+// GET /api/devices?type=&location=&tag=&search= - filter results
 router.get('/', async (req, res, next) => {
   try {
     let query =
@@ -12,15 +23,59 @@ router.get('/', async (req, res, next) => {
       'FROM devices d ' +
       'LEFT JOIN topology_nodes tn ON tn.device_id = d.id ' +
       'LEFT JOIN project_integrations pi ON pi.id = d.source_integration_id';
-    const params = [];
+
+    const conditions = ['d.project_id = ?'];
+    const params = [req.projectId];
+
     if (req.query.unplaced === 'true') {
-      query += ' WHERE tn.id IS NULL AND d.project_id = ?';
-    } else {
-      query += ' WHERE d.project_id = ?';
+      conditions.push('tn.id IS NULL');
     }
-    params.push(req.projectId);
-    query += ' ORDER BY d.hostname, d.ip';
+    if (req.query.type) {
+      conditions.push('d.type = ?');
+      params.push(req.query.type);
+    }
+    if (req.query.location) {
+      conditions.push('d.location = ?');
+      params.push(req.query.location);
+    }
+    if (req.query.search) {
+      conditions.push('(d.hostname LIKE ? OR d.ip LIKE ? OR d.model LIKE ? OR d.serial_number LIKE ?)');
+      const like = `%${req.query.search}%`;
+      params.push(like, like, like, like);
+    }
+
+    const tagIds = parseTagIds(req.query.tag);
+    if (tagIds.length > 0) {
+      conditions.push(
+        `d.id IN (SELECT device_id FROM device_tag_assignments WHERE tag_id IN (${tagIds.map(() => '?').join(', ')}))`
+      );
+      params.push(...tagIds);
+    }
+
+    query += ` WHERE ${conditions.join(' AND ')} ORDER BY d.hostname, d.ip`;
+
     const [rows] = await pool.query(query, params);
+
+    if (rows.length > 0) {
+      const ids = rows.map((r) => r.id);
+      const [tagRows] = await pool.query(
+        `SELECT dta.device_id, t.id, t.name, t.color
+         FROM device_tag_assignments dta
+         JOIN device_tags t ON t.id = dta.tag_id
+         WHERE dta.device_id IN (${ids.map(() => '?').join(', ')})
+         ORDER BY t.name ASC`,
+        ids
+      );
+      const tagsByDevice = {};
+      for (const tr of tagRows) {
+        if (!tagsByDevice[tr.device_id]) tagsByDevice[tr.device_id] = [];
+        tagsByDevice[tr.device_id].push({ id: tr.id, name: tr.name, color: tr.color });
+      }
+      for (const row of rows) {
+        row.tags = tagsByDevice[row.id] || [];
+      }
+    }
+
     res.json(rows);
   } catch (err) {
     next(err);
@@ -44,10 +99,10 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/devices - create device
 router.post('/', async (req, res, next) => {
   try {
-    const { hostname, ip, mac, type, snmp_community, notes, make, model, serial_number, purchase_date, warranty_expiry } = req.body;
+    const { hostname, ip, mac, type, snmp_community, notes, location, make, model, serial_number, purchase_date, warranty_expiry } = req.body;
     const [result] = await pool.query(
-      `INSERT INTO devices (project_id, hostname, ip, mac, type, snmp_community, notes, make, model, serial_number, purchase_date, warranty_expiry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO devices (project_id, hostname, ip, mac, type, snmp_community, notes, location, make, model, serial_number, purchase_date, warranty_expiry)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId,
         hostname || null,
@@ -56,6 +111,7 @@ router.post('/', async (req, res, next) => {
         type || null,
         snmp_community || null,
         notes || null,
+        location || null,
         make || null,
         model || null,
         serial_number || null,
@@ -73,10 +129,10 @@ router.post('/', async (req, res, next) => {
 // PUT /api/devices/:id - update device
 router.put('/:id', async (req, res, next) => {
   try {
-    const { hostname, ip, mac, type, snmp_community, notes, make, model, serial_number, purchase_date, warranty_expiry } = req.body;
+    const { hostname, ip, mac, type, snmp_community, notes, location, make, model, serial_number, purchase_date, warranty_expiry } = req.body;
     const [result] = await pool.query(
       `UPDATE devices
-       SET hostname = ?, ip = ?, mac = ?, type = ?, snmp_community = ?, notes = ?,
+       SET hostname = ?, ip = ?, mac = ?, type = ?, snmp_community = ?, notes = ?, location = ?,
            make = ?, model = ?, serial_number = ?, purchase_date = ?, warranty_expiry = ?
        WHERE id = ? AND project_id = ?`,
       [
@@ -86,6 +142,7 @@ router.put('/:id', async (req, res, next) => {
         type || null,
         snmp_community || null,
         notes || null,
+        location || null,
         make || null,
         model || null,
         serial_number || null,
@@ -104,7 +161,7 @@ router.put('/:id', async (req, res, next) => {
 });
 
 // PATCH /api/devices/:id - partial update (used for auto-save from the
-// topology properties panel)
+// topology properties panel and inline edits on the Device Inventory page)
 router.patch('/:id', async (req, res, next) => {
   try {
     const allowedFields = [
@@ -114,6 +171,7 @@ router.patch('/:id', async (req, res, next) => {
       'type',
       'snmp_community',
       'notes',
+      'location',
       'icon_color',
       'text_color',
       'make',
@@ -158,6 +216,62 @@ router.delete('/:id', async (req, res, next) => {
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Device not found' });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/devices/:id/tags - assign a tag to a device
+router.post('/:id/tags', async (req, res, next) => {
+  try {
+    const { tag_id } = req.body || {};
+    if (!tag_id) return res.status(400).json({ error: 'tag_id is required' });
+
+    const [deviceRows] = await pool.query('SELECT id FROM devices WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
+    if (deviceRows.length === 0) return res.status(404).json({ error: 'Device not found' });
+
+    const [tagRows] = await pool.query('SELECT id FROM device_tags WHERE id = ? AND project_id = ?', [
+      tag_id,
+      req.projectId,
+    ]);
+    if (tagRows.length === 0) return res.status(404).json({ error: 'Tag not found' });
+
+    await pool.query('INSERT IGNORE INTO device_tag_assignments (device_id, tag_id) VALUES (?, ?)', [
+      req.params.id,
+      tag_id,
+    ]);
+
+    const [tags] = await pool.query(
+      `SELECT t.id, t.name, t.color
+       FROM device_tag_assignments dta
+       JOIN device_tags t ON t.id = dta.tag_id
+       WHERE dta.device_id = ?
+       ORDER BY t.name ASC`,
+      [req.params.id]
+    );
+    res.status(201).json(tags);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/devices/:id/tags/:tagId - remove a tag from a device
+router.delete('/:id/tags/:tagId', async (req, res, next) => {
+  try {
+    const [deviceRows] = await pool.query('SELECT id FROM devices WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
+    if (deviceRows.length === 0) return res.status(404).json({ error: 'Device not found' });
+
+    await pool.query('DELETE FROM device_tag_assignments WHERE device_id = ? AND tag_id = ?', [
+      req.params.id,
+      req.params.tagId,
+    ]);
     res.status(204).send();
   } catch (err) {
     next(err);

@@ -17,6 +17,7 @@ const SCOPED_TABLES = [
   'ports',
   'scan_jobs',
   'racks',
+  'device_tags',
   'devices',
   'project_vlans',
   'project_integrations',

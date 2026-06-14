@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Network } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Columns3, Network, Plus, Search, Tag, X } from 'lucide-react';
 import client from '../api/client';
+import { useProject } from '../project/ProjectContext';
 import { platformInfo } from '../components/integrations/platforms';
+import ManageTagsModal from '../components/devices/ManageTagsModal';
 import './Devices.css';
 
 const emptyDevice = {
@@ -12,6 +14,7 @@ const emptyDevice = {
   type: '',
   snmp_community: '',
   notes: '',
+  location: '',
   make: '',
   model: '',
   serial_number: '',
@@ -20,9 +23,72 @@ const emptyDevice = {
 };
 const emptyPort = { port_name: '', port_number: '', cable_type: '', speed: '' };
 
+const TYPE_FILTER_OPTIONS = [
+  { value: '', label: 'All Types' },
+  { value: 'router', label: 'Router' },
+  { value: 'switch', label: 'Switch' },
+  { value: 'ap', label: 'AP' },
+  { value: 'server', label: 'Server' },
+  { value: 'firewall', label: 'Firewall' },
+  { value: 'camera', label: 'Camera' },
+  { value: 'other', label: 'Other' },
+];
+
+const COLUMN_DEFS = [
+  { key: 'ip', label: 'IP Address' },
+  { key: 'mac', label: 'MAC Address' },
+  { key: 'type', label: 'Type' },
+  { key: 'location', label: 'Location' },
+  { key: 'make', label: 'Make' },
+  { key: 'model', label: 'Model' },
+  { key: 'serial_number', label: 'Serial Number' },
+  { key: 'tags', label: 'Tags' },
+];
+
+const DEFAULT_VISIBLE_COLUMNS = {
+  ip: true,
+  mac: true,
+  type: true,
+  location: true,
+  make: false,
+  model: true,
+  serial_number: false,
+  tags: true,
+};
+
+const PAGE_SIZE = 25;
+
+// Picks readable foreground text for a colored tag pill.
+function pillTextColor(hex) {
+  if (!hex || hex.length !== 7) return '#fff';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#1a1a1a' : '#ffffff';
+}
+
 export default function DevicesPage() {
   const { id } = useParams();
+  const { currentProjectId } = useProject();
+
   const [devices, setDevices] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [locations, setLocations] = useState([]);
+
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
+  const [tagFilterIds, setTagFilterIds] = useState([]);
+  const [page, setPage] = useState(1);
+
+  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_VISIBLE_COLUMNS);
+  const [showColumnsMenu, setShowColumnsMenu] = useState(false);
+  const [showManageTags, setShowManageTags] = useState(false);
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [tagPickerDeviceId, setTagPickerDeviceId] = useState(null);
+  const [openTagPopover, setOpenTagPopover] = useState(null);
+
   const [selectedDeviceId, setSelectedDeviceId] = useState(id ? Number(id) : null);
   const [ports, setPorts] = useState([]);
   const [newDevice, setNewDevice] = useState(emptyDevice);
@@ -32,8 +98,41 @@ export default function DevicesPage() {
   const [savedAt, setSavedAt] = useState(null);
   const [error, setError] = useState(null);
 
-  const loadDevices = () => {
-    client.get('/devices').then((res) => setDevices(res.data)).catch((err) => setError(err.message));
+  const buildParams = () => {
+    const params = {};
+    if (search.trim()) params.search = search.trim();
+    if (typeFilter) params.type = typeFilter;
+    if (locationFilter) params.location = locationFilter;
+    if (tagFilterIds.length) params.tag = tagFilterIds.join(',');
+    return params;
+  };
+
+  const loadDevices = (params) => {
+    client
+      .get('/devices', { params })
+      .then((res) => setDevices(res.data || []))
+      .catch((err) => setError(err.response?.data?.error || err.message));
+  };
+
+  const loadTags = () => {
+    if (!currentProjectId) return;
+    client
+      .get(`/projects/${currentProjectId}/device-tags`)
+      .then((res) => setTags(res.data || []))
+      .catch((err) => setError(err.response?.data?.error || err.message));
+  };
+
+  const loadLocations = () => {
+    client
+      .get('/devices')
+      .then((res) => {
+        const set = new Set();
+        (res.data || []).forEach((d) => {
+          if (d.location) set.add(d.location);
+        });
+        setLocations(Array.from(set).sort());
+      })
+      .catch(() => {});
   };
 
   const loadPorts = (deviceId) => {
@@ -48,8 +147,22 @@ export default function DevicesPage() {
   };
 
   useEffect(() => {
-    loadDevices();
+    loadLocations();
   }, []);
+
+  useEffect(() => {
+    loadTags();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      loadDevices(buildParams());
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, typeFilter, locationFilter, tagFilterIds]);
 
   useEffect(() => {
     if (id) setSelectedDeviceId(Number(id));
@@ -72,22 +185,35 @@ export default function DevicesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeviceId]);
 
+  // Close any open per-row popovers/dropdowns when clicking elsewhere.
+  useEffect(() => {
+    const handleDocClick = () => {
+      setTagPickerDeviceId(null);
+      setOpenTagPopover(null);
+      setShowColumnsMenu(false);
+    };
+    document.addEventListener('click', handleDocClick);
+    return () => document.removeEventListener('click', handleDocClick);
+  }, []);
+
   const handleCreateDevice = async (e) => {
     e.preventDefault();
     try {
       await client.post('/devices', newDevice);
       setNewDevice(emptyDevice);
-      loadDevices();
+      loadDevices(buildParams());
+      loadLocations();
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const handleDeleteDevice = async (id) => {
+  const handleDeleteDevice = async (deviceId) => {
     try {
-      await client.delete(`/devices/${id}`);
-      if (selectedDeviceId === id) setSelectedDeviceId(null);
-      loadDevices();
+      await client.delete(`/devices/${deviceId}`);
+      if (selectedDeviceId === deviceId) setSelectedDeviceId(null);
+      loadDevices(buildParams());
+      loadLocations();
     } catch (err) {
       setError(err.message);
     }
@@ -100,8 +226,9 @@ export default function DevicesPage() {
     setSavedAt(null);
     try {
       const res = await client.put(`/devices/${selectedDeviceId}`, editDevice);
-      setDevices((prev) => prev.map((d) => (d.id === selectedDeviceId ? res.data : d)));
+      setDevices((prev) => prev.map((d) => (d.id === selectedDeviceId ? { ...d, ...res.data } : d)));
       setSavedAt(Date.now());
+      loadLocations();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -143,47 +270,161 @@ export default function DevicesPage() {
     }
   };
 
+  const handleLocationCommit = async (device, value) => {
+    const next = value.trim() || null;
+    if (next === (device.location || null)) return;
+    try {
+      const res = await client.patch(`/devices/${device.id}`, { location: next });
+      setDevices((prev) => prev.map((d) => (d.id === device.id ? { ...d, location: res.data.location } : d)));
+      loadLocations();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleAssignTag = async (deviceId, tagId) => {
+    try {
+      const res = await client.post(`/devices/${deviceId}/tags`, { tag_id: tagId });
+      setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, tags: res.data } : d)));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setTagPickerDeviceId(null);
+    }
+  };
+
+  const handleRemoveTag = async (deviceId, tagId) => {
+    try {
+      await client.delete(`/devices/${deviceId}/tags/${tagId}`);
+      setDevices((prev) =>
+        prev.map((d) => (d.id === deviceId ? { ...d, tags: (d.tags || []).filter((t) => t.id !== tagId) } : d))
+      );
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setOpenTagPopover(null);
+    }
+  };
+
+  const toggleTagFilter = (tagId) => {
+    setTagFilterIds((prev) => (prev.includes(tagId) ? prev.filter((tid) => tid !== tagId) : [...prev, tagId]));
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setTypeFilter('');
+    setLocationFilter('');
+    setTagFilterIds([]);
+  };
+
+  const toggleColumn = (key) => {
+    setVisibleColumns((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleTagsChanged = () => {
+    loadTags();
+    loadDevices(buildParams());
+  };
+
+  const filtersActive = !!(search || typeFilter || locationFilter || tagFilterIds.length);
+
+  const totalCount = devices.length;
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageDevices = devices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId);
 
   return (
     <div className="devices-page">
       {error && <div className="page-error">{error}</div>}
 
-      <aside className="devices-sidebar">
-        <h2>Devices</h2>
-        <ul className="device-list">
-          {devices.map((device) => (
-            <li key={device.id} className={device.id === selectedDeviceId ? 'active' : ''}>
-              <button className="device-select" onClick={() => setSelectedDeviceId(device.id)}>
-                <span className="device-name-row">
-                  <strong>{device.hostname || device.ip || `Device ${device.id}`}</strong>
-                  {device.topology_node_id != null && (
-                    <Network size={14} className="device-topology-icon" title="Linked to a topology node" />
-                  )}
-                  {device.source_integration_id != null &&
-                    (() => {
-                      const { icon: SourceIcon, label } = platformInfo(device.source_integration_platform);
-                      return (
-                        <SourceIcon
-                          size={14}
-                          className="device-source-icon"
-                          title={`Imported from ${label}${
-                            device.source_integration_name ? ` (${device.source_integration_name})` : ''
-                          }`}
-                        />
-                      );
-                    })()}
-                </span>
-                {device.type && <span className="device-type">{device.type}</span>}
-              </button>
-              <button className="delete-btn" onClick={() => handleDeleteDevice(device.id)}>
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
+      <div className="devices-toolbar">
+        <div className="devices-filters">
+          <div className="devices-search">
+            <Search size={14} />
+            <input
+              placeholder="Search hostname, IP, model, serial..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
 
-        <form onSubmit={handleCreateDevice} className="device-form">
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            {TYPE_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+            <option value="">All Locations</option>
+            {locations.map((loc) => (
+              <option key={loc} value={loc}>
+                {loc}
+              </option>
+            ))}
+          </select>
+
+          <div className="devices-tag-filters">
+            {tags.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                className={`device-tag-pill${tagFilterIds.includes(tag.id) ? ' active' : ''}`}
+                style={{ background: tag.color, color: pillTextColor(tag.color) }}
+                onClick={() => toggleTagFilter(tag.id)}
+              >
+                {tag.name}
+              </button>
+            ))}
+          </div>
+
+          {filtersActive && (
+            <button type="button" className="devices-clear-filters" onClick={clearFilters}>
+              Clear Filters
+            </button>
+          )}
+        </div>
+
+        <div className="devices-toolbar-actions">
+          <button type="button" onClick={() => setShowAddDevice((v) => !v)}>
+            <Plus size={14} /> Add Device
+          </button>
+          <button type="button" onClick={() => setShowManageTags(true)}>
+            <Tag size={14} /> Manage Tags
+          </button>
+          <div className="devices-columns-menu">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowColumnsMenu((v) => !v);
+              }}
+            >
+              <Columns3 size={14} /> Columns
+            </button>
+            {showColumnsMenu && (
+              <div className="devices-columns-dropdown" onClick={(e) => e.stopPropagation()}>
+                {COLUMN_DEFS.map((col) => (
+                  <label key={col.key} className="devices-columns-option">
+                    <input
+                      type="checkbox"
+                      checked={!!visibleColumns[col.key]}
+                      onChange={() => toggleColumn(col.key)}
+                    />
+                    {col.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showAddDevice && (
+        <form onSubmit={handleCreateDevice} className="device-form devices-add-form">
           <h3>New Device</h3>
           <input
             placeholder="Hostname"
@@ -204,6 +445,11 @@ export default function DevicesPage() {
             placeholder="Type"
             value={newDevice.type}
             onChange={(e) => setNewDevice({ ...newDevice, type: e.target.value })}
+          />
+          <input
+            placeholder="Location"
+            value={newDevice.location}
+            onChange={(e) => setNewDevice({ ...newDevice, location: e.target.value })}
           />
           <input
             placeholder="SNMP Community"
@@ -248,216 +494,386 @@ export default function DevicesPage() {
           />
           <button type="submit">Add Device</button>
         </form>
-      </aside>
+      )}
 
-      <section className="port-editor">
-        {selectedDevice ? (
-          <>
-            <div className="device-detail-header">
-              <h2>{selectedDevice.hostname || selectedDevice.ip}</h2>
-            </div>
+      <div className="devices-count">
+        Showing {pageDevices.length} of {totalCount} devices
+      </div>
 
-            <form onSubmit={handleSaveDevice} className="device-edit-form">
-              <label>
-                Hostname
-                <input
-                  value={editDevice.hostname || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, hostname: e.target.value })}
-                />
-              </label>
-              <label>
-                IP Address
-                <input
-                  value={editDevice.ip || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, ip: e.target.value })}
-                />
-              </label>
-              <label>
-                MAC Address
-                <input
-                  value={editDevice.mac || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, mac: e.target.value })}
-                />
-              </label>
-              <label>
-                Type
-                <input
-                  value={editDevice.type || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, type: e.target.value })}
-                />
-              </label>
-              <label>
-                SNMP Community
-                <input
-                  value={editDevice.snmp_community || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, snmp_community: e.target.value })}
-                />
-              </label>
-              <label>
-                Make
-                <input
-                  value={editDevice.make || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, make: e.target.value })}
-                />
-              </label>
-              <label>
-                Model
-                <input
-                  value={editDevice.model || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, model: e.target.value })}
-                />
-              </label>
-              <label>
-                Serial Number
-                <input
-                  value={editDevice.serial_number || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, serial_number: e.target.value })}
-                />
-              </label>
-              <label>
-                Purchase Date
-                <input
-                  type="date"
-                  value={editDevice.purchase_date || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, purchase_date: e.target.value })}
-                />
-              </label>
-              <label>
-                Warranty Expiry
-                <input
-                  type="date"
-                  value={editDevice.warranty_expiry || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, warranty_expiry: e.target.value })}
-                />
-              </label>
-              <label className="full-width">
-                Notes
-                <textarea
-                  value={editDevice.notes || ''}
-                  onChange={(e) => setEditDevice({ ...editDevice, notes: e.target.value })}
-                />
-              </label>
-              <div className="device-edit-actions">
-                <button type="submit" disabled={savingDevice}>
-                  {savingDevice ? 'Saving...' : 'Save Changes'}
-                </button>
-                {savedAt && <span className="device-edit-saved">Saved.</span>}
-              </div>
-            </form>
-
-            <h2>Ports</h2>
-            <table className="port-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Number</th>
-                  <th>Cable Type</th>
-                  <th>Connected Device</th>
-                  <th>Connected Port</th>
-                  <th>Speed</th>
-                  <th></th>
+      <div className="devices-table-wrap">
+        <table className="devices-table">
+          <thead>
+            <tr>
+              <th>Hostname</th>
+              {visibleColumns.ip && <th>IP Address</th>}
+              {visibleColumns.mac && <th>MAC Address</th>}
+              {visibleColumns.type && <th>Type</th>}
+              {visibleColumns.location && <th>Location</th>}
+              {visibleColumns.make && <th>Make</th>}
+              {visibleColumns.model && <th>Model</th>}
+              {visibleColumns.serial_number && <th>Serial Number</th>}
+              {visibleColumns.tags && <th>Tags</th>}
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageDevices.map((device) => {
+              const deviceTags = device.tags || [];
+              const availableTags = tags.filter((t) => !deviceTags.some((dt) => dt.id === t.id));
+              return (
+                <tr key={device.id} className={device.id === selectedDeviceId ? 'active' : ''}>
+                  <td>
+                    <button className="device-name-link" onClick={() => setSelectedDeviceId(device.id)}>
+                      <span className="device-name-row">
+                        <strong>{device.hostname || device.ip || `Device ${device.id}`}</strong>
+                        {device.topology_node_id != null && (
+                          <Network size={14} className="device-topology-icon" title="Linked to a topology node" />
+                        )}
+                        {device.source_integration_id != null &&
+                          (() => {
+                            const { icon: SourceIcon, label } = platformInfo(device.source_integration_platform);
+                            return (
+                              <SourceIcon
+                                size={14}
+                                className="device-source-icon"
+                                title={`Imported from ${label}${
+                                  device.source_integration_name ? ` (${device.source_integration_name})` : ''
+                                }`}
+                              />
+                            );
+                          })()}
+                      </span>
+                    </button>
+                  </td>
+                  {visibleColumns.ip && <td>{device.ip || ''}</td>}
+                  {visibleColumns.mac && <td>{device.mac || ''}</td>}
+                  {visibleColumns.type && <td>{device.type || ''}</td>}
+                  {visibleColumns.location && (
+                    <td>
+                      <input
+                        key={`loc-${device.id}-${device.location || ''}`}
+                        className="devices-location-input"
+                        defaultValue={device.location || ''}
+                        placeholder="—"
+                        onBlur={(e) => handleLocationCommit(device, e.target.value)}
+                      />
+                    </td>
+                  )}
+                  {visibleColumns.make && <td>{device.make || ''}</td>}
+                  {visibleColumns.model && <td>{device.model || ''}</td>}
+                  {visibleColumns.serial_number && <td>{device.serial_number || ''}</td>}
+                  {visibleColumns.tags && (
+                    <td className="devices-tags-cell">
+                      <div className="device-tag-list">
+                        {deviceTags.map((tag) => (
+                          <span key={tag.id} className="device-tag-pill-wrap">
+                            <button
+                              type="button"
+                              className="device-tag-pill"
+                              style={{ background: tag.color, color: pillTextColor(tag.color) }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const key = `${device.id}-${tag.id}`;
+                                setOpenTagPopover((prev) => (prev === key ? null : key));
+                              }}
+                            >
+                              {tag.name}
+                            </button>
+                            {openTagPopover === `${device.id}-${tag.id}` && (
+                              <div className="device-tag-popover" onClick={(e) => e.stopPropagation()}>
+                                <button type="button" onClick={() => handleRemoveTag(device.id, tag.id)}>
+                                  Remove tag
+                                </button>
+                              </div>
+                            )}
+                          </span>
+                        ))}
+                        <span className="device-tag-add-wrap">
+                          <button
+                            type="button"
+                            className="device-tag-add-btn"
+                            title="Add tag"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTagPickerDeviceId((prev) => (prev === device.id ? null : device.id));
+                            }}
+                          >
+                            <Plus size={12} />
+                          </button>
+                          {tagPickerDeviceId === device.id && (
+                            <div className="device-tag-dropdown" onClick={(e) => e.stopPropagation()}>
+                              {availableTags.length === 0 ? (
+                                <div className="device-tag-dropdown-empty">No more tags</div>
+                              ) : (
+                                availableTags.map((t) => (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    className="device-tag-dropdown-item"
+                                    onClick={() => handleAssignTag(device.id, t.id)}
+                                  >
+                                    <span className="device-tag-dropdown-swatch" style={{ background: t.color }} />
+                                    {t.name}
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </span>
+                      </div>
+                    </td>
+                  )}
+                  <td>
+                    <button className="delete-btn" onClick={() => handleDeleteDevice(device.id)}>
+                      Delete
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {ports.map((port) => (
-                  <tr key={port.id}>
-                    <td>
-                      <input
-                        value={port.port_name || ''}
-                        onChange={(e) => handleUpdatePort(port, 'port_name', e.target.value)}
-                        onBlur={() => handleSavePort(port)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        value={port.port_number ?? ''}
-                        onChange={(e) => handleUpdatePort(port, 'port_number', Number(e.target.value))}
-                        onBlur={() => handleSavePort(port)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        value={port.cable_type || ''}
-                        onChange={(e) => handleUpdatePort(port, 'cable_type', e.target.value)}
-                        onBlur={() => handleSavePort(port)}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        value={port.connected_device_id ?? ''}
-                        onChange={(e) => {
-                          const value = e.target.value ? Number(e.target.value) : null;
-                          const updated = { ...port, connected_device_id: value };
-                          setPorts((prev) => prev.map((p) => (p.id === port.id ? updated : p)));
-                          handleSavePort(updated);
-                        }}
-                      >
-                        <option value="">-</option>
-                        {devices
-                          .filter((d) => d.id !== selectedDeviceId)
-                          .map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {d.hostname || d.ip || `Device ${d.id}`}
-                            </option>
-                          ))}
-                      </select>
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        value={port.connected_port_id ?? ''}
-                        onChange={(e) =>
-                          handleUpdatePort(port, 'connected_port_id', e.target.value ? Number(e.target.value) : null)
-                        }
-                        onBlur={() => handleSavePort(port)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        value={port.speed || ''}
-                        onChange={(e) => handleUpdatePort(port, 'speed', e.target.value)}
-                        onBlur={() => handleSavePort(port)}
-                      />
-                    </td>
-                    <td>
-                      <button onClick={() => handleDeletePort(port.id)}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-            <form onSubmit={handleCreatePort} className="port-form">
-              <h3>Add Port</h3>
+      <div className="devices-pagination">
+        <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+          <ChevronLeft size={16} />
+        </button>
+        <span>
+          Page {currentPage} of {pageCount}
+        </span>
+        <button
+          type="button"
+          onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+          disabled={currentPage >= pageCount}
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
+      {selectedDevice && (
+        <section className="port-editor">
+          <div className="device-detail-header">
+            <h2>{selectedDevice.hostname || selectedDevice.ip}</h2>
+            <button type="button" className="devices-close-detail" onClick={() => setSelectedDeviceId(null)}>
+              <X size={16} />
+            </button>
+          </div>
+
+          <form onSubmit={handleSaveDevice} className="device-edit-form">
+            <label>
+              Hostname
               <input
-                placeholder="Name"
-                value={newPort.port_name}
-                onChange={(e) => setNewPort({ ...newPort, port_name: e.target.value })}
+                value={editDevice.hostname || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, hostname: e.target.value })}
               />
+            </label>
+            <label>
+              IP Address
               <input
-                type="number"
-                placeholder="Number"
-                value={newPort.port_number}
-                onChange={(e) => setNewPort({ ...newPort, port_number: e.target.value })}
+                value={editDevice.ip || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, ip: e.target.value })}
               />
+            </label>
+            <label>
+              MAC Address
               <input
-                placeholder="Cable Type"
-                value={newPort.cable_type}
-                onChange={(e) => setNewPort({ ...newPort, cable_type: e.target.value })}
+                value={editDevice.mac || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, mac: e.target.value })}
               />
+            </label>
+            <label>
+              Type
               <input
-                placeholder="Speed"
-                value={newPort.speed}
-                onChange={(e) => setNewPort({ ...newPort, speed: e.target.value })}
+                value={editDevice.type || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, type: e.target.value })}
               />
-              <button type="submit">Add Port</button>
-            </form>
-          </>
-        ) : (
-          <div className="page-status">Select a device to edit its ports.</div>
-        )}
-      </section>
+            </label>
+            <label>
+              Location
+              <input
+                value={editDevice.location || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, location: e.target.value })}
+              />
+            </label>
+            <label>
+              SNMP Community
+              <input
+                value={editDevice.snmp_community || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, snmp_community: e.target.value })}
+              />
+            </label>
+            <label>
+              Make
+              <input
+                value={editDevice.make || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, make: e.target.value })}
+              />
+            </label>
+            <label>
+              Model
+              <input
+                value={editDevice.model || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, model: e.target.value })}
+              />
+            </label>
+            <label>
+              Serial Number
+              <input
+                value={editDevice.serial_number || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, serial_number: e.target.value })}
+              />
+            </label>
+            <label>
+              Purchase Date
+              <input
+                type="date"
+                value={editDevice.purchase_date || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, purchase_date: e.target.value })}
+              />
+            </label>
+            <label>
+              Warranty Expiry
+              <input
+                type="date"
+                value={editDevice.warranty_expiry || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, warranty_expiry: e.target.value })}
+              />
+            </label>
+            <label className="full-width">
+              Notes
+              <textarea
+                value={editDevice.notes || ''}
+                onChange={(e) => setEditDevice({ ...editDevice, notes: e.target.value })}
+              />
+            </label>
+            <div className="device-edit-actions">
+              <button type="submit" disabled={savingDevice}>
+                {savingDevice ? 'Saving...' : 'Save Changes'}
+              </button>
+              {savedAt && <span className="device-edit-saved">Saved.</span>}
+            </div>
+          </form>
+
+          <h2>Ports</h2>
+          <table className="port-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Number</th>
+                <th>Cable Type</th>
+                <th>Connected Device</th>
+                <th>Connected Port</th>
+                <th>Speed</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {ports.map((port) => (
+                <tr key={port.id}>
+                  <td>
+                    <input
+                      value={port.port_name || ''}
+                      onChange={(e) => handleUpdatePort(port, 'port_name', e.target.value)}
+                      onBlur={() => handleSavePort(port)}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={port.port_number ?? ''}
+                      onChange={(e) => handleUpdatePort(port, 'port_number', Number(e.target.value))}
+                      onBlur={() => handleSavePort(port)}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      value={port.cable_type || ''}
+                      onChange={(e) => handleUpdatePort(port, 'cable_type', e.target.value)}
+                      onBlur={() => handleSavePort(port)}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      value={port.connected_device_id ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value ? Number(e.target.value) : null;
+                        const updated = { ...port, connected_device_id: value };
+                        setPorts((prev) => prev.map((p) => (p.id === port.id ? updated : p)));
+                        handleSavePort(updated);
+                      }}
+                    >
+                      <option value="">-</option>
+                      {devices
+                        .filter((d) => d.id !== selectedDeviceId)
+                        .map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.hostname || d.ip || `Device ${d.id}`}
+                          </option>
+                        ))}
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={port.connected_port_id ?? ''}
+                      onChange={(e) =>
+                        handleUpdatePort(port, 'connected_port_id', e.target.value ? Number(e.target.value) : null)
+                      }
+                      onBlur={() => handleSavePort(port)}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      value={port.speed || ''}
+                      onChange={(e) => handleUpdatePort(port, 'speed', e.target.value)}
+                      onBlur={() => handleSavePort(port)}
+                    />
+                  </td>
+                  <td>
+                    <button onClick={() => handleDeletePort(port.id)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <form onSubmit={handleCreatePort} className="port-form">
+            <h3>Add Port</h3>
+            <input
+              placeholder="Name"
+              value={newPort.port_name}
+              onChange={(e) => setNewPort({ ...newPort, port_name: e.target.value })}
+            />
+            <input
+              type="number"
+              placeholder="Number"
+              value={newPort.port_number}
+              onChange={(e) => setNewPort({ ...newPort, port_number: e.target.value })}
+            />
+            <input
+              placeholder="Cable Type"
+              value={newPort.cable_type}
+              onChange={(e) => setNewPort({ ...newPort, cable_type: e.target.value })}
+            />
+            <input
+              placeholder="Speed"
+              value={newPort.speed}
+              onChange={(e) => setNewPort({ ...newPort, speed: e.target.value })}
+            />
+            <button type="submit">Add Port</button>
+          </form>
+        </section>
+      )}
+
+      {showManageTags && (
+        <ManageTagsModal
+          projectId={currentProjectId}
+          tags={tags}
+          onClose={() => setShowManageTags(false)}
+          onChange={handleTagsChanged}
+        />
+      )}
     </div>
   );
 }
