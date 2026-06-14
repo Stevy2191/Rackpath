@@ -86,6 +86,46 @@ function sanitizeForLog(obj) {
   return obj;
 }
 
+// Video codec names (e.g. "h264") are short and must never be mistaken for a
+// recovery code/credential, even though keys like "videoCodec" match
+// /code/i.
+const KNOWN_CODEC_VALUES = new Set(['h264', 'h265', 'hevc', 'mjpeg', 'mpeg4', 'av1']);
+
+// True for string values that "look like" a credential/recovery code:
+// alphanumeric, longer than 8 characters, not a URL, and not a MAC address
+// (so fields like apMac and codec names like "h264" are excluded).
+function looksLikeCredentialValue(value) {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  if (KNOWN_CODEC_VALUES.has(value.toLowerCase())) return false;
+  if (value.length <= 8) return false;
+  if (/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(value)) return false; // MAC address
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return false; // URL
+  return /^[A-Za-z0-9]+$/.test(value);
+}
+
+// Debug helper: logs (without printing secret values) every field on `obj`
+// whose key name suggests a credential/recovery code — matching
+// /key|code|pass|secret|token|auth/i but not /codec/i — along with its
+// string length and whether it looks like a credential per
+// looksLikeCredentialValue. Recurses one level into nested objects (e.g.
+// streamSharingSettings) so those are covered too. Used to locate the
+// bootstrap API's recovery-code field across firmware versions.
+function logCredentialCandidates(label, obj) {
+  if (!obj || typeof obj !== 'object') return;
+  for (const [key, value] of Object.entries(obj)) {
+    if (/codec/i.test(key)) continue;
+    if (!/key|code|pass|secret|token|auth/i.test(key)) continue;
+    if (typeof value === 'string') {
+      console.log(
+        `[unifi-protect] [bootstrap] credential candidate ${label}.${key}: <string, ${value.length} chars>` +
+          (looksLikeCredentialValue(value) ? ' (looks like a credential)' : '')
+      );
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      logCredentialCandidates(`${label}.${key}`, value);
+    }
+  }
+}
+
 // Logs in via the UniFi OS endpoint using username/password and manually
 // extracts the session token from the response, since axios-cookiejar-support
 // is incompatible with a custom httpsAgent (needed for self-signed certs).
@@ -184,7 +224,10 @@ function extractStreamPassword(nvr, cam) {
     ['camera.recoveryCode', cam?.recoveryCode],
     ['camera.streamSharingSettings.recoveryCode', cam?.streamSharingSettings?.recoveryCode],
     ['camera.streamSharingSettings.password', cam?.streamSharingSettings?.password],
+    ['camera.streamSharingSettings.token', cam?.streamSharingSettings?.token],
     ['camera.manualRecoveryCode', cam?.manualRecoveryCode],
+    ['camera.accessKey', cam?.accessKey],
+    ['camera.authToken', cam?.authToken],
     ['nvr.recoveryCode', nvr?.recoveryCode],
     ['camera.streamSharing.plainPassword', cam?.streamSharing?.plainPassword],
     ['camera.streamSharing.password', cam?.streamSharing?.password],
@@ -194,15 +237,21 @@ function extractStreamPassword(nvr, cam) {
 
   for (const [label, value] of candidates) {
     if (typeof value === 'string' && value) {
-      console.log(`[unifi-protect] [bootstrap] recovery code found at ${label}`);
+      console.log(`[unifi-protect] [bootstrap] recovery code found at ${label} (${value.length} chars)`);
       return value;
     }
   }
 
+  // Fallback: scan the camera's own keys for anything that looks like a
+  // recovery code/credential. Excludes keys matching /codec/i (e.g.
+  // "videoCodec") and requires the value to look like a credential
+  // (alphanumeric, >8 chars, not a URL/MAC) so codec names like "h264" and
+  // MAC-valued fields like "apMac" are never picked up.
   if (cam && typeof cam === 'object') {
     for (const [key, value] of Object.entries(cam)) {
-      if (/recovery|code/i.test(key) && typeof value === 'string' && value) {
-        console.log(`[unifi-protect] [bootstrap] recovery code found via key scan at camera.${key}`);
+      if (/codec/i.test(key)) continue;
+      if (/recovery|code|key|pass|secret|token|auth/i.test(key) && looksLikeCredentialValue(value)) {
+        console.log(`[unifi-protect] [bootstrap] recovery code found via key scan at camera.${key} (${value.length} chars)`);
         return value;
       }
     }
@@ -538,10 +587,38 @@ async function syncDataBootstrap(config, projectId, db) {
     if (bootstrap.nvr && typeof bootstrap.nvr === 'object') {
       console.log(`[unifi-protect] [bootstrap] nvr keys: ${Object.keys(bootstrap.nvr).join(', ')}`);
       console.log(`[unifi-protect] [bootstrap] nvr (sanitized, full): ${JSON.stringify(sanitizeForLog(bootstrap.nvr))}`);
+      logCredentialCandidates('nvr', bootstrap.nvr);
     }
     if (cameras.length > 0) {
-      console.log(`[unifi-protect] [bootstrap] first camera keys: ${Object.keys(cameras[0]).join(', ')}`);
-      console.log(`[unifi-protect] [bootstrap] first camera (sanitized, full): ${JSON.stringify(sanitizeForLog(cameras[0]))}`);
+      const firstCam = cameras[0];
+      console.log(`[unifi-protect] [bootstrap] first camera keys: ${Object.keys(firstCam).join(', ')}`);
+      console.log(`[unifi-protect] [bootstrap] first camera (sanitized, full): ${JSON.stringify(sanitizeForLog(firstCam))}`);
+
+      // Recovery-code investigation: check the fields known to hold it on
+      // some firmware versions, plus a generic scan for anything that looks
+      // like a credential (see extractStreamPassword/logCredentialCandidates).
+      console.log(`[unifi-protect] [bootstrap] first camera apMac: ${firstCam.apMac ?? '(none)'}`);
+      console.log(
+        `[unifi-protect] [bootstrap] first camera recoveryCode: ${
+          typeof firstCam.recoveryCode === 'string' ? `<string, ${firstCam.recoveryCode.length} chars>` : firstCam.recoveryCode ?? '(none)'
+        }`
+      );
+      console.log(
+        `[unifi-protect] [bootstrap] first camera streamSharingSettings (sanitized, full): ${JSON.stringify(
+          sanitizeForLog(firstCam.streamSharingSettings ?? null)
+        )}`
+      );
+      console.log(
+        `[unifi-protect] [bootstrap] first camera accessKey: ${
+          typeof firstCam.accessKey === 'string' ? `<string, ${firstCam.accessKey.length} chars>` : firstCam.accessKey ?? '(none)'
+        }`
+      );
+      console.log(
+        `[unifi-protect] [bootstrap] first camera authToken: ${
+          typeof firstCam.authToken === 'string' ? `<string, ${firstCam.authToken.length} chars>` : firstCam.authToken ?? '(none)'
+        }`
+      );
+      logCredentialCandidates('camera', firstCam);
     }
 
     console.log(`[unifi-protect] [bootstrap] Upserting ${cameras.length} cameras for project ${projectId}`);
