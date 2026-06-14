@@ -19,10 +19,10 @@ export const emptyCamera = {
   status: 'unknown',
 };
 
-// Stream passwords are populated by syncing from UniFi Protect and are
-// overwritten on every sync, so they're shown read-only with a copy button
-// rather than as an editable input.
-function ReadOnlyMaskedField({ label, value, note }) {
+// Stream passwords (recovery codes) are populated by syncing from UniFi
+// Protect and are overwritten on every sync, so they're shown read-only with
+// a copy button rather than as an editable input.
+function ReadOnlyMaskedField({ label, value, note, title }) {
   const [visible, setVisible] = useState(false);
 
   const handleCopy = () => {
@@ -30,7 +30,7 @@ function ReadOnlyMaskedField({ label, value, note }) {
   };
 
   return (
-    <label>
+    <label title={title}>
       {label}
       <div className="camera-masked-field">
         <input
@@ -171,9 +171,10 @@ export default function CameraFormModal({ initial, onSave, onClose }) {
             placeholder="rtsps://192.168.1.1:7441/alias?quality=low"
           />
           <ReadOnlyMaskedField
-            label="Stream Password"
+            label="Recovery Code (from Protect)"
             value={draft.stream_password}
-            note="Synced from UniFi Protect — change the password in your Protect console"
+            note="Synced from UniFi Protect — change the recovery code in your Protect console"
+            title="This is the recovery code shown in Protect under camera Settings → Manage → Manual Recovery"
           />
           <label>
             Status

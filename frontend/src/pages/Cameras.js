@@ -307,7 +307,9 @@ export default function CamerasPage() {
               <th>Model</th>
               <th>IP Address</th>
               <th>RTSPS Streams</th>
-              <th>Stream Password</th>
+              <th title="This is the recovery code shown in Protect under camera Settings → Manage → Manual Recovery">
+                Recovery Code / Stream Password
+              </th>
               <th>Last Seen</th>
               <th></th>
             </tr>

@@ -173,17 +173,43 @@ function buildChannelUrls(host, channel) {
   };
 }
 
-// Best-effort extraction of a camera's stream-sharing password from the
-// bootstrap response. The exact field name varies by firmware version, so
-// several known/likely locations are tried.
+// Best-effort extraction of a camera's stream recovery code from the
+// bootstrap response. In the bootstrap API this value is called the
+// "recovery code" (shown in Protect under camera Settings -> Manage ->
+// Manual Recovery), not "streamPassword" — the exact field name varies by
+// firmware version, so several known/likely locations are tried, followed by
+// a scan of the camera's own keys for anything matching /recovery|code/i.
 function extractStreamPassword(nvr, cam) {
-  return (
-    cam?.streamSharing?.plainPassword ||
-    cam?.streamSharing?.password ||
-    nvr?.streamSharing?.plainPassword ||
-    nvr?.streamSharing?.password ||
-    null
-  );
+  const candidates = [
+    ['camera.recoveryCode', cam?.recoveryCode],
+    ['camera.streamSharingSettings.recoveryCode', cam?.streamSharingSettings?.recoveryCode],
+    ['camera.streamSharingSettings.password', cam?.streamSharingSettings?.password],
+    ['camera.manualRecoveryCode', cam?.manualRecoveryCode],
+    ['nvr.recoveryCode', nvr?.recoveryCode],
+    ['camera.streamSharing.plainPassword', cam?.streamSharing?.plainPassword],
+    ['camera.streamSharing.password', cam?.streamSharing?.password],
+    ['nvr.streamSharing.plainPassword', nvr?.streamSharing?.plainPassword],
+    ['nvr.streamSharing.password', nvr?.streamSharing?.password],
+  ];
+
+  for (const [label, value] of candidates) {
+    if (typeof value === 'string' && value) {
+      console.log(`[unifi-protect] [bootstrap] recovery code found at ${label}`);
+      return value;
+    }
+  }
+
+  if (cam && typeof cam === 'object') {
+    for (const [key, value] of Object.entries(cam)) {
+      if (/recovery|code/i.test(key) && typeof value === 'string' && value) {
+        console.log(`[unifi-protect] [bootstrap] recovery code found via key scan at camera.${key}`);
+        return value;
+      }
+    }
+  }
+
+  console.log('[unifi-protect] [bootstrap] no recovery code found for camera');
+  return null;
 }
 
 function logError(url, err) {
@@ -511,10 +537,11 @@ async function syncDataBootstrap(config, projectId, db) {
 
     if (bootstrap.nvr && typeof bootstrap.nvr === 'object') {
       console.log(`[unifi-protect] [bootstrap] nvr keys: ${Object.keys(bootstrap.nvr).join(', ')}`);
+      console.log(`[unifi-protect] [bootstrap] nvr (sanitized, full): ${JSON.stringify(sanitizeForLog(bootstrap.nvr))}`);
     }
     if (cameras.length > 0) {
       console.log(`[unifi-protect] [bootstrap] first camera keys: ${Object.keys(cameras[0]).join(', ')}`);
-      console.log(`[unifi-protect] [bootstrap] first camera (sanitized): ${bodySnippet(sanitizeForLog(cameras[0]))}`);
+      console.log(`[unifi-protect] [bootstrap] first camera (sanitized, full): ${JSON.stringify(sanitizeForLog(cameras[0]))}`);
     }
 
     console.log(`[unifi-protect] [bootstrap] Upserting ${cameras.length} cameras for project ${projectId}`);
@@ -536,6 +563,11 @@ async function syncDataBootstrap(config, projectId, db) {
       const lowUrls = buildChannelUrls(host, lowChannel);
 
       const streamPassword = extractStreamPassword(bootstrap.nvr, cam);
+      console.log(
+        `[unifi-protect] [bootstrap] camera ${cam.mac || cam.id || name}: recovery code ${
+          streamPassword ? `found (${streamPassword.length} chars)` : 'not found'
+        }`
+      );
 
       const payload = {
         name,
