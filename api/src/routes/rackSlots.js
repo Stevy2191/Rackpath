@@ -3,7 +3,7 @@ const pool = require('../db/pool');
 
 const router = express.Router();
 
-const ITEM_TYPES = ['device', 'patch-panel', 'blank', 'cable-manager'];
+const ITEM_TYPES = ['device', 'patch-panel', 'blank', 'cable-manager', 'custom-device'];
 const SIDES = ['front', 'back', 'both'];
 
 // Find an existing slot in the same rack whose U range overlaps the given
@@ -55,7 +55,7 @@ router.get('/', async (req, res, next) => {
 // POST /api/rack-slots - assign a device (or rack item) to a rack U position
 router.post('/', async (req, res, next) => {
   try {
-    const { rack_id, device_id, u_position, item_type, item_label, side } = req.body;
+    const { rack_id, device_id, u_position, item_type, item_label, side, custom_type, color } = req.body;
     const u_size = req.body.u_size || 1;
     if (!rack_id || u_position === undefined) {
       return res.status(400).json({ error: 'rack_id and u_position are required' });
@@ -84,9 +84,9 @@ router.post('/', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO rack_slots (project_id, rack_id, device_id, item_type, item_label, u_position, u_size, side)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.projectId, rack_id, device_id || null, item_type || 'device', item_label || null, u_position, u_size, resolvedSide]
+      `INSERT INTO rack_slots (project_id, rack_id, device_id, item_type, item_label, custom_type, color, u_position, u_size, side)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.projectId, rack_id, device_id || null, item_type || 'device', item_label || null, custom_type || null, color || null, u_position, u_size, resolvedSide]
     );
     const [rows] = await pool.query('SELECT * FROM rack_slots WHERE id = ?', [result.insertId]);
     res.status(201).json(rows[0]);
@@ -98,7 +98,8 @@ router.post('/', async (req, res, next) => {
 // PUT /api/rack-slots/:id - update slot (move device, resize, re-side, relabel)
 router.put('/:id', async (req, res, next) => {
   try {
-    const { rack_id, device_id, u_position, item_type, item_label, side } = req.body;
+    const { rack_id, device_id, item_type, item_label, side, custom_type, color } = req.body;
+    let u_position = req.body.u_position;
     const u_size = req.body.u_size || 1;
     if (item_type !== undefined && item_type !== null && !ITEM_TYPES.includes(item_type)) {
       return res.status(400).json({ error: 'Invalid item_type' });
@@ -113,8 +114,18 @@ router.put('/:id', async (req, res, next) => {
       req.projectId,
     ]);
     if (racks.length === 0) return res.status(404).json({ error: 'Rack not found' });
-    if (u_position + u_size - 1 > racks[0].u_height) {
-      return res.status(400).json({ error: 'Slot extends beyond rack height' });
+
+    const uHeight = racks[0].u_height;
+    if (u_position + u_size - 1 > uHeight) {
+      if (u_size > uHeight) {
+        return res.status(400).json({ error: 'Not enough space to resize — free up adjacent slots first' });
+      }
+      // Slot's top edge would land above the top of the rack - shift it down
+      // so it still fits, rather than rejecting the resize outright.
+      u_position = uHeight - u_size + 1;
+    }
+    if (u_position < 1) {
+      return res.status(400).json({ error: 'Not enough space to resize — free up adjacent slots first' });
     }
 
     const resolvedSide = side || 'both';
@@ -125,9 +136,9 @@ router.put('/:id', async (req, res, next) => {
 
     const [result] = await pool.query(
       `UPDATE rack_slots
-       SET rack_id = ?, device_id = ?, item_type = ?, item_label = ?, u_position = ?, u_size = ?, side = ?
+       SET rack_id = ?, device_id = ?, item_type = ?, item_label = ?, custom_type = ?, color = ?, u_position = ?, u_size = ?, side = ?
        WHERE id = ? AND project_id = ?`,
-      [rack_id, device_id || null, item_type || 'device', item_label || null, u_position, u_size, resolvedSide, req.params.id, req.projectId]
+      [rack_id, device_id || null, item_type || 'device', item_label || null, custom_type || null, color || null, u_position, u_size, resolvedSide, req.params.id, req.projectId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack slot not found' });
     const [rows] = await pool.query('SELECT * FROM rack_slots WHERE id = ?', [req.params.id]);

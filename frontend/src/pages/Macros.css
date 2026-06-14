@@ -1,0 +1,97 @@
+.macros-page {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  overflow: auto;
+}
+
+.macros-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.macros-header h2 {
+  margin: 0;
+}
+
+.macros-add-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.macros-add-btn:hover {
+  opacity: 0.9;
+}
+
+.macros-table {
+  width: 100%;
+  max-width: 900px;
+  border-collapse: collapse;
+}
+
+.macros-table th,
+.macros-table td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.macros-table th {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.macros-secret-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.macros-secret-value {
+  font-family: monospace;
+}
+
+.macros-actions {
+  display: flex;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.macros-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.macros-icon-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.macros-icon-btn-danger:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.macros-empty {
+  color: var(--color-text-muted);
+  text-align: center;
+}

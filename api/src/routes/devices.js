@@ -1,5 +1,7 @@
 const express = require('express');
+const snmp = require('net-snmp');
 const pool = require('../db/pool');
+const { scanDevice } = require('../services/snmpScan');
 
 const router = express.Router();
 
@@ -179,6 +181,7 @@ router.patch('/:id', async (req, res, next) => {
       'serial_number',
       'purchase_date',
       'warranty_expiry',
+      'credential_macro_id',
     ];
     const updates = [];
     const values = [];
@@ -273,6 +276,103 @@ router.delete('/:id/tags/:tagId', async (req, res, next) => {
       req.params.tagId,
     ]);
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/devices/:id/scan - probe a device over SNMP using its assigned
+// credential macro, refresh hostname/location, and sync topology interfaces.
+router.post('/:id/scan', async (req, res, next) => {
+  try {
+    const [deviceRows] = await pool.query('SELECT * FROM devices WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
+    if (deviceRows.length === 0) return res.status(404).json({ error: 'Device not found' });
+    const device = deviceRows[0];
+
+    if (!device.ip) {
+      return res.status(400).json({ error: 'Device has no IP address' });
+    }
+    if (!device.credential_macro_id) {
+      return res.status(400).json({ error: 'Device has no credential macro assigned' });
+    }
+
+    const [macroRows] = await pool.query(
+      'SELECT * FROM project_credential_macros WHERE id = ? AND project_id = ?',
+      [device.credential_macro_id, req.projectId]
+    );
+    if (macroRows.length === 0) return res.status(400).json({ error: 'Assigned credential macro not found' });
+    const macro = macroRows[0];
+
+    if (!macro.type.startsWith('snmp')) {
+      return res.status(400).json({ error: 'Assigned credential macro is not an SNMP profile' });
+    }
+
+    let result;
+    try {
+      result = await scanDevice(device.ip, macro);
+    } catch (err) {
+      if (err instanceof snmp.RequestTimedOutError || err.name === 'RequestTimedOutError') {
+        return res.status(502).json({ error: 'SNMP timeout — check IP and community string' });
+      }
+      return res.status(502).json({ error: err.message });
+    }
+
+    const updates = ['last_scanned_at = NOW()'];
+    const values = [];
+
+    const blankHostname = !device.hostname || device.hostname.toLowerCase() === 'unknown';
+    if (blankHostname && result.sysName) {
+      updates.push('hostname = ?');
+      values.push(result.sysName);
+    }
+    if (!device.location && result.sysLocation) {
+      updates.push('location = ?');
+      values.push(result.sysLocation);
+    }
+
+    values.push(device.id, req.projectId);
+    await pool.query(`UPDATE devices SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`, values);
+
+    const [nodeRows] = await pool.query(
+      'SELECT id FROM topology_nodes WHERE device_id = ? AND project_id = ?',
+      [device.id, req.projectId]
+    );
+    if (nodeRows.length > 0) {
+      const [existingInterfaces] = await pool.query(
+        'SELECT id, name FROM topology_node_interfaces WHERE device_id = ? AND project_id = ?',
+        [device.id, req.projectId]
+      );
+      const existingByName = new Map(existingInterfaces.map((row) => [row.name, row.id]));
+
+      for (const iface of result.interfaces) {
+        if (existingByName.has(iface.name)) {
+          await pool.query('UPDATE topology_node_interfaces SET speed = ? WHERE id = ?', [
+            iface.speed,
+            existingByName.get(iface.name),
+          ]);
+        } else {
+          await pool.query(
+            'INSERT INTO topology_node_interfaces (project_id, device_id, name, speed) VALUES (?, ?, ?, ?)',
+            [req.projectId, device.id, iface.name, iface.speed]
+          );
+        }
+      }
+    }
+
+    res.json({
+      sysName: result.sysName,
+      sysDescr: result.sysDescr,
+      sysLocation: result.sysLocation,
+      sysContact: result.sysContact,
+      uptime: result.uptime,
+      interfaceCount: result.interfaces.length,
+      ipCount: result.ips.length,
+      interfaces: result.interfaces,
+      ips: result.ips,
+    });
   } catch (err) {
     next(err);
   }

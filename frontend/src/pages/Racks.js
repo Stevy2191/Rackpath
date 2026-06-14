@@ -3,6 +3,7 @@ import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import client from '../api/client';
 import PortEditorModal from '../components/PortEditorModal';
+import { COLOR_SWATCHES } from '../components/topology/deviceTypes';
 import './Racks.css';
 
 const RACK_TYPES = [
@@ -31,7 +32,22 @@ const ITEM_TYPE_LABELS = {
   'cable-manager': 'Cable Manager',
 };
 
+const CUSTOM_DEVICE_TYPES = [
+  'Server',
+  'Switch',
+  'Router',
+  'Firewall',
+  'Patch Panel',
+  'Cable Manager',
+  'Blank Panel',
+  'UPS',
+  'KVM',
+  'Other',
+];
+
 const emptyRack = { name: '', location: '', u_height: 42, rack_type: '4-post', notes: '' };
+
+const emptyCustomDevice = { name: '', type: CUSTOM_DEVICE_TYPES[0], u_size: 1, color: COLOR_SWATCHES[0].hex };
 
 export default function RacksPage() {
   const [racks, setRacks] = useState([]);
@@ -45,6 +61,7 @@ export default function RacksPage() {
   const [error, setError] = useState(null);
   const [selectedSide, setSelectedSide] = useState('front');
   const [exporting, setExporting] = useState(false);
+  const [customDevice, setCustomDevice] = useState(emptyCustomDevice);
   const rackFrameRef = useRef(null);
 
   const loadRacks = () => {
@@ -130,15 +147,44 @@ export default function RacksPage() {
     }
   };
 
+  const handleUpdateSlot = async (slot, changes) => {
+    try {
+      await client.put(`/rack-slots/${slot.id}`, {
+        rack_id: slot.rack_id,
+        device_id: slot.device_id,
+        item_type: slot.item_type,
+        item_label: slot.item_label,
+        custom_type: slot.custom_type,
+        color: slot.color,
+        u_position: slot.u_position,
+        u_size: slot.u_size,
+        side: slot.side,
+        ...changes,
+      });
+      refreshRackData(selectedRack.id);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
   const handleDrop = async (uPosition, e) => {
     e.preventDefault();
     if (!selectedRack) return;
 
+    const slotId = e.dataTransfer.getData('text/slot-id');
     const deviceId = e.dataTransfer.getData('text/device-id');
     const rackItemType = e.dataTransfer.getData('text/rack-item-type');
+    const customDeviceData = e.dataTransfer.getData('text/custom-device');
 
     try {
-      if (deviceId) {
+      if (slotId) {
+        const slot = selectedRack.slots.find((s) => String(s.id) === slotId);
+        if (!slot) return;
+        const newUPosition = uPosition - slot.u_size + 1;
+        if (newUPosition === slot.u_position) return;
+        await handleUpdateSlot(slot, { u_position: newUPosition });
+        return;
+      } else if (deviceId) {
         await client.post('/rack-slots', {
           rack_id: selectedRack.id,
           device_id: Number(deviceId),
@@ -159,6 +205,19 @@ export default function RacksPage() {
           u_size: itemUSize,
           side: 'both',
         });
+      } else if (customDeviceData) {
+        const custom = JSON.parse(customDeviceData);
+        await client.post('/rack-slots', {
+          rack_id: selectedRack.id,
+          device_id: null,
+          item_type: 'custom-device',
+          item_label: custom.name,
+          custom_type: custom.type,
+          color: custom.color,
+          u_position: uPosition,
+          u_size: custom.u_size,
+          side: 'both',
+        });
       } else {
         return;
       }
@@ -177,57 +236,26 @@ export default function RacksPage() {
     }
   };
 
-  const handleResizeSlot = async (slot, uSize) => {
+  const handleResizeSlot = (slot, uSize) => {
     if (uSize < 1) return;
-    try {
-      await client.put(`/rack-slots/${slot.id}`, {
-        rack_id: slot.rack_id,
-        device_id: slot.device_id,
-        item_type: slot.item_type,
-        item_label: slot.item_label,
-        u_position: slot.u_position,
-        u_size: uSize,
-        side: slot.side,
-      });
-      refreshRackData(selectedRack.id);
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    }
+    handleUpdateSlot(slot, { u_size: uSize });
   };
 
-  const handleSlotSideChange = async (slot, newSide) => {
-    try {
-      await client.put(`/rack-slots/${slot.id}`, {
-        rack_id: slot.rack_id,
-        device_id: slot.device_id,
-        item_type: slot.item_type,
-        item_label: slot.item_label,
-        u_position: slot.u_position,
-        u_size: slot.u_size,
-        side: newSide,
-      });
-      refreshRackData(selectedRack.id);
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    }
+  const handleSlotSideChange = (slot, newSide) => {
+    handleUpdateSlot(slot, { side: newSide });
   };
 
-  const handleItemLabelChange = async (slot, newLabel) => {
+  const handleItemLabelChange = (slot, newLabel) => {
     if (newLabel === (slot.item_label || '')) return;
-    try {
-      await client.put(`/rack-slots/${slot.id}`, {
-        rack_id: slot.rack_id,
-        device_id: slot.device_id,
-        item_type: slot.item_type,
-        item_label: newLabel,
-        u_position: slot.u_position,
-        u_size: slot.u_size,
-        side: slot.side,
-      });
-      refreshRackData(selectedRack.id);
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    }
+    handleUpdateSlot(slot, { item_label: newLabel });
+  };
+
+  const handleCustomTypeChange = (slot, newType) => {
+    handleUpdateSlot(slot, { custom_type: newType });
+  };
+
+  const handleCustomColorChange = (slot, newColor) => {
+    handleUpdateSlot(slot, { color: newColor });
   };
 
   const handleExport = async (format) => {
@@ -368,6 +396,60 @@ export default function RacksPage() {
             </li>
           ))}
         </ul>
+
+        <h3>Add Custom Device</h3>
+        <p className="hint">Fill in the details, then drag the preview onto a U slot.</p>
+        <div className="custom-device-form">
+          <input
+            placeholder="Name"
+            value={customDevice.name}
+            onChange={(e) => setCustomDevice({ ...customDevice, name: e.target.value })}
+          />
+          <select
+            value={customDevice.type}
+            onChange={(e) => setCustomDevice({ ...customDevice, type: e.target.value })}
+          >
+            {CUSTOM_DEVICE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min="1"
+            placeholder="U Size"
+            value={customDevice.u_size}
+            onChange={(e) => setCustomDevice({ ...customDevice, u_size: Math.max(1, Number(e.target.value)) })}
+          />
+          <div className="custom-device-swatches">
+            {COLOR_SWATCHES.map((c) => (
+              <button
+                key={c.hex}
+                type="button"
+                className={`custom-device-swatch ${customDevice.color === c.hex ? 'active' : ''}`}
+                style={{ background: c.hex }}
+                title={c.name}
+                onClick={() => setCustomDevice({ ...customDevice, color: c.hex })}
+              />
+            ))}
+          </div>
+          <div
+            className={`custom-device-preview ${customDevice.name ? '' : 'disabled'}`}
+            draggable={!!customDevice.name}
+            onDragStart={(e) => {
+              if (!customDevice.name) return;
+              e.dataTransfer.setData('text/custom-device', JSON.stringify(customDevice));
+            }}
+          >
+            <span className="custom-device-preview-swatch" style={{ background: customDevice.color }} />
+            {customDevice.name ? (
+              <em>{customDevice.name}</em>
+            ) : (
+              <span>Enter a name, then drag to place</span>
+            )}
+          </div>
+        </div>
       </aside>
 
       <section className="rack-view">
@@ -442,11 +524,17 @@ export default function RacksPage() {
                 const slot = slotsByTopPosition[u];
                 if (slot) {
                   const isDevice = slot.item_type === 'device';
+                  const isCustomDevice = slot.item_type === 'custom-device';
                   return (
                     <div
                       key={u}
-                      className="rack-unit occupied"
-                      style={{ height: `${slot.u_size * 28}px` }}
+                      className={`rack-unit occupied ${isCustomDevice ? 'custom-device' : ''}`}
+                      style={{
+                        height: `${slot.u_size * 28}px`,
+                        ...(isCustomDevice && slot.color ? { borderColor: slot.color } : {}),
+                      }}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData('text/slot-id', String(slot.id))}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => handleDrop(u, e)}
                     >
@@ -465,6 +553,15 @@ export default function RacksPage() {
                           >
                             {slot.hostname || slot.ip || `Device ${slot.device_id}`}
                           </button>
+                        ) : isCustomDevice ? (
+                          <input
+                            className="rack-unit-item-label rack-unit-custom-name"
+                            defaultValue={slot.item_label || ''}
+                            onBlur={(e) => handleItemLabelChange(slot, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.target.blur();
+                            }}
+                          />
                         ) : (
                           <input
                             className="rack-unit-item-label"
@@ -474,6 +571,33 @@ export default function RacksPage() {
                               if (e.key === 'Enter') e.target.blur();
                             }}
                           />
+                        )}
+                        {isCustomDevice && (
+                          <>
+                            <select
+                              className="rack-unit-custom-type"
+                              value={slot.custom_type || ''}
+                              onChange={(e) => handleCustomTypeChange(slot, e.target.value)}
+                            >
+                              {CUSTOM_DEVICE_TYPES.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="custom-device-swatches">
+                              {COLOR_SWATCHES.map((c) => (
+                                <button
+                                  key={c.hex}
+                                  type="button"
+                                  className={`custom-device-swatch ${slot.color === c.hex ? 'active' : ''}`}
+                                  style={{ background: c.hex }}
+                                  title={c.name}
+                                  onClick={() => handleCustomColorChange(slot, c.hex)}
+                                />
+                              ))}
+                            </div>
+                          </>
                         )}
                         <label className="rack-unit-size">
                           U Size

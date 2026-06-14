@@ -25,11 +25,18 @@
 }
 
 .navbar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   color: #c9c9d8;
   text-decoration: none;
   font-size: 0.95rem;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+}
+
+.navbar-link-icon {
+  flex-shrink: 0;
 }
 
 .navbar-link:hover {

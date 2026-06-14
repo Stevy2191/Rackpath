@@ -242,6 +242,46 @@
   background: var(--color-bg-elevated);
 }
 
+/* Credential macro select */
+.devices-credential-select {
+  width: 100%;
+  min-width: 140px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: inherit;
+  padding: 0.25rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+/* Scan button */
+.devices-scan-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  border-radius: 4px;
+  padding: 0.3rem;
+  cursor: pointer;
+}
+
+.devices-scan-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.devices-spin {
+  animation: devices-spin 0.8s linear infinite;
+}
+
+@keyframes devices-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Tags cell, pills, and popovers */
 .devices-tags-cell {
   min-width: 200px;

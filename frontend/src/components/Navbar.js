@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { Key } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import ProjectSwitcher from '../project/ProjectSwitcher';
@@ -11,6 +12,7 @@ const links = [
   { to: '/vlans', label: 'VLANs' },
   { to: '/racks', label: 'Racks' },
   { to: '/devices', label: 'Devices' },
+  { to: '/macros', label: 'Macros', icon: Key },
   { to: '/integrations', label: 'Integrations' },
 ];
 
@@ -31,6 +33,7 @@ export default function Navbar() {
             to={link.to}
             className={({ isActive }) => `navbar-link${isActive ? ' active' : ''}`}
           >
+            {link.icon && <link.icon size={14} className="navbar-link-icon" />}
             {link.label}
           </NavLink>
         ))}

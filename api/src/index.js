@@ -16,6 +16,7 @@ const scanRouter = require('./routes/scan');
 const vlansRouter = require('./routes/vlans');
 const integrationsRouter = require('./routes/integrations');
 const deviceTagsRouter = require('./routes/deviceTags');
+const macrosRouter = require('./routes/macros');
 const { requireAuth } = require('./auth/middleware');
 const { projectScope } = require('./middleware/projectScope');
 const { migrate } = require('./db/migrate');
@@ -51,6 +52,7 @@ app.use('/api/scans', scanRouter);
 app.use('/api', vlansRouter);
 app.use('/api', integrationsRouter);
 app.use('/api', deviceTagsRouter);
+app.use('/api', macrosRouter);
 
 // Fallback error handler
 app.use((err, req, res, next) => {

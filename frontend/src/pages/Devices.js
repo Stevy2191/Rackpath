@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Columns3, Network, Plus, Search, Tag, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Columns3, Loader2, Network, Plus, Radio, Search, Tag, X } from 'lucide-react';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
 import { platformInfo } from '../components/integrations/platforms';
 import ManageTagsModal from '../components/devices/ManageTagsModal';
+import ScanResultModal from '../components/devices/ScanResultModal';
 import './Devices.css';
 
 const emptyDevice = {
@@ -43,6 +44,7 @@ const COLUMN_DEFS = [
   { key: 'model', label: 'Model' },
   { key: 'serial_number', label: 'Serial Number' },
   { key: 'tags', label: 'Tags' },
+  { key: 'credential', label: 'Credential' },
 ];
 
 const DEFAULT_VISIBLE_COLUMNS = {
@@ -54,6 +56,7 @@ const DEFAULT_VISIBLE_COLUMNS = {
   model: true,
   serial_number: false,
   tags: true,
+  credential: true,
 };
 
 const PAGE_SIZE = 25;
@@ -74,7 +77,10 @@ export default function DevicesPage() {
 
   const [devices, setDevices] = useState([]);
   const [tags, setTags] = useState([]);
+  const [macros, setMacros] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [scanningId, setScanningId] = useState(null);
+  const [scanResult, setScanResult] = useState(null); // { device, result }
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -122,6 +128,14 @@ export default function DevicesPage() {
       .catch((err) => setError(err.response?.data?.error || err.message));
   };
 
+  const loadMacros = () => {
+    if (!currentProjectId) return;
+    client
+      .get(`/projects/${currentProjectId}/macros`)
+      .then((res) => setMacros(res.data || []))
+      .catch((err) => setError(err.response?.data?.error || err.message));
+  };
+
   const loadLocations = () => {
     client
       .get('/devices')
@@ -152,6 +166,7 @@ export default function DevicesPage() {
 
   useEffect(() => {
     loadTags();
+    loadMacros();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProjectId]);
 
@@ -303,6 +318,59 @@ export default function DevicesPage() {
       setError(err.response?.data?.error || err.message);
     } finally {
       setOpenTagPopover(null);
+    }
+  };
+
+  const handleCredentialChange = async (device, macroId) => {
+    try {
+      const res = await client.patch(`/devices/${device.id}`, { credential_macro_id: macroId || null });
+      setDevices((prev) =>
+        prev.map((d) => (d.id === device.id ? { ...d, credential_macro_id: res.data.credential_macro_id } : d))
+      );
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const macroById = React.useMemo(() => new Map(macros.map((m) => [m.id, m])), [macros]);
+
+  const canScan = (device) => {
+    if (!device.ip || !device.credential_macro_id) return false;
+    const macro = macroById.get(device.credential_macro_id);
+    return !!macro && macro.type.startsWith('snmp');
+  };
+
+  const handleScan = async (device) => {
+    setScanningId(device.id);
+    setError('');
+    try {
+      const res = await client.post(`/devices/${device.id}/scan`, {});
+      setDevices((prev) =>
+        prev.map((d) => (d.id === device.id ? { ...d, last_scanned_at: new Date().toISOString() } : d))
+      );
+      setScanResult({ device, result: res.data });
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setScanningId(null);
+    }
+  };
+
+  const handleUpdateDeviceFromScan = async (device, result) => {
+    const patch = {};
+    if (result.sysName) patch.hostname = result.sysName;
+    if (result.sysLocation) patch.location = result.sysLocation;
+    if (Object.keys(patch).length === 0) {
+      setScanResult(null);
+      return;
+    }
+    try {
+      const res = await client.patch(`/devices/${device.id}`, patch);
+      setDevices((prev) => prev.map((d) => (d.id === device.id ? { ...d, ...res.data } : d)));
+      loadLocations();
+      setScanResult(null);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
     }
   };
 
@@ -513,6 +581,8 @@ export default function DevicesPage() {
               {visibleColumns.model && <th>Model</th>}
               {visibleColumns.serial_number && <th>Serial Number</th>}
               {visibleColumns.tags && <th>Tags</th>}
+              {visibleColumns.credential && <th>Credential</th>}
+              <th>Scan</th>
               <th></th>
             </tr>
           </thead>
@@ -623,6 +693,37 @@ export default function DevicesPage() {
                       </div>
                     </td>
                   )}
+                  {visibleColumns.credential && (
+                    <td>
+                      <select
+                        className="devices-credential-select"
+                        value={device.credential_macro_id || ''}
+                        onChange={(e) => handleCredentialChange(device, e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">—</option>
+                        {macros.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
+                  <td>
+                    <button
+                      type="button"
+                      className="devices-scan-btn"
+                      title={canScan(device) ? 'Run SNMP scan' : 'Requires an IP address and an SNMP credential macro'}
+                      disabled={!canScan(device) || scanningId === device.id}
+                      onClick={() => handleScan(device)}
+                    >
+                      {scanningId === device.id ? (
+                        <Loader2 size={14} className="devices-spin" />
+                      ) : (
+                        <Radio size={14} />
+                      )}
+                    </button>
+                  </td>
                   <td>
                     <button className="delete-btn" onClick={() => handleDeleteDevice(device.id)}>
                       Delete
@@ -872,6 +973,15 @@ export default function DevicesPage() {
           tags={tags}
           onClose={() => setShowManageTags(false)}
           onChange={handleTagsChanged}
+        />
+      )}
+
+      {scanResult && (
+        <ScanResultModal
+          device={scanResult.device}
+          result={scanResult.result}
+          onClose={() => setScanResult(null)}
+          onUpdateDevice={handleUpdateDeviceFromScan}
         />
       )}
     </div>

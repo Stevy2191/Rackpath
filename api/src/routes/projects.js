@@ -18,6 +18,7 @@ const SCOPED_TABLES = [
   'scan_jobs',
   'racks',
   'device_tags',
+  'project_credential_macros',
   'devices',
   'project_vlans',
   'project_integrations',

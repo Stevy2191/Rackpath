@@ -156,6 +156,26 @@
 
 .rack-unit.occupied {
   background-color: var(--color-occupied-bg);
+  cursor: grab;
+}
+
+.rack-unit.occupied.custom-device {
+  border: 1px dashed var(--color-border-strong);
+  border-bottom-style: dashed;
+}
+
+.rack-unit-custom-name {
+  font-style: italic;
+}
+
+.rack-unit-custom-type {
+  padding: 0.1rem 0.25rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  font-size: 0.7rem;
+  flex-shrink: 0;
 }
 
 .rack-unit-device {
@@ -324,4 +344,68 @@
   color: var(--color-text);
   cursor: grab;
   margin-bottom: 0.25rem;
+}
+
+.custom-device-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.custom-device-form input,
+.custom-device-form select {
+  padding: 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+}
+
+.custom-device-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.custom-device-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.custom-device-swatch.active {
+  border-color: var(--color-text);
+}
+
+.custom-device-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  cursor: grab;
+  font-size: 0.85rem;
+}
+
+.custom-device-preview.disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+}
+
+.custom-device-preview-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }

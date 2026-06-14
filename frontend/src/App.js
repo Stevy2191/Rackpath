@@ -6,6 +6,7 @@ import TopologyPage from './pages/Topology';
 import VlansPage from './pages/Vlans';
 import RacksPage from './pages/Racks';
 import DevicesPage from './pages/Devices';
+import MacrosPage from './pages/Macros';
 import IntegrationsPage from './pages/Integrations';
 import ScanPage from './pages/Scan';
 import LoginPage from './pages/Login';
@@ -79,6 +80,14 @@ function AppShell() {
             element={
               <RequireAuth>
                 <DevicesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/macros"
+            element={
+              <RequireAuth>
+                <MacrosPage />
               </RequireAuth>
             }
           />
