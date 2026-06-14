@@ -1,8 +1,8 @@
 // Adapter for Ubiquiti UniFi Network controllers — supports both UniFi OS API
-// key (Bearer token, UniFi OS 4.x+) and legacy cookie-based username/password
-// login for older standalone controllers. Works against both a local
-// controller IP (e.g. https://192.168.1.1, UDM/UDM-SE direct) and
-// https://unifi.ui.com (cloud-managed).
+// key (X-API-KEY header, UniFi OS 4.x+) and legacy cookie-based
+// username/password login for older standalone controllers. API key auth
+// only works against a local controller IP (e.g. https://192.168.1.1,
+// UDM/UDM-SE direct) — the cloud proxy at unifi.ui.com does not accept it.
 //
 // UniFi's API layout varies a lot between controller versions, so most
 // endpoints are tried in a fallback order and every request/response is
@@ -21,6 +21,9 @@ const UNIFI_TYPE_MAP = {
   uap: 'ap',
 };
 
+// All requests for a sync/test run go through this single instance, so the
+// httpsAgent (and its rejectUnauthorized setting for self-signed certs)
+// applies to every request — devices, VLANs, login, and connection tests.
 function makeClient(config) {
   return axios.create({
     baseURL: config.base_url.replace(/\/+$/, ''),
@@ -28,6 +31,13 @@ function makeClient(config) {
     validateStatus: () => true,
     timeout: 10000,
   });
+}
+
+const CLOUD_URL_MESSAGE =
+  'Cloud URL detected — please use your local controller IP address (e.g. https://192.168.1.1) with an API key generated from your local console';
+
+function isCloudUrl(baseUrl) {
+  return /unifi\.ui\.com/i.test(baseUrl || '');
 }
 
 function bodySnippet(data) {
@@ -114,16 +124,16 @@ async function cookieLogin(http, config) {
 }
 
 // Authenticates against the controller using whichever credentials are
-// configured. An API key (Bearer token) takes priority and works against
-// both local-IP and cloud (unifi.ui.com) controllers; username/password
-// falls back to a cookie-based session for legacy/older controllers.
+// configured. An API key takes priority and is sent via the UniFi OS
+// X-API-KEY header (local controller IP only); username/password falls back
+// to a cookie-based session for legacy/older controllers.
 async function authenticate(config) {
   const http = makeClient(config);
 
   if (config.api_key) {
     return {
       http,
-      headers: { Authorization: `Bearer ${config.api_key}`, 'Content-Type': 'application/json' },
+      headers: { 'X-API-KEY': config.api_key, 'Content-Type': 'application/json' },
     };
   }
 
@@ -142,6 +152,11 @@ const VLAN_ENDPOINTS = ['/proxy/network/api/s/default/rest/networkconf', '/api/s
 const SELF_ENDPOINTS = ['/proxy/network/api/s/default/self', '/api/s/default/self'];
 
 async function testConnection(config) {
+  if (config.api_key && isCloudUrl(config.base_url)) {
+    console.log(`[unifi] ${CLOUD_URL_MESSAGE}`);
+    return { success: false, message: CLOUD_URL_MESSAGE };
+  }
+
   try {
     const session = await authenticate(config);
     const paths = config.api_key ? DEVICE_ENDPOINTS : SELF_ENDPOINTS;
@@ -180,6 +195,11 @@ function isDeviceUp(dev) {
 }
 
 async function syncData(config, projectId, db) {
+  if (config.api_key && isCloudUrl(config.base_url)) {
+    console.log(`[unifi] ${CLOUD_URL_MESSAGE}`);
+    return { devices_imported: 0, vlans_imported: 0, status: 'failed', message: CLOUD_URL_MESSAGE };
+  }
+
   const session = await authenticate(config);
   const { http, headers } = session;
 
