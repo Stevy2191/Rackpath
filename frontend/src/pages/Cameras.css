@@ -169,18 +169,15 @@
   scrollbar-width: thin;
 }
 
+.cameras-rtsps-value-revealed {
+  max-width: none;
+  overflow-x: visible;
+  white-space: normal;
+  word-break: break-all;
+}
+
 .cameras-password-cell {
   min-width: 160px;
-}
-
-.cameras-password-field {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.cameras-password-field input {
-  flex: 1;
 }
 
 .cameras-icon-btn {

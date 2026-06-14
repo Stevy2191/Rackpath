@@ -27,7 +27,6 @@ export default function CamerasPage() {
   const [revealed, setRevealed] = useState(new Set());
   const [editingPasswordId, setEditingPasswordId] = useState(null);
   const [passwordDraft, setPasswordDraft] = useState('');
-  const [passwordVisible, setPasswordVisible] = useState(false);
   const [protectIntegration, setProtectIntegration] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState(null);
@@ -102,7 +101,6 @@ export default function CamerasPage() {
   const startEditPassword = (camera) => {
     setEditingPasswordId(camera.id);
     setPasswordDraft(camera.stream_password || '');
-    setPasswordVisible(false);
   };
 
   const commitPassword = async (camera) => {
@@ -147,7 +145,10 @@ export default function CamerasPage() {
         return (
           <div className="cameras-rtsps-row" key={key}>
             <span className="cameras-rtsps-label">{label}</span>
-            <span className="cameras-rtsps-value" title={value || undefined}>
+            <span
+              className={`cameras-rtsps-value${isRevealed ? ' cameras-rtsps-value-revealed' : ''}`}
+              title={value || undefined}
+            >
               {value ? (isRevealed ? value : '••••••••') : '—'}
             </span>
             {value && (
@@ -178,14 +179,14 @@ export default function CamerasPage() {
     </td>
   );
 
-  const renderPasswordCell = (camera) => (
-    <td className="cameras-password-cell">
-      {editingPasswordId === camera.id ? (
-        <div className="cameras-password-field">
+  const renderPasswordCell = (camera) => {
+    if (editingPasswordId === camera.id) {
+      return (
+        <td className="cameras-password-cell">
           <input
             autoFocus
             className="cameras-location-input"
-            type={passwordVisible ? 'text' : 'password'}
+            type="text"
             value={passwordDraft}
             onChange={(e) => setPasswordDraft(e.target.value)}
             onBlur={() => commitPassword(camera)}
@@ -194,23 +195,48 @@ export default function CamerasPage() {
             }}
             autoComplete="off"
           />
-          <button
-            type="button"
-            className="cameras-icon-btn"
-            onClick={() => setPasswordVisible((v) => !v)}
-            aria-label={passwordVisible ? 'Hide' : 'Show'}
-            title={passwordVisible ? 'Hide' : 'Show'}
+        </td>
+      );
+    }
+
+    const value = camera.stream_password;
+    const isRevealed = revealed.has(`${camera.id}:stream_password`);
+    return (
+      <td className="cameras-rtsps-cell cameras-password-cell">
+        <div className="cameras-rtsps-row">
+          <span
+            className={`cameras-rtsps-value cameras-location-display${isRevealed ? ' cameras-rtsps-value-revealed' : ''}`}
+            onClick={() => startEditPassword(camera)}
+            title={value ? 'Click to edit' : 'Click to set'}
           >
-            {passwordVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-          </button>
+            {value ? (isRevealed ? value : '••••••••') : 'Set password'}
+          </span>
+          {value && (
+            <>
+              <button
+                type="button"
+                className="cameras-icon-btn"
+                onClick={() => toggleReveal(camera.id, 'stream_password')}
+                aria-label={isRevealed ? 'Hide' : 'Show'}
+                title={isRevealed ? 'Hide' : 'Show'}
+              >
+                {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+              <button
+                type="button"
+                className="cameras-icon-btn"
+                onClick={() => copyValue(value)}
+                aria-label="Copy"
+                title="Copy to clipboard"
+              >
+                <Clipboard size={14} />
+              </button>
+            </>
+          )}
         </div>
-      ) : (
-        <span className="cameras-location-display" onClick={() => startEditPassword(camera)} title="Click to edit">
-          {camera.stream_password ? '••••••••' : 'Set password'}
-        </span>
-      )}
-    </td>
-  );
+      </td>
+    );
+  };
 
   const filtered = cameras.filter((c) => {
     if (!search.trim()) return true;
