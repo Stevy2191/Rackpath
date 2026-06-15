@@ -1,19 +1,15 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
-import { Plus, ZoomIn, ZoomOut } from 'lucide-react';
+import React, { useState } from 'react';
 import RackEnclosure from './RackEnclosure';
 import CableOverlay from './CableOverlay';
 import './RackCanvas.css';
 
 const SIMPLE_ITEM_TYPES = ['patch-panel', 'blank', 'cable-manager'];
 
-const MIN_U_HEIGHT = 20;
-const MAX_U_HEIGHT = 44;
-const DEFAULT_U_HEIGHT = 32;
+const U_HEIGHT = 40;
 
 // Horizontal multi-rack canvas: one RackEnclosure per rack (sorted by id,
-// oldest first), plus a trailing "+ Add Rack" card. Owns the shared
-// drag-and-drop drop handler and the `draggingMeta` used for collision
-// highlighting in empty slots.
+// oldest first). Owns the shared drag-and-drop drop handler and the
+// `draggingMeta` used for collision highlighting in empty slots.
 export default function RackCanvas({
   racks,
   allSlots,
@@ -23,49 +19,10 @@ export default function RackCanvas({
   cableViewEnabled,
   focusedRackId,
   onFocusRack,
-  onAddRack,
 }) {
   const [draggingMeta, setDraggingMeta] = useState(null);
-  const [uHeight, setUHeight] = useState(DEFAULT_U_HEIGHT);
-  const canvasRef = useRef(null);
 
   const sortedRacks = [...racks].sort((a, b) => a.id - b.id);
-  const maxUCount = Math.max(1, ...sortedRacks.map((r) => r.u_height || 42));
-
-  // Auto-fit the U height so the tallest rack's full body fits in the
-  // visible canvas without scrolling: available height = canvas height
-  // minus its own padding minus each rack's fixed chrome (badge, frame
-  // border/padding, blanking panels), divided by its U count.
-  useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const recompute = () => {
-      const enclosure = canvas.querySelector('.rack-enclosure');
-      const rackUnits = canvas.querySelector('.rack-units');
-      if (!enclosure || !rackUnits) return;
-
-      const chrome = enclosure.offsetHeight - rackUnits.offsetHeight;
-      const style = window.getComputedStyle(canvas);
-      const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-      const available = canvas.clientHeight - padding - chrome;
-      const next = Math.max(MIN_U_HEIGHT, Math.min(MAX_U_HEIGHT, Math.floor(available / maxUCount)));
-      setUHeight((prev) => (prev === next ? prev : next));
-    };
-
-    recompute();
-    const observer = new ResizeObserver(recompute);
-    observer.observe(canvas);
-    window.addEventListener('resize', recompute);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', recompute);
-    };
-  }, [maxUCount, sortedRacks.length]);
-
-  const adjustZoom = (delta) => {
-    setUHeight((h) => Math.max(MIN_U_HEIGHT, Math.min(MAX_U_HEIGHT, h + delta)));
-  };
 
   const handleDrop = (rackId, uPosition, side, e) => {
     e.preventDefault();
@@ -144,16 +101,7 @@ export default function RackCanvas({
   };
 
   return (
-    <div className="rack-canvas" ref={canvasRef}>
-      <div className="rack-zoom-control">
-        <button type="button" onClick={() => adjustZoom(-2)} disabled={uHeight <= MIN_U_HEIGHT} title="Zoom out">
-          <ZoomOut size={14} />
-        </button>
-        <button type="button" onClick={() => adjustZoom(2)} disabled={uHeight >= MAX_U_HEIGHT} title="Zoom in">
-          <ZoomIn size={14} />
-        </button>
-      </div>
-
+    <div className="rack-canvas">
       {sortedRacks.map((rack) => (
         <RackEnclosure
           key={rack.id}
@@ -166,14 +114,9 @@ export default function RackCanvas({
           onDrop={handleDrop}
           onFocus={() => onFocusRack(rack.id)}
           isFocused={focusedRackId === rack.id}
-          uHeight={uHeight}
+          uHeight={U_HEIGHT}
         />
       ))}
-
-      <button type="button" className="rack-add-card" onClick={onAddRack}>
-        <Plus size={28} />
-        <span>Add Rack</span>
-      </button>
 
       {cableViewEnabled && <CableOverlay racks={sortedRacks} allSlots={allSlots} />}
     </div>

@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 560px;
+  width: 600px;
 }
 
 .rack-badge {
@@ -17,6 +17,9 @@
   cursor: pointer;
   color: #e8ebf0;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .rack-badge-name {
@@ -157,7 +160,7 @@
 /* --- Device labels (outside the rack) --------------------------------------- */
 .rack-labels {
   flex-shrink: 0;
-  width: 150px;
+  width: 200px;
   display: flex;
   flex-direction: column;
   /* Aligns label rows with .rack-body rows: offsets the frame's
@@ -171,7 +174,6 @@
   justify-content: center;
   gap: 2px;
   padding: 0 4px;
-  overflow: hidden;
 }
 
 .rack-label-name {
@@ -185,9 +187,8 @@
   font-size: 0.78rem;
   font-weight: 600;
   color: #e6e9f0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
   cursor: default;
 }
 
@@ -203,9 +204,8 @@
 .rack-label-model {
   font-size: 0.68rem;
   color: #6b7280;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .rack-label-empty {

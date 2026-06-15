@@ -205,7 +205,6 @@ export default function RacksPage() {
           cableViewEnabled={cableViewEnabled}
           focusedRackId={focusedRackId}
           onFocusRack={(id) => setFocusedRackId((cur) => (cur === id ? null : id))}
-          onAddRack={() => setAddRackOpen(true)}
         />
         {catalogOpen && (
           <DeviceCatalog

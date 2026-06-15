@@ -300,7 +300,7 @@ export default function RackEnclosure({
             if (slot) {
               const { name, subtitle } = getDeviceLabel(slot);
               return (
-                <div key={slot.id} className="rack-label" style={{ height: `${slot.u_size * uHeight}px` }}>
+                <div key={slot.id} className="rack-label" style={{ minHeight: `${slot.u_size * uHeight}px` }}>
                   {slot.item_type === 'device' && slot.device_id ? (
                     <button
                       type="button"
