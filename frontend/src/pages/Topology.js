@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactFlow, {
   addEdge,
   applyEdgeChanges,
@@ -173,6 +173,7 @@ function computeHandles(source, target) {
 
 function TopologyCanvas() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentProjectId } = useProject();
   const reactFlowInstance = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
@@ -378,6 +379,34 @@ function TopologyCanvas() {
     handleLabelChange,
     handleLabelDelete,
   ]);
+
+  // Cross-link from the Rack Builder: ?focusDevice=<id> selects and centers
+  // the matching device node once it's loaded, then clears the param so it
+  // doesn't re-trigger on subsequent renders.
+  useEffect(() => {
+    if (loading) return;
+    const focusDeviceId = searchParams.get('focusDevice');
+    if (!focusDeviceId) return;
+    const node = nodes.find((n) => n.type === 'device' && String(n.data.deviceId) === focusDeviceId);
+    if (node) {
+      setSelectedNodeId(node.id);
+      setSelectedEdgeId(null);
+      const width = node.style?.width || 120;
+      const height = node.style?.height || 80;
+      reactFlowInstance.setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+        zoom: 1,
+        duration: 400,
+      });
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('focusDevice');
+        return next;
+      },
+      { replace: true }
+    );
+  }, [loading, nodes, searchParams, setSearchParams, reactFlowInstance]);
 
   const edgeCallbacks = useMemo(
     () => ({ onEdgeEdit: handleEdgeEdit, onEdgeDelete: handleEdgeDelete, onEdgeReroute: handleEdgeReroute }),

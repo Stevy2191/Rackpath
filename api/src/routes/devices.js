@@ -381,6 +381,25 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
+// GET /api/devices/:id/rack-location - where (if at all) this device is
+// mounted, for the Topology "Rack Location" field and its cross-link.
+router.get('/:id/rack-location', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT rs.id AS slot_id, rs.rack_id, rs.u_position, rs.u_size, rs.front_back,
+              r.name AS rack_name
+       FROM rack_slots rs
+       JOIN racks r ON r.id = rs.rack_id
+       WHERE rs.device_id = ? AND rs.project_id = ?
+       LIMIT 1`,
+      [req.params.id, req.projectId]
+    );
+    res.json(rows[0] || null);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/devices - create device
 router.post('/', async (req, res, next) => {
   try {

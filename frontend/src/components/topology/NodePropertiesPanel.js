@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { MapPin, Trash2, X } from 'lucide-react';
 import client from '../../api/client';
 import { useProject } from '../../project/ProjectContext';
 import {
@@ -57,6 +58,7 @@ export default function NodePropertiesPanel({
   onConnectionPointsChange,
 }) {
   const { currentProjectId } = useProject();
+  const navigate = useNavigate();
   const [displayNode, setDisplayNode] = useState(null);
   const [hostname, setHostname] = useState('');
   const [interfaces, setInterfaces] = useState([]);
@@ -64,6 +66,7 @@ export default function NodePropertiesPanel({
   const [editingNameId, setEditingNameId] = useState(null);
   const [error, setError] = useState(null);
   const [vlans, setVlans] = useState([]);
+  const [rackLocation, setRackLocation] = useState(null);
 
   useEffect(() => {
     client
@@ -116,6 +119,25 @@ export default function NodePropertiesPanel({
       })
       .catch(() => {
         if (!cancelled) setConnectionPoints([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedDeviceId]);
+
+  useEffect(() => {
+    if (!linkedDeviceId) {
+      setRackLocation(null);
+      return;
+    }
+    let cancelled = false;
+    client
+      .get(`/devices/${linkedDeviceId}/rack-location`)
+      .then((res) => {
+        if (!cancelled) setRackLocation(res.data || null);
+      })
+      .catch(() => {
+        if (!cancelled) setRackLocation(null);
       });
     return () => {
       cancelled = true;
@@ -308,6 +330,20 @@ export default function NodePropertiesPanel({
           }
         />
       </div>
+
+      {linkedDeviceId && rackLocation && (
+        <div className="node-properties-section">
+          <span className="node-properties-label">Rack Location</span>
+          <button
+            type="button"
+            className="node-properties-rack-location-btn"
+            onClick={() => navigate(`/racks?highlightDevice=${linkedDeviceId}`)}
+          >
+            <MapPin size={13} />
+            {rackLocation.rack_name} — U{rackLocation.u_position}
+          </button>
+        </div>
+      )}
 
       {linkedDeviceId && (
       <div className="node-properties-section">

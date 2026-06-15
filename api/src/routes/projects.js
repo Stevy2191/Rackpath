@@ -15,6 +15,7 @@ const SCOPED_TABLES = [
   'topology_zones',
   'topology_layout',
   'rack_slots',
+  'rack_custom_devices',
   'ports',
   'scan_jobs',
   'racks',

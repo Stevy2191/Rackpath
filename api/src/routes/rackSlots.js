@@ -6,6 +6,7 @@ const router = express.Router();
 
 const ITEM_TYPES = ['device', 'patch-panel', 'blank', 'cable-manager', 'custom-device'];
 const SIDES = ['front', 'back', 'both'];
+const FRONT_BACK = ['front', 'back'];
 
 // Find an existing slot in the same rack whose U range overlaps the given
 // range on a "compatible" side (either slot is 'both', or both sides match).
@@ -36,7 +37,7 @@ router.get('/', async (req, res, next) => {
   try {
     const { rack_id } = req.query;
     let query = `
-      SELECT rs.*, d.hostname, d.ip, d.type AS device_type
+      SELECT rs.*, d.hostname, d.ip, d.type AS device_type, d.status AS device_status
       FROM rack_slots rs
       LEFT JOIN devices d ON d.id = rs.device_id
       WHERE rs.project_id = ?`;
@@ -56,7 +57,20 @@ router.get('/', async (req, res, next) => {
 // POST /api/rack-slots - assign a device (or rack item) to a rack U position
 router.post('/', async (req, res, next) => {
   try {
-    const { rack_id, device_id, u_position, item_type, item_label, side, custom_type, color } = req.body;
+    const {
+      rack_id,
+      device_id,
+      u_position,
+      item_type,
+      item_label,
+      side,
+      custom_type,
+      color,
+      front_back,
+      catalog_id,
+      custom_image_url,
+      vendor,
+    } = req.body;
     const u_size = req.body.u_size || 1;
     if (!rack_id || u_position === undefined) {
       return res.status(400).json({ error: 'rack_id and u_position are required' });
@@ -66,6 +80,9 @@ router.post('/', async (req, res, next) => {
     }
     if (side !== undefined && side !== null && !SIDES.includes(side)) {
       return res.status(400).json({ error: 'Invalid side' });
+    }
+    if (front_back !== undefined && front_back !== null && !FRONT_BACK.includes(front_back)) {
+      return res.status(400).json({ error: 'Invalid front_back' });
     }
     if (u_size < 1) return res.status(400).json({ error: 'u_size must be at least 1' });
 
@@ -85,9 +102,24 @@ router.post('/', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO rack_slots (project_id, rack_id, device_id, item_type, item_label, custom_type, color, u_position, u_size, side)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.projectId, rack_id, device_id || null, item_type || 'device', item_label || null, custom_type || null, color || null, u_position, u_size, resolvedSide]
+      `INSERT INTO rack_slots (project_id, rack_id, device_id, item_type, item_label, custom_type, color, u_position, u_size, side, front_back, catalog_id, custom_image_url, vendor)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.projectId,
+        rack_id,
+        device_id || null,
+        item_type || 'device',
+        item_label || null,
+        custom_type || null,
+        color || null,
+        u_position,
+        u_size,
+        resolvedSide,
+        front_back || 'front',
+        catalog_id || null,
+        custom_image_url || null,
+        vendor || null,
+      ]
     );
     const [rows] = await pool.query('SELECT * FROM rack_slots WHERE id = ?', [result.insertId]);
 
@@ -107,7 +139,19 @@ router.post('/', async (req, res, next) => {
 // PUT /api/rack-slots/:id - update slot (move device, resize, re-side, relabel)
 router.put('/:id', async (req, res, next) => {
   try {
-    const { rack_id, device_id, item_type, item_label, side, custom_type, color } = req.body;
+    const {
+      rack_id,
+      device_id,
+      item_type,
+      item_label,
+      side,
+      custom_type,
+      color,
+      front_back,
+      catalog_id,
+      custom_image_url,
+      vendor,
+    } = req.body;
     let u_position = req.body.u_position;
     const u_size = req.body.u_size || 1;
     if (item_type !== undefined && item_type !== null && !ITEM_TYPES.includes(item_type)) {
@@ -115,6 +159,9 @@ router.put('/:id', async (req, res, next) => {
     }
     if (side !== undefined && side !== null && !SIDES.includes(side)) {
       return res.status(400).json({ error: 'Invalid side' });
+    }
+    if (front_back !== undefined && front_back !== null && !FRONT_BACK.includes(front_back)) {
+      return res.status(400).json({ error: 'Invalid front_back' });
     }
     if (u_size < 1) return res.status(400).json({ error: 'u_size must be at least 1' });
 
@@ -145,9 +192,25 @@ router.put('/:id', async (req, res, next) => {
 
     const [result] = await pool.query(
       `UPDATE rack_slots
-       SET rack_id = ?, device_id = ?, item_type = ?, item_label = ?, custom_type = ?, color = ?, u_position = ?, u_size = ?, side = ?
+       SET rack_id = ?, device_id = ?, item_type = ?, item_label = ?, custom_type = ?, color = ?, u_position = ?, u_size = ?, side = ?, front_back = ?, catalog_id = ?, custom_image_url = ?, vendor = ?
        WHERE id = ? AND project_id = ?`,
-      [rack_id, device_id || null, item_type || 'device', item_label || null, custom_type || null, color || null, u_position, u_size, resolvedSide, req.params.id, req.projectId]
+      [
+        rack_id,
+        device_id || null,
+        item_type || 'device',
+        item_label || null,
+        custom_type || null,
+        color || null,
+        u_position,
+        u_size,
+        resolvedSide,
+        front_back || 'front',
+        catalog_id || null,
+        custom_image_url || null,
+        vendor || null,
+        req.params.id,
+        req.projectId,
+      ]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack slot not found' });
     const [rows] = await pool.query('SELECT * FROM rack_slots WHERE id = ?', [req.params.id]);

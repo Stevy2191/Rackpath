@@ -1,0 +1,148 @@
+.device-block {
+  display: flex;
+  align-items: stretch;
+  border-radius: 2px;
+  border: 1px solid #05060a;
+  background: linear-gradient(180deg, #3a3f48 0%, #1c1f25 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  cursor: grab;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  color: #d7dbe2;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.device-block:active {
+  cursor: grabbing;
+}
+
+.device-block-highlighted {
+  animation: device-block-pulse 1.4s ease-in-out 2;
+}
+
+@keyframes device-block-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px #4adede, 0 0 6px rgba(74, 222, 222, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 2px #4adede, 0 0 18px rgba(74, 222, 222, 0.9);
+  }
+}
+
+.device-block-vendor-badge {
+  flex-shrink: 0;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: rgba(0, 0, 0, 0.25);
+  border-right: 1px solid rgba(0, 0, 0, 0.4);
+  color: #8a93a3;
+}
+
+.device-block-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 8px;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.device-block-name {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e8ebf0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: inherit;
+}
+
+.device-block-name.linked {
+  cursor: pointer;
+  color: #7dd3fc;
+}
+
+.device-block-name.linked:hover {
+  text-decoration: underline;
+}
+
+.device-block-subtitle {
+  font-size: 10px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-block-led {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin: 0 10px;
+  align-self: center;
+  background: #4a4f5a;
+}
+
+.device-block-led.led-online {
+  background: #34d976;
+  box-shadow: 0 0 4px #34d976;
+}
+
+.device-block-led.led-offline {
+  background: #ff5757;
+  box-shadow: 0 0 4px #ff5757;
+}
+
+.device-block-led.led-unknown {
+  background: #6b7280;
+}
+
+.device-block-actions {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.device-block:hover .device-block-actions {
+  opacity: 1;
+}
+
+.device-block-icon-btn {
+  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  color: #cbd5e1;
+  border-radius: 2px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.device-block-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+}

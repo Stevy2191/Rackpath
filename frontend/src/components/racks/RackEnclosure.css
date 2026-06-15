@@ -1,0 +1,263 @@
+.rack-enclosure {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 400px;
+}
+
+.rack-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(180deg, #2a2d35 0%, #1a1c22 100%);
+  border: 1px solid #3a3f4a;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #e8ebf0;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+}
+
+.rack-badge-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rack-badge-u {
+  font-size: 0.7rem;
+  color: #8a93a3;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.rack-badge-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rack-side-toggle {
+  display: flex;
+  border: 1px solid #3a3f4a;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-right: 4px;
+}
+
+.rack-side-toggle button {
+  border: none;
+  background: transparent;
+  color: #8a93a3;
+  padding: 4px 10px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.rack-side-toggle button.active {
+  background: #4adede;
+  color: #0a0a0f;
+}
+
+.rack-badge-icon-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rack-badge-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.rack-badge-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rack-badge-danger:hover {
+  background: rgba(255, 87, 87, 0.25);
+  color: #ff5757;
+}
+
+.rack-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  background: #1a1c22;
+  border: 1px solid #3a3f4a;
+  border-radius: 6px;
+}
+
+.rack-edit-form input,
+.rack-edit-form select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #3a3f4a;
+  border-radius: 4px;
+  background: #0e0f13;
+  color: #e8ebf0;
+  font-size: 0.8rem;
+}
+
+.rack-edit-form button {
+  padding: 0.3rem 0.7rem;
+  border: none;
+  border-radius: 4px;
+  background: #4adede;
+  color: #0a0a0f;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.rack-edit-form button[type='button'] {
+  background: #3a3f4a;
+  color: #cbd5e1;
+}
+
+/* --- Frame / enclosure ----------------------------------------------------- */
+.rack-frame {
+  position: relative;
+  background: linear-gradient(135deg, #2c2f36 0%, #1a1c22 50%, #15161b 100%);
+  border: 2px solid #060708;
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 30px rgba(74, 222, 222, 0.04);
+  transition: box-shadow 0.2s ease;
+}
+
+.rack-enclosure-focused .rack-frame {
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 0 0 2px #4adede,
+    0 0 30px rgba(74, 222, 222, 0.35);
+}
+
+.rack-panel {
+  height: 14px;
+  margin: 0 0 4px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #3a3f48 0%, #20232a 100%);
+  border: 1px solid #060708;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.rack-panel-bottom {
+  margin: 4px 0 0;
+}
+
+.rack-body {
+  display: flex;
+}
+
+.rack-rail {
+  display: flex;
+  flex-direction: column;
+  width: 26px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #24262c 0%, #1a1c21 100%);
+  border: 1px solid #060708;
+}
+
+.rack-rail-left {
+  border-radius: 3px 0 0 3px;
+  border-right: none;
+}
+
+.rack-rail-right {
+  border-radius: 0 3px 3px 0;
+  border-left: none;
+}
+
+.rack-rail-number {
+  height: 44px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  color: #5a6170;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.rack-units {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 320px;
+  border-top: 1px solid #060708;
+  border-bottom: 1px solid #060708;
+  animation: rack-units-flip 0.25s ease;
+}
+
+@keyframes rack-units-flip {
+  from {
+    opacity: 0;
+    transform: scaleY(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+/* --- Empty U slot ------------------------------------------------------------ */
+.rack-unit-slot {
+  height: 44px;
+  box-sizing: border-box;
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  position: relative;
+  transition: background 0.1s ease;
+}
+
+.rack-unit-band-0 {
+  background: rgba(255, 255, 255, 0.012);
+}
+
+.rack-unit-band-1 {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.rack-unit-slot-number {
+  font-size: 9px;
+  color: #3a414f;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+}
+
+.rack-unit-slot.drop-ok {
+  background: rgba(74, 158, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(74, 158, 255, 0.7);
+}
+
+.rack-unit-slot.drop-collision {
+  background: rgba(255, 87, 87, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 87, 87, 0.7);
+}
+
+.rack-units .device-block {
+  box-sizing: border-box;
+  border-bottom: 1px solid #05060a;
+}

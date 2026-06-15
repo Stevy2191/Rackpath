@@ -12,13 +12,17 @@ const SCAN_HOST_PATH = /^\/api\/scans\/\d+\/host$/;
 // Authorization header, so the raw file route is left unauthenticated.
 const TOPOLOGY_ICON_FILE_PATH = /^\/api\/topology\/icons\/file\/[^/]+$/;
 
+// Same reasoning as TOPOLOGY_ICON_FILE_PATH, for uploaded rack device faceplates.
+const RACK_DEVICE_IMAGE_FILE_PATH = /^\/api\/rack-custom-devices\/images\/file\/[^/]+$/;
+
 function isPublicPath(path) {
   return (
     PUBLIC_PATHS.has(path) ||
     SCAN_RESULTS_PATH.test(path) ||
     SCAN_PROGRESS_PATH.test(path) ||
     SCAN_HOST_PATH.test(path) ||
-    TOPOLOGY_ICON_FILE_PATH.test(path)
+    TOPOLOGY_ICON_FILE_PATH.test(path) ||
+    RACK_DEVICE_IMAGE_FILE_PATH.test(path)
   );
 }
 

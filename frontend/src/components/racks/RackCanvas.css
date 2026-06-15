@@ -1,0 +1,36 @@
+.rack-canvas {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+  padding: 24px;
+  overflow: auto;
+  flex: 1;
+  position: relative;
+}
+
+.rack-add-card {
+  flex-shrink: 0;
+  width: 120px;
+  height: 240px;
+  margin-top: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed #3a3f4a;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: #6b7280;
+  cursor: pointer;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.rack-add-card:hover {
+  border-color: #4adede;
+  color: #4adede;
+  background: rgba(74, 222, 222, 0.05);
+}

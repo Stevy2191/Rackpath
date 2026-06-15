@@ -1,0 +1,47 @@
+import React, { useState } from 'react';
+
+// One empty rack-unit row: a drop target for devices/catalog items, with a
+// blue (ok) or red (collision) highlight while something is being dragged
+// over it.
+export default function RackUnitSlot({ u, band, draggingMeta, occupiedByU, onDrop }) {
+  const [dragOverState, setDragOverState] = useState(null); // null | 'ok' | 'collision'
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (!draggingMeta) {
+      setDragOverState('ok');
+      return;
+    }
+    const { uSize, excludeSlotId } = draggingMeta;
+    const uPosition = u - uSize + 1;
+    let state = 'ok';
+    if (uPosition < 1) {
+      state = 'collision';
+    } else {
+      for (let pos = uPosition; pos <= u; pos++) {
+        const owner = occupiedByU.get(pos);
+        if (owner !== undefined && owner !== excludeSlotId) {
+          state = 'collision';
+          break;
+        }
+      }
+    }
+    setDragOverState(state);
+  };
+
+  const handleDrop = (e) => {
+    setDragOverState(null);
+    onDrop(u, e);
+  };
+
+  return (
+    <div
+      className={`rack-unit-slot rack-unit-band-${band}${dragOverState ? ` drop-${dragOverState}` : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={() => setDragOverState(null)}
+      onDrop={handleDrop}
+    >
+      <span className="rack-unit-slot-number">{u}</span>
+    </div>
+  );
+}

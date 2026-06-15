@@ -126,6 +126,26 @@
   color: var(--color-text);
 }
 
+.node-properties-rack-location-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.node-properties-rack-location-btn:hover {
+  background: var(--color-bg-subtle);
+}
+
 .node-properties-interfaces {
   margin: 0;
   padding: 0;
