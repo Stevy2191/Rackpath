@@ -5,7 +5,7 @@
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  max-width: 480px;
+  max-width: 640px;
 }
 
 .project-select-section h2 {
@@ -94,6 +94,45 @@
 }
 
 .project-select-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.project-select-template-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.project-select-template-actions button:not(.project-select-link) {
+  padding: 0.5rem 1.25rem;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-select-template-actions button:not(.project-select-link):disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.project-select-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-link);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.project-select-link:disabled {
   opacity: 0.6;
   cursor: default;
 }

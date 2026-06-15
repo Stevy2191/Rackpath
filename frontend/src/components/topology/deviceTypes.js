@@ -16,12 +16,14 @@ import {
   Cloud,
   Globe,
   Puzzle,
+  Cable,
 } from 'lucide-react';
 
 // Preset device types shown in the Manual picker tab, and used to classify
 // devices (manual or discovered) for icons/accent colors throughout the
 // topology canvas. `icon` is a lucide-react component.
 export const DEVICE_TYPES = {
+  modem: { label: 'Modem', icon: Cable, color: '#4b5563' },
   router: { label: 'Router', icon: RouterIcon, color: '#2563eb' },
   switch: { label: 'Switch', icon: GitBranch, color: '#d97706' },
   firewall: { label: 'Firewall', icon: Shield, color: '#dc2626' },
@@ -44,7 +46,7 @@ export const DEVICE_TYPES = {
 // Visio-style grouping for the device picker. Order here drives the order
 // the collapsible categories are rendered in.
 export const DEVICE_CATEGORIES = [
-  { name: 'Network Infrastructure', types: ['router', 'switch', 'firewall', 'loadbalancer'] },
+  { name: 'Network Infrastructure', types: ['modem', 'router', 'switch', 'firewall', 'loadbalancer'] },
   { name: 'Wireless', types: ['ap', 'wireless_controller'] },
   { name: 'Servers & Storage', types: ['server', 'nas', 'san'] },
   { name: 'End Devices', types: ['endpoint', 'laptop', 'printer', 'ip_phone'] },

@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useProject, DEFAULT_PROJECT_ID } from './ProjectContext';
+import client from '../api/client';
+import TemplatePicker from '../components/TemplatePicker';
 import './ProjectSwitcher.css';
 
 const DELETE_WARNING =
@@ -19,9 +22,12 @@ export default function ProjectSwitcher() {
   const [modal, setModal] = useState(null); // null | { mode: 'create' | 'edit', project }
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [createStep, setCreateStep] = useState('details'); // 'details' | 'template'
+  const [template, setTemplate] = useState('blank');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const containerRef = useRef(null);
+  const navigate = useNavigate();
 
   // Close the dropdown when clicking outside it.
   useEffect(() => {
@@ -40,6 +46,8 @@ export default function ProjectSwitcher() {
     setModal({ mode: 'create', project: null });
     setName('');
     setDescription('');
+    setCreateStep('details');
+    setTemplate('blank');
     setError(null);
   };
 
@@ -63,18 +71,48 @@ export default function ProjectSwitcher() {
       setError('Name is required');
       return;
     }
+    if (modal.mode === 'create' && createStep === 'details') {
+      setError(null);
+      setCreateStep('template');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       if (modal.mode === 'create') {
-        await createProject({ name: name.trim(), description: description.trim() || null });
+        await createAndApplyTemplate(template);
       } else {
         await updateProject(modal.project.id, {
           name: name.trim(),
           description: description.trim() || null,
         });
+        closeModal();
       }
-      closeModal();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+      setSaving(false);
+    }
+  };
+
+  const createAndApplyTemplate = async (templateKey) => {
+    const project = await createProject({ name: name.trim(), description: description.trim() || null });
+    if (templateKey !== 'blank') {
+      await client.post(`/projects/${project.id}/apply-template`, { template: templateKey });
+    }
+    closeModal();
+    navigate(`/projects/${project.id}`);
+  };
+
+  const handleCreateBack = () => {
+    setCreateStep('details');
+    setError(null);
+  };
+
+  const handleStartBlank = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await createAndApplyTemplate('blank');
     } catch (err) {
       setError(err.response?.data?.error || err.message);
       setSaving(false);
@@ -152,27 +190,44 @@ export default function ProjectSwitcher() {
 
       {modal && (
         <div className="project-modal-overlay" onMouseDown={closeModal}>
-          <div className="project-modal" onMouseDown={(e) => e.stopPropagation()}>
-            <h3>{modal.mode === 'create' ? 'New Project' : 'Project Settings'}</h3>
+          <div
+            className={`project-modal${modal.mode === 'create' && createStep === 'template' ? ' project-modal-wide' : ''}`}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3>
+              {modal.mode === 'edit'
+                ? 'Project Settings'
+                : createStep === 'template'
+                ? 'Choose a starting template'
+                : 'New Project'}
+            </h3>
             <form onSubmit={handleSave}>
-              <label>
-                Name
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Project name"
-                  autoFocus
-                />
-              </label>
-              <label>
-                Description (optional)
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What is this project for?"
-                  rows={3}
-                />
-              </label>
+              {modal.mode === 'create' && createStep === 'template' ? (
+                <div className="project-modal-template-step">
+                  <TemplatePicker value={template} onChange={setTemplate} />
+                </div>
+              ) : (
+                <>
+                  <label>
+                    Name
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Project name"
+                      autoFocus
+                    />
+                  </label>
+                  <label>
+                    Description (optional)
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="What is this project for?"
+                      rows={3}
+                    />
+                  </label>
+                </>
+              )}
 
               {error && <div className="project-modal-error">{error}</div>}
 
@@ -187,12 +242,28 @@ export default function ProjectSwitcher() {
                     Delete Project
                   </button>
                 )}
+                {modal.mode === 'create' && createStep === 'template' && (
+                  <button type="button" onClick={handleCreateBack} disabled={saving}>
+                    Back
+                  </button>
+                )}
                 <div className="project-modal-actions-right">
+                  {modal.mode === 'create' && createStep === 'template' && (
+                    <button type="button" className="project-modal-link" onClick={handleStartBlank} disabled={saving}>
+                      Start blank
+                    </button>
+                  )}
                   <button type="button" onClick={closeModal} disabled={saving}>
                     Cancel
                   </button>
                   <button type="submit" className="project-modal-save" disabled={saving}>
-                    {saving ? 'Saving...' : 'Save'}
+                    {saving
+                      ? 'Saving...'
+                      : modal.mode === 'edit'
+                      ? 'Save'
+                      : createStep === 'details'
+                      ? 'Continue'
+                      : 'Create Project'}
                   </button>
                 </div>
               </div>

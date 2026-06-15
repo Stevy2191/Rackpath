@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
+const { TEMPLATES, TEMPLATE_KEYS } = require('../templates/networkTemplates');
 
 const router = express.Router();
 
@@ -74,6 +75,116 @@ router.patch('/:id', async (req, res, next) => {
 
     const [rows] = await pool.query('SELECT * FROM projects WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/projects/:id/apply-template - populate a project's topology
+// canvas, VLANs, and rack from a hardcoded starter template.
+router.post('/:id/apply-template', async (req, res, next) => {
+  try {
+    const projectId = parseInt(req.params.id, 10);
+    const { template } = req.body || {};
+
+    if (!TEMPLATE_KEYS.includes(template)) {
+      return res.status(400).json({ error: `template must be one of: ${TEMPLATE_KEYS.join(', ')}` });
+    }
+
+    const [projectRows] = await pool.query('SELECT * FROM projects WHERE id = ?', [projectId]);
+    if (projectRows.length === 0) return res.status(404).json({ error: 'Project not found' });
+
+    const def = TEMPLATES[template];
+
+    if (def.nodes.length > 0) {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const nodeIdsByKey = {};
+        for (const node of def.nodes) {
+          const [deviceResult] = await conn.query(
+            'INSERT INTO devices (project_id, hostname, type) VALUES (?, ?, ?)',
+            [projectId, node.label, node.type]
+          );
+          const [nodeResult] = await conn.query(
+            'INSERT INTO topology_nodes (project_id, device_id, x, y) VALUES (?, ?, ?, ?)',
+            [projectId, deviceResult.insertId, node.x, node.y]
+          );
+          nodeIdsByKey[node.key] = { deviceId: deviceResult.insertId, nodeId: nodeResult.insertId };
+        }
+
+        for (const [sourceKey, targetKey] of def.edges) {
+          await conn.query(
+            'INSERT INTO topology_edges (project_id, source_node_id, target_node_id) VALUES (?, ?, ?)',
+            [projectId, nodeIdsByKey[sourceKey].nodeId, nodeIdsByKey[targetKey].nodeId]
+          );
+        }
+
+        for (const vlan of def.vlans) {
+          await conn.query(
+            'INSERT INTO project_vlans (project_id, vlan_id, name, subnet) VALUES (?, ?, ?, ?)',
+            [projectId, vlan.vlan_id, vlan.name, vlan.subnet]
+          );
+        }
+
+        if (def.rack) {
+          const [rackResult] = await conn.query(
+            'INSERT INTO racks (project_id, name, u_height) VALUES (?, ?, ?)',
+            [projectId, def.rack.name, def.rack.u_height]
+          );
+          const rackId = rackResult.insertId;
+
+          for (const item of def.rack.items) {
+            await conn.query(
+              'INSERT INTO rack_slots (project_id, rack_id, device_id, u_position, u_size, item_type) VALUES (?, ?, ?, ?, ?, ?)',
+              [projectId, rackId, nodeIdsByKey[item.key].deviceId, item.u_position, 1, 'device']
+            );
+          }
+        }
+
+        await conn.commit();
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
+    }
+
+    const [nodes] = await pool.query(
+      `SELECT n.id, n.device_id, n.label, n.type AS node_type,
+              n.icon_color AS node_icon_color, n.text_color AS node_text_color,
+              n.x, n.y, n.width, n.height,
+              d.hostname, d.ip, d.mac, d.type AS device_type, d.snmp_community, d.notes,
+              d.icon_color AS device_icon_color, d.text_color AS device_text_color, d.updated_at
+       FROM topology_nodes n
+       LEFT JOIN devices d ON d.id = n.device_id
+       WHERE n.project_id = ?`,
+      [projectId]
+    );
+    const [edges] = await pool.query('SELECT * FROM topology_edges WHERE project_id = ?', [projectId]);
+    const [vlans] = await pool.query('SELECT * FROM project_vlans WHERE project_id = ? ORDER BY vlan_id ASC', [projectId]);
+    const [racks] = await pool.query('SELECT * FROM racks WHERE project_id = ? ORDER BY name', [projectId]);
+
+    for (const rack of racks) {
+      const [slots] = await pool.query(
+        `SELECT rs.*, d.hostname, d.ip, d.type AS device_type
+         FROM rack_slots rs
+         LEFT JOIN devices d ON d.id = rs.device_id
+         WHERE rs.rack_id = ?
+         ORDER BY rs.u_position`,
+        [rack.id]
+      );
+      rack.slots = slots;
+    }
+
+    res.status(201).json({
+      project: projectRows[0],
+      topology: { nodes, edges },
+      vlans,
+      racks,
+    });
   } catch (err) {
     next(err);
   }

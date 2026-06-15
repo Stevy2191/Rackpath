@@ -140,6 +140,14 @@
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
 }
 
+.project-modal-wide {
+  width: 600px;
+}
+
+.project-modal-template-step {
+  margin-bottom: 0.85rem;
+}
+
 .project-modal h3 {
   margin: 0 0 1rem;
 }
@@ -210,4 +218,11 @@
 .project-modal-actions button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.project-modal-link {
+  border: none !important;
+  background: none !important;
+  color: var(--color-link);
+  text-decoration: underline;
 }
