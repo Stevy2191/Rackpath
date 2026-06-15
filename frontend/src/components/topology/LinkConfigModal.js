@@ -70,6 +70,14 @@ export default function LinkConfigModal({ sourceDevice, targetDevice, initialVal
     };
   }, [sourceDevice?.id, targetDevice?.id]);
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit({

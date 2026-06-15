@@ -1,19 +1,29 @@
 .modal:has(.link-config-ports) {
-  width: min(420px, 92vw);
+  width: 100%;
+  max-width: min(600px, 90vw);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .link-config-ports {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 0.75rem;
 }
 
 .link-config-port {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
   gap: 0.3rem;
   font-size: 0.85rem;
   color: var(--color-text-muted);
+}
+
+.link-config-port input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .link-config-port-label {
