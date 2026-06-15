@@ -37,6 +37,16 @@ function ColorSwatchPicker({ value, onChange, onReset }) {
 
 const CONNECTION_POINT_POSITIONS = ['top', 'bottom', 'left', 'right'];
 
+const IFACE_NAME_DISPLAY_MAX = 12;
+
+// Long interface names (e.g. "GigabitEthernet0/0/1") are truncated with an
+// ellipsis in the list so rows stay aligned; the full name is shown via the
+// title tooltip and in the edit input.
+function truncateIfaceName(name) {
+  if (!name || name.length <= IFACE_NAME_DISPLAY_MAX) return name;
+  return `${name.slice(0, IFACE_NAME_DISPLAY_MAX)}…`;
+}
+
 export default function NodePropertiesPanel({
   node,
   onClose,
@@ -330,9 +340,9 @@ export default function NodePropertiesPanel({
                   <span
                     className="node-properties-iface-name"
                     onClick={() => setEditingNameId(iface.id)}
-                    title="Click to edit"
+                    title={iface.name || 'unnamed'}
                   >
-                    {iface.name || 'unnamed'}
+                    {iface.name ? truncateIfaceName(iface.name) : 'unnamed'}
                   </span>
                 )}
                 {iface.status && (

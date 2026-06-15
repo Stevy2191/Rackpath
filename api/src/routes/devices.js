@@ -2,6 +2,7 @@ const express = require('express');
 const snmp = require('net-snmp');
 const pool = require('../db/pool');
 const { scanDevice } = require('../services/snmpScan');
+const { translateInterfaceName } = require('../services/interfaceNames');
 
 const router = express.Router();
 
@@ -656,18 +657,22 @@ router.post('/:id/scan', async (req, res, next) => {
 
       for (const iface of result.interfaces) {
         const discoveredIp = ipByIfIndex.get(iface.index) || null;
-        const existing = existingByName.get(iface.name);
+        const cleanName = translateInterfaceName(iface.name);
+        // Match on either the new clean name or the raw ifDescr previously
+        // stored (before this translation existed), so re-scanning a device
+        // renames its existing interface rows instead of duplicating them.
+        const existing = existingByName.get(cleanName) || existingByName.get(iface.name);
 
         if (existing) {
           await pool.query(
-            'UPDATE topology_node_interfaces SET speed = ?, status = ?, description = ?, ip = ? WHERE id = ?',
-            [iface.speed, iface.operStatus, iface.name, discoveredIp || existing.ip, existing.id]
+            'UPDATE topology_node_interfaces SET name = ?, speed = ?, status = ?, description = ?, ip = ? WHERE id = ?',
+            [cleanName, iface.speed, iface.operStatus, iface.name, discoveredIp || existing.ip, existing.id]
           );
         } else {
           await pool.query(
             `INSERT INTO topology_node_interfaces (project_id, device_id, parent_id, name, description, ip, speed, status)
              VALUES (?, ?, NULL, ?, ?, ?, ?, ?)`,
-            [req.projectId, device.id, iface.name, iface.name, discoveredIp, iface.speed, iface.operStatus]
+            [req.projectId, device.id, cleanName, iface.name, discoveredIp, iface.speed, iface.operStatus]
           );
         }
       }

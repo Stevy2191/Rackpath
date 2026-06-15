@@ -5,6 +5,7 @@
 
 const snmp = require('net-snmp');
 const { upsertDevice } = require('./helpers');
+const { translateInterfaceName } = require('../services/interfaceNames');
 
 const SYSTEM_OID = '1.3.6.1.2.1.1';
 const SYS_DESCR_OID = '1.3.6.1.2.1.1.1.0';
@@ -132,16 +133,19 @@ async function syncData(config, projectId, db) {
       const deviceId = deviceRows[0].id;
       for (const iface of Object.values(ifaces)) {
         if (!iface.name) continue;
+        const cleanName = translateInterfaceName(iface.name);
         const [existing] = await db.query(
-          'SELECT id FROM topology_node_interfaces WHERE device_id = ? AND name = ?',
-          [deviceId, iface.name]
+          'SELECT id FROM topology_node_interfaces WHERE device_id = ? AND name IN (?, ?)',
+          [deviceId, cleanName, iface.name]
         );
         if (existing.length === 0) {
           await db.query(
             `INSERT INTO topology_node_interfaces (project_id, device_id, name, description)
              VALUES (?, ?, ?, ?)`,
-            [projectId, deviceId, iface.name, iface.mac ? `MAC ${iface.mac}` : null]
+            [projectId, deviceId, cleanName, iface.mac ? `MAC ${iface.mac}` : null]
           );
+        } else {
+          await db.query('UPDATE topology_node_interfaces SET name = ? WHERE id = ?', [cleanName, existing[0].id]);
         }
       }
     }
