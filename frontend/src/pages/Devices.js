@@ -25,8 +25,6 @@ const emptyDevice = {
   purchase_date: '',
   warranty_expiry: '',
 };
-const emptyPort = { port_name: '', port_number: '', cable_type: '', speed: '' };
-
 const TYPE_FILTER_OPTIONS = [
   { value: '', label: 'All Types' },
   { value: 'router', label: 'Router' },
@@ -134,9 +132,9 @@ export default function DevicesPage() {
   const [cameraModalState, setCameraModalState] = useState(null); // null | camera object
 
   const [selectedDeviceId, setSelectedDeviceId] = useState(id ? Number(id) : null);
-  const [ports, setPorts] = useState([]);
+  const [interfaces, setInterfaces] = useState([]);
+  const [interfacesLoading, setInterfacesLoading] = useState(false);
   const [newDevice, setNewDevice] = useState(emptyDevice);
-  const [newPort, setNewPort] = useState(emptyPort);
   const [editDevice, setEditDevice] = useState(emptyDevice);
   const [savingDevice, setSavingDevice] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
@@ -211,15 +209,17 @@ export default function DevicesPage() {
       .catch(() => {});
   };
 
-  const loadPorts = (deviceId) => {
-    if (!deviceId) {
-      setPorts([]);
+  const loadInterfaces = (device) => {
+    if (!device || device.topology_node_id == null) {
+      setInterfaces([]);
       return;
     }
+    setInterfacesLoading(true);
     client
-      .get('/ports', { params: { device_id: deviceId } })
-      .then((res) => setPorts(res.data))
-      .catch((err) => setError(err.message));
+      .get(`/topology/nodes/${device.id}/interfaces`)
+      .then((res) => setInterfaces(res.data || []))
+      .catch((err) => setError(err.message))
+      .finally(() => setInterfacesLoading(false));
   };
 
   useEffect(() => {
@@ -248,8 +248,8 @@ export default function DevicesPage() {
   }, [id]);
 
   useEffect(() => {
-    loadPorts(selectedDeviceId);
     const device = devices.find((d) => d.id === selectedDeviceId && d.source !== 'camera');
+    loadInterfaces(device);
     setEditDevice(
       device
         ? {
@@ -321,40 +321,6 @@ export default function DevicesPage() {
       setError(err.message);
     } finally {
       setSavingDevice(false);
-    }
-  };
-
-  const handleCreatePort = async (e) => {
-    e.preventDefault();
-    if (!selectedDeviceId) return;
-    try {
-      await client.post('/ports', { ...newPort, device_id: selectedDeviceId });
-      setNewPort(emptyPort);
-      loadPorts(selectedDeviceId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleUpdatePort = (port, field, value) => {
-    const updated = { ...port, [field]: value };
-    setPorts((prev) => prev.map((p) => (p.id === port.id ? updated : p)));
-  };
-
-  const handleSavePort = async (port) => {
-    try {
-      await client.put(`/ports/${port.id}`, port);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleDeletePort = async (portId) => {
-    try {
-      await client.delete(`/ports/${portId}`);
-      setPorts((prev) => prev.filter((p) => p.id !== portId));
-    } catch (err) {
-      setError(err.message);
     }
   };
 
@@ -976,12 +942,12 @@ export default function DevicesPage() {
                       ) : (
                       <select
                         className="devices-credential-select"
-                        value={device.credential_macro_id || ''}
+                        value={device.credential_macro_id != null ? device.credential_macro_id.toString() : ''}
                         onChange={(e) => handleCredentialChange(device, e.target.value ? Number(e.target.value) : null)}
                       >
                         <option value="">—</option>
                         {macros.map((m) => (
-                          <option key={m.id} value={m.id}>
+                          <option key={m.id} value={m.id.toString()}>
                             {m.name}
                           </option>
                         ))}
@@ -1090,11 +1056,12 @@ export default function DevicesPage() {
               />
             </label>
             <label>
-              SNMP Community
-              <input
-                value={editDevice.snmp_community || ''}
-                onChange={(e) => setEditDevice({ ...editDevice, snmp_community: e.target.value })}
-              />
+              SNMP Credential
+              <div className="device-readonly-field">
+                {selectedDevice.credential_macro_id
+                  ? macroById.get(selectedDevice.credential_macro_id)?.name || 'No credential assigned'
+                  : 'No credential assigned'}
+              </div>
             </label>
             <label>
               Make
@@ -1149,113 +1116,44 @@ export default function DevicesPage() {
           </form>
 
           <h2>Ports</h2>
-          <table className="port-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Number</th>
-                <th>Cable Type</th>
-                <th>Connected Device</th>
-                <th>Connected Port</th>
-                <th>Speed</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {ports.map((port) => (
-                <tr key={port.id}>
-                  <td>
-                    <input
-                      value={port.port_name || ''}
-                      onChange={(e) => handleUpdatePort(port, 'port_name', e.target.value)}
-                      onBlur={() => handleSavePort(port)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={port.port_number ?? ''}
-                      onChange={(e) => handleUpdatePort(port, 'port_number', Number(e.target.value))}
-                      onBlur={() => handleSavePort(port)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={port.cable_type || ''}
-                      onChange={(e) => handleUpdatePort(port, 'cable_type', e.target.value)}
-                      onBlur={() => handleSavePort(port)}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      value={port.connected_device_id ?? ''}
-                      onChange={(e) => {
-                        const value = e.target.value ? Number(e.target.value) : null;
-                        const updated = { ...port, connected_device_id: value };
-                        setPorts((prev) => prev.map((p) => (p.id === port.id ? updated : p)));
-                        handleSavePort(updated);
-                      }}
-                    >
-                      <option value="">-</option>
-                      {devices
-                        .filter((d) => d.source !== 'camera' && d.id !== selectedDeviceId)
-                        .map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.hostname || d.ip || `Device ${d.id}`}
-                          </option>
-                        ))}
-                    </select>
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={port.connected_port_id ?? ''}
-                      onChange={(e) =>
-                        handleUpdatePort(port, 'connected_port_id', e.target.value ? Number(e.target.value) : null)
-                      }
-                      onBlur={() => handleSavePort(port)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={port.speed || ''}
-                      onChange={(e) => handleUpdatePort(port, 'speed', e.target.value)}
-                      onBlur={() => handleSavePort(port)}
-                    />
-                  </td>
-                  <td>
-                    <button onClick={() => handleDeletePort(port.id)}>Delete</button>
-                  </td>
+          {selectedDevice.topology_node_id == null ? (
+            <p className="device-interfaces-empty">
+              No topology node linked — add this device to the topology to see ports
+            </p>
+          ) : interfacesLoading ? (
+            <p className="device-interfaces-empty">Loading…</p>
+          ) : interfaces.length === 0 ? (
+            <p className="device-interfaces-empty">No ports discovered yet — run an SNMP scan.</p>
+          ) : (
+            <table className="port-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Speed</th>
+                  <th>Status</th>
+                  <th>IP Address</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <form onSubmit={handleCreatePort} className="port-form">
-            <h3>Add Port</h3>
-            <input
-              placeholder="Name"
-              value={newPort.port_name}
-              onChange={(e) => setNewPort({ ...newPort, port_name: e.target.value })}
-            />
-            <input
-              type="number"
-              placeholder="Number"
-              value={newPort.port_number}
-              onChange={(e) => setNewPort({ ...newPort, port_number: e.target.value })}
-            />
-            <input
-              placeholder="Cable Type"
-              value={newPort.cable_type}
-              onChange={(e) => setNewPort({ ...newPort, cable_type: e.target.value })}
-            />
-            <input
-              placeholder="Speed"
-              value={newPort.speed}
-              onChange={(e) => setNewPort({ ...newPort, speed: e.target.value })}
-            />
-            <button type="submit">Add Port</button>
-          </form>
+              </thead>
+              <tbody>
+                {interfaces.map((iface) => (
+                  <tr key={iface.id}>
+                    <td>{iface.name}</td>
+                    <td>{iface.speed || '—'}</td>
+                    <td>
+                      {iface.status ? (
+                        <span className={`device-iface-status-badge device-iface-status-${iface.status}`}>
+                          {iface.status.toUpperCase()}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>{iface.ip || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </section>
       )}
 
