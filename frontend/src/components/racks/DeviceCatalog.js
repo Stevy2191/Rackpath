@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 import { RACK_CATALOG, CATALOG_CATEGORIES, CATALOG_VENDOR_OPTIONS, CATALOG_TYPE_OPTIONS, vendorBucket } from './rackCatalog';
 import DeviceFacePlate from './DeviceFacePlate';
 import CustomDeviceModal from './CustomDeviceModal';
@@ -44,6 +44,7 @@ export default function DeviceCatalog({
   const [vendorFilter, setVendorFilter] = useState('All Vendors');
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [search, setSearch] = useState('');
+  const [unrackedOpen, setUnrackedOpen] = useState(false);
 
   if (!open) return null;
 
@@ -189,23 +190,38 @@ export default function DeviceCatalog({
       )}
 
       <div className="device-catalog-list">
-        {category === 'all' && unrackedDevices.length > 0 && (
+        {category === 'all' && (
           <div className="device-catalog-section">
-            <h4>Unracked Devices</h4>
-            {unrackedDevices.map((device) => (
-              <div
-                key={device.id}
-                className="device-catalog-card device-catalog-card-simple"
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData('text/device-id', String(device.id))}
-                onClick={() => addUnrackedDevice(device)}
-              >
-                <div className="device-catalog-card-info">
-                  <span className="device-catalog-card-name">{device.hostname || device.ip || `Device ${device.id}`}</span>
-                  <span className="device-catalog-card-meta">{device.type || 'Device'} · 1U</span>
-                </div>
-              </div>
-            ))}
+            <button
+              type="button"
+              className="device-catalog-section-toggle"
+              onClick={() => setUnrackedOpen((v) => !v)}
+            >
+              {unrackedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <span>Unracked Devices</span>
+              <span className="device-catalog-count-badge">{unrackedDevices.length}</span>
+            </button>
+            {unrackedOpen &&
+              (unrackedDevices.length === 0 ? (
+                <p className="device-catalog-empty">No unracked devices.</p>
+              ) : (
+                unrackedDevices.map((device) => (
+                  <div
+                    key={device.id}
+                    className="device-catalog-card device-catalog-card-simple"
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData('text/device-id', String(device.id))}
+                    onClick={() => addUnrackedDevice(device)}
+                  >
+                    <div className="device-catalog-card-info">
+                      <span className="device-catalog-card-name">
+                        {device.hostname || device.ip || `Device ${device.id}`}
+                      </span>
+                      <span className="device-catalog-card-meta">{device.type || 'Device'} · 1U</span>
+                    </div>
+                  </div>
+                ))
+              ))}
           </div>
         )}
 

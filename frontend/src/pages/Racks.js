@@ -115,10 +115,12 @@ export default function RacksPage() {
       }
     },
     onSlotDelete: async (slotId) => {
+      const previous = allSlots;
+      setAllSlots((cur) => cur.filter((s) => s.id !== slotId));
       try {
         await client.delete(`/rack-slots/${slotId}`);
-        loadAllSlots();
       } catch (err) {
+        setAllSlots(previous);
         setError(err.response?.data?.error || err.message);
       }
     },

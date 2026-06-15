@@ -154,6 +154,43 @@
   color: #6b7280;
 }
 
+.device-catalog-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0 0 8px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.device-catalog-section-toggle:hover {
+  color: #d4d8e0;
+}
+
+.device-catalog-section-toggle span:first-of-type {
+  flex: 1;
+  text-align: left;
+}
+
+.device-catalog-count-badge {
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #8b91a1;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
 .device-catalog-card {
   display: flex;
   align-items: center;

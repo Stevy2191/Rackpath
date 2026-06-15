@@ -60,25 +60,9 @@ export default function RackEnclosure({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightedSlotId, slots]);
 
-  // The Front/Back toggle is a *view* of the rack, not a filter: every device
-  // stays visible and just switches between its front and back faceplate
-  // (LEDs/ports vs PSU/exhaust). The only time a slot is hidden is when
-  // another slot mounted on the opposite rail occupies the same U range -
-  // then the slot matching the current view side wins.
-  const primarySlots = slots.filter((s) => (s.front_back || 'front') === side);
-  const primaryCovered = new Set();
-  for (const s of primarySlots) {
-    for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) primaryCovered.add(u);
-  }
-  const otherSide = side === 'front' ? 'back' : 'front';
-  const secondarySlots = slots.filter((s) => {
-    if ((s.front_back || 'front') !== otherSide) return false;
-    for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) {
-      if (primaryCovered.has(u)) return false;
-    }
-    return true;
-  });
-  const visibleSlots = [...primarySlots, ...secondarySlots];
+  // The Front/Back toggle shows only what is physically mounted on that
+  // side of the rack.
+  const visibleSlots = slots.filter((s) => (s.front_back || 'front') === side);
 
   const slotsByTop = {};
   const covered = new Set();
