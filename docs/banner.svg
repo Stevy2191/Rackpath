@@ -1,0 +1,35 @@
+<svg width="1200" height="280" viewBox="0 0 1200 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Rackpath banner">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1c22"/>
+      <stop offset="100%" stop-color="#0a0a0f"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4adede"/>
+      <stop offset="100%" stop-color="#7dd3fc"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="280" fill="url(#bg)"/>
+
+  <!-- rack icon -->
+  <g transform="translate(60,40)">
+    <rect x="0" y="0" width="160" height="200" rx="8" fill="#15161b" stroke="#3a3f4a" stroke-width="2"/>
+    <rect x="10" y="10" width="140" height="24" rx="3" fill="#2a2d35"/>
+    <rect x="10" y="36" width="140" height="24" rx="3" fill="#4adede" opacity="0.35"/>
+    <rect x="10" y="62" width="140" height="24" rx="3" fill="#2a2d35"/>
+    <rect x="10" y="88" width="140" height="24" rx="3" fill="#2a2d35"/>
+    <rect x="10" y="114" width="140" height="24" rx="3" fill="#4adede" opacity="0.35"/>
+    <rect x="10" y="140" width="140" height="24" rx="3" fill="#2a2d35"/>
+    <rect x="10" y="166" width="140" height="24" rx="3" fill="#2a2d35"/>
+    <circle cx="142" cy="22" r="2" fill="#4adede"/>
+    <circle cx="142" cy="126" r="2" fill="#4adede"/>
+  </g>
+
+  <!-- title -->
+  <text x="260" y="140" font-family="'Roboto Mono', 'Courier New', monospace" font-size="64" font-weight="700" fill="#e6e9f0">Rack<tspan fill="url(#accent)">path</tspan></text>
+
+  <!-- tagline -->
+  <text x="262" y="182" font-family="'Roboto Mono', 'Courier New', monospace" font-size="20" fill="#8b91a1">Network documentation and infrastructure management</text>
+  <text x="262" y="210" font-family="'Roboto Mono', 'Courier New', monospace" font-size="20" fill="#8b91a1">for IT teams and homelabs</text>
+</svg>

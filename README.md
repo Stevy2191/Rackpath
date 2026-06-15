@@ -1,15 +1,94 @@
-# Rackpath
+<p align="center">
+  <img src="docs/banner.svg" alt="Rackpath — network documentation and infrastructure management for IT teams and homelabs" width="100%" />
+</p>
 
-Self-hosted network topology and rack management web app.
+<p align="center">
+  <strong>Network documentation and infrastructure management for IT teams and homelabs</strong>
+</p>
 
-## Stack
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Stevy2191/Rackpath?style=flat-square" alt="License"></a>
+  <a href="https://github.com/Stevy2191/Rackpath/stargazers"><img src="https://img.shields.io/github/stars/Stevy2191/Rackpath?style=flat-square" alt="GitHub stars"></a>
+  <img src="https://img.shields.io/badge/version-0.1.0-4adede?style=flat-square" alt="Version">
+</p>
 
-- **Frontend**: React + React Flow (topology diagram) + custom rack builder UI, served via nginx
-- **API**: Node.js + Express + MariaDB (`mysql2` driver), JWT-based authentication
-- **Scanner**: Python service using `nmap`, `puresnmp`, `scapy`, `zeroconf` (mDNS), `manuf` (MAC OUI), and `impacket` (NetBIOS) for enhanced network discovery, streaming per-host results back to the API
+---
+
+## What is Rackpath?
+
+Rackpath is a self-hosted network documentation platform for documenting,
+visualizing, and managing IT infrastructure. It brings together network
+topology diagrams, visual rack layouts, device inventory, VLAN planning, and
+third-party integrations in a single web app — so you always have an
+up-to-date picture of what's running where, whether you're managing a
+business network or a homelab.
+
+Everything runs in your own environment via Docker Compose: your data never
+leaves your infrastructure.
+
+## ✨ Features
+
+- 🗺️ **Interactive Network Topology** — drag-and-drop canvas with animated
+  links and interface labels
+- 🗄️ **Visual Rack Builder** — front/back views, vendor catalog, multi-rack
+  support
+- 📋 **Device Inventory** — SNMP scanning, credential macros, tags and
+  locations
+- 🔗 **Integrations** — UniFi, UniFi Protect, UniFi Access, Zabbix, LibreNMS,
+  NetBox, SNMP
+- 🌐 **VLAN Planning** — subnet management and zone visualization
+- 📊 **Project Dashboard** — site overview with warnings and activity log
+- 🔍 **Subnet Scanner** — discover and fingerprint devices on your network
+- 📦 **Project Templates** — starter topologies for common setups
+- 🏢 **Multi-site** — manage multiple sites as separate projects
+
+## 📸 Screenshots
+
+| Dashboard | Topology |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Topology](docs/screenshots/topology.png) |
+| Project overview with warnings and recent activity | Drag-and-drop network topology canvas |
+
+| Rack Builder | Device Inventory |
+|---|---|
+| ![Rack Builder](docs/screenshots/rack-builder.png) | ![Device Inventory](docs/screenshots/devices.png) |
+| Front/back rack views with a vendor catalog | Inventory list with SNMP scan results and tags |
+
+| Integrations |
+|---|
+| ![Integrations](docs/screenshots/integrations.png) |
+| Connect UniFi, Zabbix, LibreNMS, NetBox, and more |
+
+*Don't see images above? Add screenshots to [`docs/screenshots/`](docs/screenshots/) — see that folder's README for filenames.*
+
+## 🚀 Quick Start
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/deploy.sh | bash
+```
+
+This downloads the compose config, prompts for a JWT secret, starts the
+stack, applies the database schema, and creates the default admin user.
+
+Once it finishes, open:
+
+```
+http://your-server-ip:8080
+```
+
+**Default login:** `admin` / `rackpath` — you'll be required to change this
+password immediately on first login.
+
+> Prefer to set things up by hand or build from source? See
+> [Manual setup](#manual-setup) below.
+
+## 🛠️ Tech Stack
+
+- **Frontend**: React + React Flow (topology diagram), custom rack builder UI, served via nginx
+- **Backend**: Node.js + Express, JWT-based authentication
 - **Database**: MariaDB
-
-## Project layout
+- **Scanner**: Python (nmap, SNMP, mDNS, NetBIOS, MAC OUI lookup) for network discovery
+- **Deployment**: Docker Compose
 
 ```
 Rackpath/
@@ -21,13 +100,15 @@ Rackpath/
 └── .github/    # CI workflows (build & publish images to GHCR)
 ```
 
-## Prerequisites
+## Manual setup
+
+### Prerequisites
 
 - [Docker Engine](https://docs.docker.com/engine/install/)
 - [Docker Compose plugin](https://docs.docker.com/compose/install/) (`docker compose ...`) - `docker-compose` v1 also works as a fallback
 - `curl` and `openssl` (used by `deploy.sh`)
 
-## Quick start: `deploy.sh`
+### Using `deploy.sh`
 
 The fastest way to stand up a fresh instance is the included deploy script.
 It creates a deployment directory, downloads the compose config, prompts for
@@ -40,7 +121,7 @@ Run it directly from the repo:
 ./deploy.sh
 ```
 
-Or fetch and run it without cloning the repo:
+Or fetch and run it without cloning the repo (same command as Quick Start):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/deploy.sh | bash
@@ -57,7 +138,7 @@ During setup you'll be prompted for:
 When it finishes, it prints the URL, login credentials, and the path to
 your `.env` file.
 
-## Manual setup (fallback)
+### Setting things up by hand
 
 If you'd rather set things up by hand, or need to customize the compose
 file:
@@ -100,14 +181,6 @@ file:
    schema changes shipped after your initial deploy are picked up
    automatically.
 
-   **Schema changes:** any commit that adds or alters a table/column in
-   `db/init.sql` (or that a route now depends on) MUST also add a
-   `api/src/db/migrations/NNNN_description.sql` file in the same commit,
-   using `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` so it's
-   safe to run against existing databases. Without it, existing deployments
-   never get the new table/column and the API returns 500s once code that
-   depends on it ships.
-
 6. Create the default admin user:
 
    ```bash
@@ -116,7 +189,7 @@ file:
 
 7. Open the frontend at `http://localhost:8080` (or `FRONTEND_PORT` from `.env`).
 
-### Building locally instead of pulling
+#### Building locally instead of pulling
 
 To build all images from source instead of pulling from GHCR:
 
@@ -125,7 +198,7 @@ docker compose build
 docker compose up -d
 ```
 
-## Services and ports
+### Services and ports
 
 | Service              | Description                                 | Default port | `.env` variable  |
 |----------------------|----------------------------------------------|---------------|-------------------|
@@ -134,119 +207,68 @@ docker compose up -d
 | `rackpath-scanner`   | Python discovery service (host networking)  | 5001          | `SCANNER_PORT`    |
 | `rackpath-db`        | MariaDB with persistent named volume        | 3306          | `DB_PORT`         |
 
-### A note on the scanner and `network_mode: host`
-
 `rackpath-scanner` runs with `network_mode: host` so it can perform ping
-sweeps, ARP probes, and SNMP/LLDP discovery directly on your LAN - this
-doesn't work from an isolated bridge network. Because of this:
+sweeps, ARP probes, and SNMP/LLDP discovery directly on your LAN. The API
+reaches it via `SCANNER_URL` (default `http://host.docker.internal:5001`),
+and `SCAN_INTERFACE` should be set to the host network interface you want
+scans to run on (default `eth0`).
 
-- Its published port (`SCANNER_PORT`, default 5001) is bound directly on the
-  host, not via a compose `ports:` mapping.
-- The API reaches it via `SCANNER_URL` (default
-  `http://host.docker.internal:5001`), and the scanner calls back into the
-  API via `API_PUBLIC_URL` (default `http://localhost:3010`).
-- `SCAN_INTERFACE` should be set to the host network interface you want
-  scans to run on (default `eth0`).
+## 📖 Usage
 
-## Login and authentication
-
-Rackpath requires a login. The seed script (`npm run seed`, run
-automatically by `deploy.sh`) creates a default user:
-
-- **Username**: `admin`
-- **Password**: `rackpath`
-
-This account has `must_change_password` set, so you'll be redirected to a
-change-password screen immediately after the first login. The JWT used for
-sessions is signed with `RACKPATH_JWT_SECRET` - keep this value secret, and
-changing it invalidates all existing sessions.
-
-## Pages
+### Pages
 
 - `/topology` — React Flow canvas of discovered devices and links
 - `/racks` — Rack builder: create racks and place devices into U slots
 - `/devices` — Device list with an editable detail form and per-port editor (cabling/connections)
-- `/scan` — Default landing page. Configure and start subnet scans, watch
-  results stream in live, sort/export them, and select hosts to import into
-  inventory; a sidebar lists past scans by name and date
+- `/scan` — Configure and start subnet scans, watch results stream in live,
+  sort/export them, and select hosts to import into inventory
 
-A light/dark theme toggle is available in the navbar; the choice is remembered
-per-browser.
+A light/dark theme toggle is available in the navbar; the choice is
+remembered per-browser.
 
-## Projects
+### Projects (multi-site)
 
 Rackpath data is organized into **projects** — each project has its own
-isolated set of devices, ports, racks, topology, and scans. A project switcher
-in the nav bar (next to the logo) shows the current project and lets you switch
-between projects, create new ones, and rename or delete existing ones.
+isolated set of devices, ports, racks, topology, and scans. A project
+switcher in the nav bar shows the current project and lets you switch
+between projects, create new ones, and rename or delete existing ones. The
+**Default Project** is created automatically and cannot be deleted.
 
-- The **Default Project** (id 1) is created automatically and cannot be deleted.
-- The selected project is remembered in `localStorage`, so it survives a refresh;
-  if the stored project no longer exists, the app falls back to the first one.
-- Every API request carries the current project via the `X-Project-ID` header
-  (defaulting to the Default Project when absent), and switching projects
-  immediately re-fetches the current page's data for the new project.
-- Deleting a project permanently removes all of its devices, scans, topology,
-  and racks (`DELETE /api/projects/:id`, cascaded).
+### Subnet scanner
 
-Project CRUD lives at `GET/POST /api/projects` and `PATCH/DELETE
-/api/projects/:id`, all behind the same JWT auth as the rest of the API.
-
-## Scanner capabilities
-
-Slitheris-style enhanced discovery runs in parallel per host:
-
-- Multi-method liveness: ICMP ping, TCP probe (80/443/22), and a UDP probe — a
-  host is marked **up** if any method responds
-- Nmap SYN scan (`-sS`) with OS detection and a configurable port set
-  (top 1000 by default)
-- NetBIOS/SMB query (`nmblookup`, impacket fallback) for the Windows machine
-  name and workgroup/domain
-- mDNS/Bonjour browse (zeroconf) for `.local` hostnames and Apple/printer/IoT
-  service advertisements
-- SNMP v2c walk for `sysName`/`sysDescr`/`sysContact`/`sysLocation`, the
-  interface table, and ARP table
-- LLDP/CDP neighbor discovery via SNMP OIDs
-- MAC OUI → vendor lookup via the bundled Wireshark database (`manuf`)
-- Device-type inference (Router, Switch, Firewall, Server, Windows PC, Mac,
-  Linux, Printer, AP, IP Camera, IoT, NAS, Unknown) from the combined signals
-
-Each scan can target a whole subnet (CIDR), a single IP, or a list of multiple
-IPs (one per line or comma separated), and an expandable **Scan Options** panel
-offers profiles that toggle which steps run:
+Each scan can target a whole subnet (CIDR), a single IP, or a list of
+multiple IPs, with selectable profiles:
 
 - **Quick** — ping sweep only (fast, no port scan)
 - **Standard** (default) — ping + top 1000 ports + OS detection + NetBIOS + SNMP
 - **Deep** — ping + all 65535 ports + OS + service-version detection + NetBIOS + SNMP + mDNS
 - **Port Scan Only** — port scan up hosts, skip the other discovery steps
-- **Custom** — individually toggle ICMP/TCP ping, port scan (with a port-range
-  field), OS detection, service-version detection, SNMP walk (with a community
-  string), NetBIOS/SMB, mDNS, and MAC vendor lookup
+- **Custom** — individually toggle each discovery step
 
-The selected options are sent with the scan job and the scanner skips any step
-that isn't enabled.
+Results stream into the `/scan` page row-by-row over Server-Sent Events.
+Discovered devices are **not** added to inventory automatically — review and
+click "Add Selected" to import them.
 
-As each host is fully enriched the scanner POSTs it to the API immediately, and
-the API streams it to the browser over **Server-Sent Events**
-(`GET /api/scans/:id/stream`) so the results table populates row by row in real
-time. A progress bar tracks hosts scanned vs. total hosts in the subnet, and
-live counters show found / up / down.
+## 🗺️ Roadmap
 
-Past scans are listed by name and date (`GET /api/scans`); selecting one
-reloads its stored results (`GET /api/scans/:id/results`), and **Clear History**
-(`DELETE /api/scans/history`) removes all scan jobs and their results. Results
-can be exported to PDF or CSV from the `/scan` page; the export includes scan
-metadata (name, target, profile, duration, date, host count) drawn from the
-stored job fields (`target_type`, `scan_profile`, `started_at`, `completed_at`).
+Planned work and known issues are tracked in
+[GitHub Issues](https://github.com/Stevy2191/Rackpath/issues). Feature
+requests and bug reports are welcome there.
 
-Results are returned as structured JSON and stored on the scan job, but
-devices found during a scan are **not** added to your inventory
-automatically. Review the discovered devices on the `/scan` page, select the
-ones you want, and click "Add Selected" to import them into the
-devices/ports tables.
+## 🤝 Contributing
 
-## CI/CD
+Contributions are welcome!
 
-`.github/workflows/docker-publish.yml` builds and pushes the frontend, API,
-and scanner images to GHCR (`ghcr.io/stevy2191/rackpath-*`) on every push to
-`main`.
+1. Fork the repo and create a feature branch
+2. Make your changes (see `CLAUDE.md` for database migration conventions —
+   any new table/column/index needs a matching file in
+   `api/src/db/migrations/` in the same commit)
+3. Open a pull request describing your change
+
+`.github/workflows/docker-publish.yml` builds and publishes the frontend,
+API, and scanner images to GHCR (`ghcr.io/stevy2191/rackpath-*`) on every
+push to `main`.
+
+## 📄 License
+
+Rackpath is licensed under the [MIT License](LICENSE).
