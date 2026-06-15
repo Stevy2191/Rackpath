@@ -20,7 +20,7 @@ function buildInterfaceOptions(interfaces) {
   return options;
 }
 
-function InterfaceSelect({ deviceLabel, interfaces, value, onChange, listId }) {
+function InterfaceSelect({ deviceLabel, interfaces, value, onChange, loading }) {
   const options = buildInterfaceOptions(interfaces);
 
   return (
@@ -28,18 +28,26 @@ function InterfaceSelect({ deviceLabel, interfaces, value, onChange, listId }) {
       <span className="link-config-port-label" title={deviceLabel}>
         {deviceLabel}
       </span>
-      <input
-        type="text"
-        list={listId}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="e.g. eth0"
-      />
-      <datalist id={listId}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value} label={o.label} />
-        ))}
-      </datalist>
+      {loading ? (
+        <div className="link-config-port-loading">Loading…</div>
+      ) : (
+        <select value={value} onChange={(e) => onChange(e.target.value)}>
+          {options.length === 0 ? (
+            <option value="" disabled>
+              No interfaces found — add in node properties
+            </option>
+          ) : (
+            <>
+              <option value="">— Select interface —</option>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </>
+          )}
+        </select>
+      )}
     </label>
   );
 }
@@ -51,20 +59,30 @@ export default function LinkConfigModal({ sourceDevice, targetDevice, initialVal
   const [label, setLabel] = useState(initialValues?.label || '');
   const [sourceIfaces, setSourceIfaces] = useState([]);
   const [targetIfaces, setTargetIfaces] = useState([]);
+  const [sourceLoading, setSourceLoading] = useState(true);
+  const [targetLoading, setTargetLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    async function loadInterfaces(deviceId, setter) {
-      if (!deviceId) return;
+    async function loadInterfaces(deviceId, setItems, setLoading) {
+      if (!deviceId) {
+        if (!cancelled) {
+          setItems([]);
+          setLoading(false);
+        }
+        return;
+      }
       try {
         const res = await client.get(`/topology/nodes/${deviceId}/interfaces`);
-        if (!cancelled) setter(res.data || []);
+        if (!cancelled) setItems(res.data || []);
       } catch {
-        if (!cancelled) setter([]);
+        if (!cancelled) setItems([]);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
-    loadInterfaces(sourceDevice?.id, setSourceIfaces);
-    loadInterfaces(targetDevice?.id, setTargetIfaces);
+    loadInterfaces(sourceDevice?.id, setSourceIfaces, setSourceLoading);
+    loadInterfaces(targetDevice?.id, setTargetIfaces, setTargetLoading);
     return () => {
       cancelled = true;
     };
@@ -101,14 +119,14 @@ export default function LinkConfigModal({ sourceDevice, targetDevice, initialVal
               interfaces={sourceIfaces}
               value={sourceInterface}
               onChange={setSourceInterface}
-              listId="link-config-source-ifaces"
+              loading={sourceLoading}
             />
             <InterfaceSelect
               deviceLabel={targetName}
               interfaces={targetIfaces}
               value={targetInterface}
               onChange={setTargetInterface}
-              listId="link-config-target-ifaces"
+              loading={targetLoading}
             />
           </div>
 
