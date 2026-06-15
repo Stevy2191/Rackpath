@@ -7,7 +7,6 @@
   overflow: auto;
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 120px);
   position: relative;
 }
 

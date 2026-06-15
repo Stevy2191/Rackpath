@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Plus, ZoomIn, ZoomOut } from 'lucide-react';
 import RackEnclosure from './RackEnclosure';
 import CableOverlay from './CableOverlay';
@@ -6,9 +6,9 @@ import './RackCanvas.css';
 
 const SIMPLE_ITEM_TYPES = ['patch-panel', 'blank', 'cable-manager'];
 
-const MIN_U_HEIGHT = 24;
-const MAX_U_HEIGHT = 48;
-const DEFAULT_U_HEIGHT = 36;
+const MIN_U_HEIGHT = 20;
+const MAX_U_HEIGHT = 44;
+const DEFAULT_U_HEIGHT = 32;
 
 // Horizontal multi-rack canvas: one RackEnclosure per rack (sorted by id,
 // oldest first), plus a trailing "+ Add Rack" card. Owns the shared
@@ -27,8 +27,41 @@ export default function RackCanvas({
 }) {
   const [draggingMeta, setDraggingMeta] = useState(null);
   const [uHeight, setUHeight] = useState(DEFAULT_U_HEIGHT);
+  const canvasRef = useRef(null);
 
   const sortedRacks = [...racks].sort((a, b) => a.id - b.id);
+  const maxUCount = Math.max(1, ...sortedRacks.map((r) => r.u_height || 42));
+
+  // Auto-fit the U height so the tallest rack's full body fits in the
+  // visible canvas without scrolling: available height = canvas height
+  // minus its own padding minus each rack's fixed chrome (badge, frame
+  // border/padding, blanking panels), divided by its U count.
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const recompute = () => {
+      const enclosure = canvas.querySelector('.rack-enclosure');
+      const rackUnits = canvas.querySelector('.rack-units');
+      if (!enclosure || !rackUnits) return;
+
+      const chrome = enclosure.offsetHeight - rackUnits.offsetHeight;
+      const style = window.getComputedStyle(canvas);
+      const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const available = canvas.clientHeight - padding - chrome;
+      const next = Math.max(MIN_U_HEIGHT, Math.min(MAX_U_HEIGHT, Math.floor(available / maxUCount)));
+      setUHeight((prev) => (prev === next ? prev : next));
+    };
+
+    recompute();
+    const observer = new ResizeObserver(recompute);
+    observer.observe(canvas);
+    window.addEventListener('resize', recompute);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', recompute);
+    };
+  }, [maxUCount, sortedRacks.length]);
 
   const adjustZoom = (delta) => {
     setUHeight((h) => Math.max(MIN_U_HEIGHT, Math.min(MAX_U_HEIGHT, h + delta)));
@@ -111,7 +144,7 @@ export default function RackCanvas({
   };
 
   return (
-    <div className="rack-canvas">
+    <div className="rack-canvas" ref={canvasRef}>
       <div className="rack-zoom-control">
         <button type="button" onClick={() => adjustZoom(-2)} disabled={uHeight <= MIN_U_HEIGHT} title="Zoom out">
           <ZoomOut size={14} />
