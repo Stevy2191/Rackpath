@@ -198,7 +198,10 @@ def _enrich_host(ip, snmp_community, local_arp, mdns_map, opts):
         "mac": mac,
         "mac_vendor": mac_vendor,
         "device_type": inferred,
-        "os": nmap_result.get("os_guess"),
+        # OS is intentionally left blank here: nmap's range-style OS guesses
+        # (e.g. "Linux 5.18" / "FortiOS 6.2 - 7.2") are inaccurate, so the API
+        # fills this in from SNMP sysDescr during enrichment when available.
+        "os": None,
         "open_ports": open_ports,
         "netbios_name": nb.get("netbios_name"),
         "raw": {

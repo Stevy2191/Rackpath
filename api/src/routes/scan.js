@@ -2,8 +2,89 @@ const express = require('express');
 const axios = require('axios');
 const pool = require('../db/pool');
 const sse = require('../sse/hub');
+const { getSystemInfo } = require('../services/snmpScan');
 
 const router = express.Router();
+
+// Infer a device type from SNMP sysDescr/sysObjectID (and a couple of port
+// hints). Returns a value from the same DEVICE_TYPES vocabulary as
+// scanner/modules/device_type.py, or 'Unknown' when nothing matches so
+// callers can keep an existing better guess.
+function inferSnmpDeviceType(sysDescr, sysObjectID, openPorts) {
+  const text = `${sysDescr || ''} ${sysObjectID || ''}`;
+  const ports = new Set((openPorts || []).map(Number));
+  if (/UVC|camera/i.test(text)) return 'IP Camera';
+  if (/\bNVR\b/i.test(text)) return 'Server';
+  if (/UniFi/i.test(text) && /\bAP\b|access point/i.test(text)) return 'AP';
+  if (/FortiOS|Fortinet/i.test(text)) return 'Firewall';
+  if (/switch/i.test(text)) return 'Switch';
+  if (/router|EdgeRouter/i.test(text)) return 'Router';
+  if (/Windows/i.test(text)) return 'Windows PC';
+  if (/Linux/i.test(text) && ports.has(22)) return 'Server';
+  return 'Unknown';
+}
+
+// Background SNMP enrichment for a freshly-discovered host: when the scan job
+// requested it, try each of the project's SNMP credential macros against the
+// host and, on the first that answers, update the row's hostname/OS/device
+// type and record which macro responded. Re-published over SSE so the table
+// updates in place. Never throws into the request path - it runs detached.
+async function enrichResultWithSnmp(jobId, resultId, ip) {
+  const [jobRows] = await pool.query('SELECT project_id, snmp_enrichment FROM scan_jobs WHERE id = ?', [jobId]);
+  if (jobRows.length === 0 || !jobRows[0].snmp_enrichment) return;
+  const projectId = jobRows[0].project_id;
+
+  const [macros] = await pool.query(
+    `SELECT * FROM project_credential_macros
+     WHERE project_id = ? AND type IN ('snmp_v1', 'snmp_v2c', 'snmp_v3')
+     ORDER BY id ASC`,
+    [projectId]
+  );
+  if (macros.length === 0) return;
+
+  let info = null;
+  let macro = null;
+  for (const candidate of macros) {
+    // eslint-disable-next-line no-await-in-loop
+    const result = await getSystemInfo(ip, candidate);
+    if (result) {
+      info = result;
+      macro = candidate;
+      break;
+    }
+  }
+  if (!info || !macro) return;
+
+  const [current] = await pool.query('SELECT * FROM scan_results WHERE id = ?', [resultId]);
+  if (current.length === 0) return;
+  const row = current[0];
+  const openPorts = parseJsonField(row.open_ports, []);
+
+  const hostname = row.hostname || info.sysName || null;
+  const os = info.sysDescr || row.os || null;
+  const snmpType = inferSnmpDeviceType(info.sysDescr, info.sysObjectID, openPorts);
+  // Only override the device type when SNMP gives us something concrete;
+  // otherwise keep whatever the scanner already inferred.
+  const deviceType = snmpType !== 'Unknown' ? snmpType : row.device_type;
+
+  const rawObj = parseJsonField(row.raw, {}) || {};
+  rawObj.snmp = {
+    macro_id: macro.id,
+    macro_name: macro.name,
+    sysDescr: info.sysDescr,
+    sysName: info.sysName,
+    sysLocation: info.sysLocation,
+    sysObjectID: info.sysObjectID,
+  };
+
+  await pool.query(
+    `UPDATE scan_results SET hostname = ?, device_type = ?, os = ?, snmp_macro_id = ?, raw = ? WHERE id = ?`,
+    [hostname, deviceType, os, macro.id, JSON.stringify(rawObj), resultId]
+  );
+
+  const [updated] = await pool.query('SELECT * FROM scan_results WHERE id = ?', [resultId]);
+  if (updated.length > 0) sse.publish(jobId, 'host', mapResultRow(updated[0]));
+}
 
 const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:5001';
 const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://rackpath-api:${process.env.API_PORT || 3000}`;
@@ -40,6 +121,8 @@ function mapResultRow(row) {
     netbios_name: row.netbios_name,
     last_seen: row.last_seen,
     raw: parseJsonField(row.raw, null),
+    snmp_macro_id: row.snmp_macro_id ?? null,
+    snmp: row.snmp_macro_id != null,
   };
 }
 
@@ -177,15 +260,16 @@ router.post('/', async (req, res, next) => {
 
     const targetType = (options && options.target_type) || null;
     const scanProfile = (options && options.profile) || null;
+    const snmpEnrichment = !!(options && options.snmp_enrichment);
 
     const scanName =
       (name && name.trim()) ||
       `${target_subnet} - ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`;
 
     const [result] = await pool.query(
-      `INSERT INTO scan_jobs (project_id, name, target_subnet, target_type, scan_profile, status, started_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
-      [req.projectId, scanName, target_subnet, targetType, scanProfile]
+      `INSERT INTO scan_jobs (project_id, name, target_subnet, target_type, scan_profile, snmp_enrichment, status, started_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+      [req.projectId, scanName, target_subnet, targetType, scanProfile, snmpEnrichment ? 1 : 0]
     );
     const jobId = result.insertId;
 
@@ -254,6 +338,14 @@ router.post('/:id/host', async (req, res, next) => {
 
     const [rows] = await pool.query('SELECT * FROM scan_results WHERE id = ?', [result.insertId]);
     sse.publish(jobId, 'host', mapResultRow(rows[0]));
+
+    // Kick off SNMP enrichment in the background (when the job requested it) so
+    // the row gets accurate OS/device-type data without blocking scan progress.
+    if ((host.status || 'up') !== 'down' && host.ip) {
+      enrichResultWithSnmp(jobId, result.insertId, host.ip).catch((enrichErr) =>
+        console.error(`SNMP enrichment failed for ${host.ip}:`, enrichErr.message)
+      );
+    }
 
     res.json({ ok: true, id: result.insertId });
   } catch (err) {
@@ -339,7 +431,7 @@ router.post('/:id/import', async (req, res, next) => {
     const added = [];
     const skipped = [];
     for (const device of devices) {
-      const { ip, mac, hostname, type, device_type, snmp_community, ports } = device;
+      const { ip, mac, hostname, type, device_type, snmp_community, ports, snmp_macro_id } = device;
       const deviceType = type || device_type || null;
 
       // Duplicate detection is scoped to the current project so the same IP
@@ -357,10 +449,26 @@ router.post('/:id/import', async (req, res, next) => {
         continue;
       }
 
+      // If SNMP responded during the scan, pre-select that credential macro on
+      // the device (and seed its community string) so a later device-page scan
+      // uses the right one without the user picking it again.
+      let credentialMacroId = null;
+      let snmpCommunity = snmp_community || null;
+      if (snmp_macro_id) {
+        const [macroRows] = await conn.query(
+          'SELECT id, community_string FROM project_credential_macros WHERE id = ? AND project_id = ?',
+          [snmp_macro_id, req.projectId]
+        );
+        if (macroRows.length > 0) {
+          credentialMacroId = macroRows[0].id;
+          if (!snmpCommunity && macroRows[0].community_string) snmpCommunity = macroRows[0].community_string;
+        }
+      }
+
       const [insertResult] = await conn.query(
-        `INSERT INTO devices (project_id, hostname, ip, mac, type, snmp_community)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [req.projectId, hostname || null, ip || null, mac || null, deviceType, snmp_community || null]
+        `INSERT INTO devices (project_id, hostname, ip, mac, type, snmp_community, credential_macro_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.projectId, hostname || null, ip || null, mac || null, deviceType, snmpCommunity, credentialMacroId]
       );
       const deviceId = insertResult.insertId;
 

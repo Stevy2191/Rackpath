@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import client from '../api/client';
+import { useProject } from '../project/ProjectContext';
 import './Scan.css';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || '/api';
@@ -216,7 +217,32 @@ export default function ScanPage() {
   const [custom, setCustom] = useState(DEFAULT_CUSTOM);
   const [clearing, setClearing] = useState(false);
 
+  // SNMP enrichment: which credential macros are available for this project,
+  // and whether to run enrichment during the scan (default on when macros exist).
+  const { currentProjectId } = useProject();
+  const [snmpMacros, setSnmpMacros] = useState([]);
+  const [snmpEnrichment, setSnmpEnrichment] = useState(true);
+
   const esRef = useRef(null);
+
+  useEffect(() => {
+    if (!currentProjectId) return undefined;
+    let cancelled = false;
+    client
+      .get(`/projects/${currentProjectId}/macros`)
+      .then((res) => {
+        if (cancelled) return;
+        const snmp = (res.data || []).filter((m) => (m.type || '').startsWith('snmp'));
+        setSnmpMacros(snmp);
+        setSnmpEnrichment(snmp.length > 0);
+      })
+      .catch(() => {
+        if (!cancelled) setSnmpMacros([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProjectId]);
 
   const setCustomField = (field, value) =>
     setCustom((prev) => ({ ...prev, [field]: value }));
@@ -224,10 +250,12 @@ export default function ScanPage() {
   // Resolve the current profile + target type into the options payload the
   // scanner consumes.
   const buildOptions = () => {
+    const snmp_enrichment = snmpEnrichment && snmpMacros.length > 0;
     if (profile === 'custom') {
       return {
         profile: 'custom',
         target_type: targetType,
+        snmp_enrichment,
         icmp_ping: custom.icmp_ping,
         tcp_ping: custom.tcp_ping,
         port_scan: custom.port_scan,
@@ -240,7 +268,7 @@ export default function ScanPage() {
         mac_vendor: custom.mac_vendor,
       };
     }
-    return { profile, target_type: targetType, ...PROFILE_PRESETS[profile] };
+    return { profile, target_type: targetType, snmp_enrichment, ...PROFILE_PRESETS[profile] };
   };
 
   // Normalize the chosen target into the string the API/scanner parse. For
@@ -307,7 +335,15 @@ export default function ScanPage() {
       es.addEventListener('host', (e) => {
         const host = safeParse(e.data);
         if (!host) return;
-        setRows((prev) => (prev.some((r) => r.id === host.id) ? prev : [...prev, host]));
+        // Upsert by id: a host arrives once on discovery and again once SNMP
+        // enrichment updates its OS/device-type, so replace the existing row.
+        setRows((prev) => {
+          const idx = prev.findIndex((r) => r.id === host.id);
+          if (idx === -1) return [...prev, host];
+          const next = prev.slice();
+          next[idx] = host;
+          return next;
+        });
       });
 
       es.addEventListener('progress', (e) => {
@@ -465,6 +501,7 @@ export default function ScanPage() {
       hostname: r.hostname,
       device_type: r.device_type,
       snmp_community: r.raw?.snmp_community || undefined,
+      snmp_macro_id: r.snmp_macro_id || undefined,
       ports: Array.isArray(r.raw?.ports) ? r.raw.ports : undefined,
     }));
 
@@ -685,6 +722,27 @@ export default function ScanPage() {
                   </label>
                 </div>
 
+                <div className="scan-options-row scan-snmp-enrich">
+                  <label className="scan-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={snmpEnrichment && snmpMacros.length > 0}
+                      disabled={snmpMacros.length === 0}
+                      onChange={(e) => setSnmpEnrichment(e.target.checked)}
+                    />
+                    Use SNMP enrichment
+                  </label>
+                  {snmpMacros.length === 0 ? (
+                    <span className="scan-snmp-hint">
+                      Add a credential macro to enable SNMP enrichment during scans
+                    </span>
+                  ) : (
+                    <span className="scan-snmp-macros">
+                      Tries: {snmpMacros.map((m) => m.name).join(', ')}
+                    </span>
+                  )}
+                </div>
+
                 {profile === 'custom' && (
                   <div className="scan-custom-options">
                     <label className="scan-checkbox">
@@ -849,7 +907,17 @@ export default function ScanPage() {
                         <td>{dash(row?.hostname)}</td>
                         <td>{dash(row?.mac)}</td>
                         <td>{dash(row?.mac_vendor)}</td>
-                        <td>{deviceType(row?.device_type)}</td>
+                        <td>
+                          {deviceType(row?.device_type)}
+                          {row?.snmp && (
+                            <span
+                              className="scan-snmp-badge"
+                              title={row?.raw?.snmp?.sysDescr || 'SNMP responded during scan'}
+                            >
+                              SNMP
+                            </span>
+                          )}
+                        </td>
                         <td>{dash(row?.os)}</td>
                         <td>{formatPorts(row?.open_ports)}</td>
                         <td>{dash(row?.netbios_name)}</td>

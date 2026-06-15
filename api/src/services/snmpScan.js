@@ -41,7 +41,7 @@ function formatSpeed(bps) {
   return `${n} bps`;
 }
 
-function createSession(ip, macro) {
+function createSession(ip, macro, { timeout = 5000, retries = 1 } = {}) {
   const port = macro.port || 161;
 
   if (macro.type === 'snmp_v3') {
@@ -57,11 +57,11 @@ function createSession(ip, macro) {
       privProtocol: macro.priv_protocol === 'AES' ? snmp.PrivProtocols.aes : snmp.PrivProtocols.des,
       privKey: macro.priv_password || undefined,
     };
-    return snmp.createV3Session(ip, user, { port, version: snmp.Version3, timeout: 5000 });
+    return snmp.createV3Session(ip, user, { port, version: snmp.Version3, timeout, retries });
   }
 
   const version = macro.type === 'snmp_v1' ? snmp.Version1 : snmp.Version2c;
-  return snmp.createSession(ip, macro.community_string || 'public', { port, version, timeout: 5000 });
+  return snmp.createSession(ip, macro.community_string || 'public', { port, version, timeout, retries });
 }
 
 function snmpGet(session, oids) {
@@ -136,4 +136,33 @@ async function scanDevice(ip, macro) {
   }
 }
 
-module.exports = { scanDevice };
+// Lightweight system-info probe used by subnet-scan SNMP enrichment: a single
+// GET of the four system OIDs with a short timeout (so trying several macros
+// against many non-SNMP hosts fails fast). Returns null if the host doesn't
+// answer SNMP with these credentials.
+async function getSystemInfo(ip, macro, { timeout = 1500, retries = 0 } = {}) {
+  const session = createSession(ip, macro, { timeout, retries });
+  try {
+    const varbinds = await snmpGet(session, [
+      SYSTEM_OIDS.sysDescr,
+      SYSTEM_OIDS.sysName,
+      SYSTEM_OIDS.sysLocation,
+      SYSTEM_OIDS.sysObjectID,
+    ]);
+    const sysDescr = varbindValue(varbinds, SYSTEM_OIDS.sysDescr);
+    const sysName = varbindValue(varbinds, SYSTEM_OIDS.sysName);
+    if (sysDescr == null && sysName == null) return null;
+    return {
+      sysDescr,
+      sysName,
+      sysLocation: varbindValue(varbinds, SYSTEM_OIDS.sysLocation),
+      sysObjectID: varbindValue(varbinds, SYSTEM_OIDS.sysObjectID),
+    };
+  } catch (err) {
+    return null;
+  } finally {
+    session.close();
+  }
+}
+
+module.exports = { scanDevice, getSystemInfo };

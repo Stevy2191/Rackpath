@@ -263,6 +263,29 @@
   opacity: 0.5;
 }
 
+.scan-snmp-enrich {
+  font-size: 0.85rem;
+}
+
+.scan-snmp-hint,
+.scan-snmp-macros {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.scan-snmp-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  cursor: default;
+}
+
 /* --- Status / progress -------------------------------------------------- */
 .scan-status-bar {
   display: flex;
