@@ -103,7 +103,6 @@ router.get('/:id/overview', async (req, res, next) => {
       devicesNoIp,
       devicesNoRack,
       devicesNoCredential,
-      interfacesNoIp,
       vlansNoSubnet,
       nodesNoDevice,
       devices,
@@ -131,13 +130,6 @@ router.get('/:id/overview', async (req, res, next) => {
         [projectId, projectId]
       ),
       pool.query('SELECT id, hostname FROM devices WHERE project_id = ? AND credential_macro_id IS NULL', [projectId]),
-      pool.query(
-        `SELECT tni.id, tni.name, d.hostname
-         FROM topology_node_interfaces tni
-         JOIN devices d ON d.id = tni.device_id
-         WHERE tni.project_id = ? AND (tni.ip IS NULL OR tni.ip = '')`,
-        [projectId]
-      ),
       pool.query("SELECT id, vlan_id, name FROM project_vlans WHERE project_id = ? AND (subnet IS NULL OR subnet = '')", [projectId]),
       pool.query("SELECT id, label, type FROM topology_nodes WHERE project_id = ? AND device_id IS NULL", [projectId]),
       pool.query('SELECT id, hostname, ip, type, location, make, model FROM devices WHERE project_id = ? ORDER BY hostname', [projectId]),
@@ -182,7 +174,6 @@ router.get('/:id/overview', async (req, res, next) => {
         devicesNoIp: devicesNoIp[0],
         devicesNoRack: devicesNoRack[0],
         devicesNoCredential: devicesNoCredential[0],
-        interfacesNoIp: interfacesNoIp[0],
         vlansNoSubnet: vlansNoSubnet[0],
         nodesNoDevice: nodesNoDevice[0],
       },

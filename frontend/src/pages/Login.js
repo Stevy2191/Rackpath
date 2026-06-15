@@ -14,7 +14,7 @@ export default function LoginPage() {
   if (loading) return null;
 
   if (user) {
-    const from = location.state?.from?.pathname || '/scan';
+    const from = location.state?.from?.pathname || '/dashboard';
     return <Navigate to={from} replace />;
   }
 

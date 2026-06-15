@@ -14,10 +14,12 @@ import IntegrationsPage from './pages/Integrations';
 import ScanPage from './pages/Scan';
 import LoginPage from './pages/Login';
 import ChangePasswordPage from './pages/ChangePassword';
+import ProjectSelectPage from './pages/ProjectSelect';
 import { AuthProvider, useAuth } from './auth/AuthContext';
-import { ProjectProvider, useProject, DEFAULT_PROJECT_ID } from './project/ProjectContext';
+import { ProjectProvider, useProject } from './project/ProjectContext';
 import RequireAuth from './auth/RequireAuth';
 import ErrorBoundary from './components/ErrorBoundary';
+import LandingRedirect from './components/LandingRedirect';
 import { ThemeProvider } from './theme/ThemeContext';
 import './App.css';
 
@@ -45,7 +47,30 @@ function AppShell() {
               </RequireAuth>
             }
           />
-          <Route path="/" element={<Navigate to={`/projects/${currentProjectId ?? DEFAULT_PROJECT_ID}`} replace />} />
+          <Route
+            path="/"
+            element={
+              <RequireAuth>
+                <LandingRedirect />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <LandingRedirect />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/projects"
+            element={
+              <RequireAuth>
+                <ProjectSelectPage />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/projects/:id"
             element={

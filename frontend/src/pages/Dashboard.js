@@ -46,11 +46,6 @@ const WARNING_DEFS = [
     render: (item) => item.hostname || `Device ${item.id}`,
   },
   {
-    key: 'interfacesNoIp',
-    label: 'Interfaces with no IP address',
-    render: (item) => `${item.hostname || 'Device'} — ${item.name}`,
-  },
-  {
     key: 'vlansNoSubnet',
     label: 'VLANs with no subnet defined',
     render: (item) => `VLAN ${item.vlan_id} (${item.name})`,
