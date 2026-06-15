@@ -3,6 +3,7 @@ const snmp = require('net-snmp');
 const pool = require('../db/pool');
 const { scanDevice } = require('../services/snmpScan');
 const { translateInterfaceName } = require('../services/interfaceNames');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -404,6 +405,7 @@ router.post('/', async (req, res, next) => {
       ]
     );
     const [rows] = await pool.query('SELECT * FROM devices WHERE id = ?', [result.insertId]);
+    logActivity(req.projectId, req.user.id, 'device.created', rows[0].hostname || `Device ${rows[0].id}`);
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -438,6 +440,7 @@ router.put('/:id', async (req, res, next) => {
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Device not found' });
     const [rows] = await pool.query('SELECT * FROM devices WHERE id = ?', [req.params.id]);
+    logActivity(req.projectId, req.user.id, 'device.updated', rows[0].hostname || `Device ${rows[0].id}`);
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -496,11 +499,16 @@ router.patch('/:id', async (req, res, next) => {
 // DELETE /api/devices/:id
 router.delete('/:id', async (req, res, next) => {
   try {
+    const [existing] = await pool.query('SELECT hostname FROM devices WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     const [result] = await pool.query('DELETE FROM devices WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Device not found' });
+    logActivity(req.projectId, req.user.id, 'device.deleted', existing[0]?.hostname || `Device ${req.params.id}`);
     res.status(204).send();
   } catch (err) {
     next(err);

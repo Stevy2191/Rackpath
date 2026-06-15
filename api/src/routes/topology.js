@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const pool = require('../db/pool');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -12,6 +13,19 @@ const NODE_FIELDS = `n.id, n.device_id, n.label, n.type AS node_type,
               d.hostname, d.ip, d.mac, d.type AS device_type, d.snmp_community, d.notes,
               d.icon_color AS device_icon_color, d.text_color AS device_text_color,
               d.updated_at`;
+
+// Display name for a topology node used in activity-log entries: the linked
+// device's hostname, or the standalone node's own label, falling back to its id.
+async function nodeDisplayName(projectId, nodeId) {
+  const [rows] = await pool.query(
+    `SELECT COALESCE(d.hostname, n.label, CONCAT('Node ', n.id)) AS name
+     FROM topology_nodes n
+     LEFT JOIN devices d ON d.id = n.device_id
+     WHERE n.id = ? AND n.project_id = ?`,
+    [nodeId, projectId]
+  );
+  return rows[0]?.name || `Node ${nodeId}`;
+}
 
 // Returns true if the error is MariaDB/MySQL's "table doesn't exist" error.
 // Lets older deployments (whose DB volume predates these tables) fall back
@@ -152,6 +166,7 @@ router.post('/nodes', async (req, res, next) => {
       [result.insertId]
     );
 
+    logActivity(req.projectId, req.user.id, 'topology.node.created', rows[0].hostname || rows[0].label || `Node ${rows[0].id}`);
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -201,6 +216,7 @@ router.patch('/nodes/:id', async (req, res, next) => {
 router.delete('/nodes/:id', async (req, res, next) => {
   try {
     const nodeId = req.params.id;
+    const nodeName = await nodeDisplayName(req.projectId, nodeId);
 
     await pool.query(
       'DELETE FROM topology_edges WHERE (source_node_id = ? OR target_node_id = ?) AND project_id = ?',
@@ -209,6 +225,7 @@ router.delete('/nodes/:id', async (req, res, next) => {
 
     await pool.query('DELETE FROM topology_nodes WHERE id = ? AND project_id = ?', [nodeId, req.projectId]);
 
+    logActivity(req.projectId, req.user.id, 'topology.node.deleted', nodeName);
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -451,6 +468,13 @@ router.post('/edges', async (req, res, next) => {
     );
 
     const [rows] = await pool.query('SELECT * FROM topology_edges WHERE id = ?', [result.insertId]);
+
+    const [sourceName, targetName] = await Promise.all([
+      nodeDisplayName(req.projectId, source_node_id),
+      nodeDisplayName(req.projectId, target_node_id),
+    ]);
+    logActivity(req.projectId, req.user.id, 'topology.edge.created', `${sourceName} ↔ ${targetName}`);
+
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -511,12 +535,26 @@ router.patch('/edges/:id', async (req, res, next) => {
 // DELETE /api/topology/edges/:id
 router.delete('/edges/:id', async (req, res, next) => {
   try {
+    const [existing] = await pool.query('SELECT source_node_id, target_node_id FROM topology_edges WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
+
     // Idempotent: an edge may already have been removed by a cascading
     // node deletion, in which case this is a no-op rather than an error.
     await pool.query('DELETE FROM topology_edges WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
+
+    if (existing.length > 0) {
+      const [sourceName, targetName] = await Promise.all([
+        nodeDisplayName(req.projectId, existing[0].source_node_id),
+        nodeDisplayName(req.projectId, existing[0].target_node_id),
+      ]);
+      logActivity(req.projectId, req.user.id, 'topology.edge.deleted', `${sourceName} ↔ ${targetName}`);
+    }
+
     res.status(204).send();
   } catch (err) {
     next(err);

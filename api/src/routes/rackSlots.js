@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -89,6 +90,14 @@ router.post('/', async (req, res, next) => {
       [req.projectId, rack_id, device_id || null, item_type || 'device', item_label || null, custom_type || null, color || null, u_position, u_size, resolvedSide]
     );
     const [rows] = await pool.query('SELECT * FROM rack_slots WHERE id = ?', [result.insertId]);
+
+    let itemName = item_label || `${item_type || 'device'}`;
+    if (device_id) {
+      const [deviceRows] = await pool.query('SELECT hostname FROM devices WHERE id = ?', [device_id]);
+      itemName = deviceRows[0]?.hostname || itemName;
+    }
+    logActivity(req.projectId, req.user.id, 'rack_slot.assigned', `${itemName} → U${u_position}`);
+
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -151,11 +160,23 @@ router.put('/:id', async (req, res, next) => {
 // DELETE /api/rack-slots/:id - remove device from rack
 router.delete('/:id', async (req, res, next) => {
   try {
+    const [existing] = await pool.query(
+      `SELECT rs.item_label, rs.item_type, rs.u_position, d.hostname
+       FROM rack_slots rs
+       LEFT JOIN devices d ON d.id = rs.device_id
+       WHERE rs.id = ? AND rs.project_id = ?`,
+      [req.params.id, req.projectId]
+    );
     const [result] = await pool.query('DELETE FROM rack_slots WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack slot not found' });
+
+    if (existing.length > 0) {
+      const itemName = existing[0].hostname || existing[0].item_label || existing[0].item_type || 'item';
+      logActivity(req.projectId, req.user.id, 'rack_slot.removed', `${itemName} (was U${existing[0].u_position})`);
+    }
     res.status(204).send();
   } catch (err) {
     next(err);

@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -48,6 +49,7 @@ router.post('/projects/:projectId/cameras', async (req, res, next) => {
       [req.params.projectId, ...values]
     );
     const [rows] = await pool.query('SELECT * FROM project_cameras WHERE id = ?', [result.insertId]);
+    logActivity(req.params.projectId, req.user.id, 'camera.created', rows[0].name);
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -82,11 +84,16 @@ router.put('/cameras/:id', async (req, res, next) => {
 // DELETE /api/cameras/:id - remove a camera
 router.delete('/cameras/:id', async (req, res, next) => {
   try {
+    const [existing] = await pool.query('SELECT name FROM project_cameras WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     const [result] = await pool.query('DELETE FROM project_cameras WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Camera not found' });
+    logActivity(req.projectId, req.user.id, 'camera.deleted', existing[0]?.name || `Camera ${req.params.id}`);
     res.status(204).send();
   } catch (err) {
     next(err);

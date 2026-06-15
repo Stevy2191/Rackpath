@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -66,6 +67,7 @@ router.post('/', async (req, res, next) => {
       [req.projectId, name, location || null, u_height || 42, rack_type || '4-post', notes || null]
     );
     const [rows] = await pool.query('SELECT * FROM racks WHERE id = ?', [result.insertId]);
+    logActivity(req.projectId, req.user.id, 'rack.created', rows[0].name);
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -95,11 +97,16 @@ router.put('/:id', async (req, res, next) => {
 // DELETE /api/racks/:id
 router.delete('/:id', async (req, res, next) => {
   try {
+    const [existing] = await pool.query('SELECT name FROM racks WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     const [result] = await pool.query('DELETE FROM racks WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack not found' });
+    logActivity(req.projectId, req.user.id, 'rack.deleted', existing[0]?.name || `Rack ${req.params.id}`);
     res.status(204).send();
   } catch (err) {
     next(err);

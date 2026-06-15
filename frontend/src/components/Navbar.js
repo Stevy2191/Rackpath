@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Key, ChevronDown } from 'lucide-react';
+import { Key, ChevronDown, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { useProject, DEFAULT_PROJECT_ID } from '../project/ProjectContext';
 import ProjectSwitcher from '../project/ProjectSwitcher';
 import './Navbar.css';
 
@@ -28,6 +29,7 @@ const deviceLinks = [
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { currentProjectId } = useProject();
   const location = useLocation();
 
   const isDevicesPath = location.pathname.startsWith('/devices');
@@ -58,6 +60,13 @@ export default function Navbar() {
         <ProjectSwitcher />
       </div>
       <div className="navbar-links">
+        <NavLink
+          to={`/projects/${currentProjectId ?? DEFAULT_PROJECT_ID}`}
+          className={({ isActive }) => `navbar-link${isActive ? ' active' : ''}`}
+        >
+          <LayoutDashboard size={14} className="navbar-link-icon" />
+          Dashboard
+        </NavLink>
         {links.map((link) => (
           <NavLink
             key={link.to}

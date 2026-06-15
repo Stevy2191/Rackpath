@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -37,6 +38,7 @@ router.post('/projects/:projectId/vlans', async (req, res, next) => {
     );
 
     const [rows] = await pool.query('SELECT * FROM project_vlans WHERE id = ?', [result.insertId]);
+    logActivity(req.params.projectId, req.user.id, 'vlan.created', `VLAN ${rows[0].vlan_id} (${rows[0].name})`);
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -90,11 +92,18 @@ router.put('/vlans/:id', async (req, res, next) => {
 // DELETE /api/vlans/:id - remove a VLAN definition
 router.delete('/vlans/:id', async (req, res, next) => {
   try {
+    const [existing] = await pool.query('SELECT vlan_id, name FROM project_vlans WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     const [result] = await pool.query('DELETE FROM project_vlans WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'VLAN not found' });
+    if (existing.length > 0) {
+      logActivity(req.projectId, req.user.id, 'vlan.deleted', `VLAN ${existing[0].vlan_id} (${existing[0].name})`);
+    }
     res.status(204).send();
   } catch (err) {
     next(err);

@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
+const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -51,6 +52,7 @@ router.post('/projects/:projectId/macros', async (req, res, next) => {
       [req.params.projectId, ...values]
     );
     const [rows] = await pool.query('SELECT * FROM project_credential_macros WHERE id = ?', [result.insertId]);
+    logActivity(req.params.projectId, req.user.id, 'macro.created', rows[0].name);
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -86,11 +88,16 @@ router.put('/macros/:id', async (req, res, next) => {
 // DELETE /api/macros/:id - delete a credential macro
 router.delete('/macros/:id', async (req, res, next) => {
   try {
+    const [existing] = await pool.query('SELECT name FROM project_credential_macros WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
     const [result] = await pool.query('DELETE FROM project_credential_macros WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Macro not found' });
+    logActivity(req.projectId, req.user.id, 'macro.deleted', existing[0]?.name || `Macro ${req.params.id}`);
     res.status(204).send();
   } catch (err) {
     next(err);

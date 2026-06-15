@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { BrowserRouter } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import DashboardPage from './pages/Dashboard';
 import TopologyPage from './pages/Topology';
 import VlansPage from './pages/Vlans';
 import RacksPage from './pages/Racks';
@@ -14,7 +15,7 @@ import ScanPage from './pages/Scan';
 import LoginPage from './pages/Login';
 import ChangePasswordPage from './pages/ChangePassword';
 import { AuthProvider, useAuth } from './auth/AuthContext';
-import { ProjectProvider, useProject } from './project/ProjectContext';
+import { ProjectProvider, useProject, DEFAULT_PROJECT_ID } from './project/ProjectContext';
 import RequireAuth from './auth/RequireAuth';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -44,7 +45,15 @@ function AppShell() {
               </RequireAuth>
             }
           />
-          <Route path="/" element={<Navigate to="/scan" replace />} />
+          <Route path="/" element={<Navigate to={`/projects/${currentProjectId ?? DEFAULT_PROJECT_ID}`} replace />} />
+          <Route
+            path="/projects/:id"
+            element={
+              <RequireAuth>
+                <DashboardPage />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/topology"
             element={
