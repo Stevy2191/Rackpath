@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { Pencil, Trash2, Download, FileDown } from 'lucide-react';
-import DeviceBlock from './DeviceBlock';
+import DeviceBlock, { getDeviceLabel } from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import './RackEnclosure.css';
 
@@ -242,55 +242,89 @@ export default function RackEnclosure({
         </form>
       )}
 
-      <div className="rack-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }}>
-        <div className="rack-panel rack-panel-top" />
-        <div className="rack-body">
-          <div className="rack-rail rack-rail-left">
-            {uRows.map((u) => (
-              <div key={u} className="rack-rail-number">
-                {u}
-              </div>
-            ))}
-          </div>
-          <div className="rack-units" key={side}>
-            {uRows.map((u) => {
-              const slot = slotsByTop[u];
-              if (slot) {
+      <div className="rack-body-row">
+        <div className="rack-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }}>
+          <div className="rack-panel rack-panel-top" />
+          <div className="rack-body">
+            <div className="rack-rail rack-rail-left">
+              {uRows.map((u) => (
+                <div key={u} className="rack-rail-number">
+                  {u}
+                </div>
+              ))}
+            </div>
+            <div className="rack-units" key={side}>
+              {uRows.map((u) => {
+                const slot = slotsByTop[u];
+                if (slot) {
+                  return (
+                    <DeviceBlock
+                      key={slot.id}
+                      slot={slot}
+                      side={side}
+                      uHeight={uHeight}
+                      highlighted={slot.id === highlightedSlotId}
+                      setDraggingMeta={setDraggingMeta}
+                      actions={actions}
+                    />
+                  );
+                }
+                if (covered.has(u)) return null;
+                const band = Math.floor((u - 1) / 5) % 2;
                 return (
-                  <DeviceBlock
-                    key={slot.id}
-                    slot={slot}
-                    side={side}
-                    uHeight={uHeight}
-                    highlighted={slot.id === highlightedSlotId}
-                    setDraggingMeta={setDraggingMeta}
-                    actions={actions}
+                  <RackUnitSlot
+                    key={u}
+                    u={u}
+                    band={band}
+                    draggingMeta={draggingMeta}
+                    occupiedByU={occupiedByU}
+                    onDrop={(uPos, e) => onDrop(rack.id, uPos, side, e)}
                   />
                 );
-              }
-              if (covered.has(u)) return null;
-              const band = Math.floor((u - 1) / 5) % 2;
-              return (
-                <RackUnitSlot
-                  key={u}
-                  u={u}
-                  band={band}
-                  draggingMeta={draggingMeta}
-                  occupiedByU={occupiedByU}
-                  onDrop={(uPos, e) => onDrop(rack.id, uPos, side, e)}
-                />
-              );
-            })}
+              })}
+            </div>
+            <div className="rack-rail rack-rail-right">
+              {uRows.map((u) => (
+                <div key={u} className="rack-rail-number">
+                  {u}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="rack-rail rack-rail-right">
-            {uRows.map((u) => (
-              <div key={u} className="rack-rail-number">
-                {u}
-              </div>
-            ))}
-          </div>
+          <div className="rack-panel rack-panel-bottom" />
         </div>
-        <div className="rack-panel rack-panel-bottom" />
+
+        <div className="rack-labels" key={side}>
+          {uRows.map((u) => {
+            const slot = slotsByTop[u];
+            if (slot) {
+              const { name, subtitle } = getDeviceLabel(slot);
+              return (
+                <div key={slot.id} className="rack-label" style={{ height: `${slot.u_size * uHeight}px` }}>
+                  {slot.item_type === 'device' && slot.device_id ? (
+                    <button
+                      type="button"
+                      className="rack-label-name rack-label-link"
+                      title={name}
+                      onClick={() =>
+                        actions.onOpenPortEditor({ id: slot.device_id, hostname: slot.hostname, ip: slot.ip })
+                      }
+                    >
+                      {name}
+                    </button>
+                  ) : (
+                    <span className="rack-label-name" title={name}>
+                      {name}
+                    </span>
+                  )}
+                  {subtitle && <span className="rack-label-model">{subtitle}</span>}
+                </div>
+              );
+            }
+            if (covered.has(u)) return null;
+            return <div key={`empty-${u}`} className="rack-label-empty" style={{ height: `${uHeight}px` }} />;
+          })}
+        </div>
       </div>
     </div>
   );

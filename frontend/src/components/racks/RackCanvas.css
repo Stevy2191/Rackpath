@@ -1,6 +1,7 @@
 .rack-canvas {
   display: flex;
   align-items: flex-start;
+  justify-content: center;
   gap: 40px;
   padding: 24px;
   overflow: auto;

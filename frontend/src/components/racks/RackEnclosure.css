@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 400px;
+  width: 560px;
 }
 
 .rack-badge {
@@ -135,7 +135,15 @@
 }
 
 /* --- Frame / enclosure ----------------------------------------------------- */
+.rack-body-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 .rack-frame {
+  flex: 1;
+  min-width: 0;
   position: relative;
   background: linear-gradient(135deg, #2c2f36 0%, #1a1c22 50%, #15161b 100%);
   border: 2px solid #060708;
@@ -144,6 +152,64 @@
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 30px rgba(74, 222, 222, 0.04);
   transition: box-shadow 0.2s ease;
+}
+
+/* --- Device labels (outside the rack) --------------------------------------- */
+.rack-labels {
+  flex-shrink: 0;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  /* Aligns label rows with .rack-body rows: offsets the frame's
+     border + padding + top/bottom blanking panel (2 + 6 + 14 + 4 = 26px). */
+  margin: 26px 0;
+}
+
+.rack-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 4px;
+  overflow: hidden;
+}
+
+.rack-label-name {
+  display: block;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e6e9f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.rack-label-link {
+  cursor: pointer;
+  color: #7dd3fc;
+}
+
+.rack-label-link:hover {
+  text-decoration: underline;
+}
+
+.rack-label-model {
+  font-size: 0.68rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rack-label-empty {
+  flex-shrink: 0;
 }
 
 .rack-enclosure-focused .rack-frame {

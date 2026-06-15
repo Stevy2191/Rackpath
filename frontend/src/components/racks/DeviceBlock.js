@@ -6,27 +6,27 @@ import './DeviceBlock.css';
 
 const STATUS_LED_CLASS = { up: 'led-online', down: 'led-offline' };
 
-// One occupied rack slot: faceplate graphic, name/vendor labels, status LED,
-// and hover actions (topology link, context menu). Draggable to move within
-// or between racks/sides.
-export default function DeviceBlock({ slot, side, uHeight, highlighted, setDraggingMeta, actions }) {
-  const navigate = useNavigate();
-
+// Display name + model/vendor for a slot, shared with the rack's outside
+// label column so both stay in sync.
+export function getDeviceLabel(slot) {
   const isDevice = slot.item_type === 'device';
   const name = isDevice ? slot.hostname || slot.ip || `Device ${slot.device_id}` : slot.item_label || 'Device';
   const subtitle = slot.vendor || slot.custom_type || null;
+  return { name, subtitle };
+}
+
+// One occupied rack slot: faceplate graphic, vendor badge, status LED, and
+// hover actions (topology link, context menu). Draggable to move within or
+// between racks/sides. Device name/model are shown outside the rack frame.
+export default function DeviceBlock({ slot, side, uHeight, highlighted, setDraggingMeta, actions }) {
+  const navigate = useNavigate();
+
   const ledClass = STATUS_LED_CLASS[slot.device_status] || 'led-unknown';
   const badgeText = (slot.vendor || slot.device_type || slot.custom_type || '?').slice(0, 2).toUpperCase();
 
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/slot-id', String(slot.id));
     setDraggingMeta({ uSize: slot.u_size, excludeSlotId: slot.id });
-  };
-
-  const handleNameClick = () => {
-    if (isDevice && slot.device_id) {
-      actions.onOpenPortEditor({ id: slot.device_id, hostname: slot.hostname, ip: slot.ip });
-    }
   };
 
   return (
@@ -40,17 +40,6 @@ export default function DeviceBlock({ slot, side, uHeight, highlighted, setDragg
       data-device-id={slot.device_id || ''}
     >
       <div className="device-block-vendor-badge">{badgeText}</div>
-      <div className="device-block-info">
-        <button
-          type="button"
-          className={`device-block-name${isDevice ? ' linked' : ''}`}
-          onClick={handleNameClick}
-          title={name}
-        >
-          {name}
-        </button>
-        {subtitle && <span className="device-block-subtitle">{subtitle}</span>}
-      </div>
       <DeviceFacePlate slot={slot} side={side} />
       <span className={`device-block-led ${ledClass}`} title={slot.device_status || 'unknown'} />
       <div className="device-block-actions">

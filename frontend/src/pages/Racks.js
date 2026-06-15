@@ -92,6 +92,8 @@ export default function RacksPage() {
       }
     },
     onSlotUpdate: async (slot, changes) => {
+      const previous = allSlots;
+      setAllSlots((cur) => cur.map((s) => (s.id === slot.id ? { ...s, ...changes } : s)));
       try {
         await client.put(`/rack-slots/${slot.id}`, {
           rack_id: slot.rack_id,
@@ -109,8 +111,8 @@ export default function RacksPage() {
           vendor: slot.vendor,
           ...changes,
         });
-        loadAllSlots();
       } catch (err) {
+        setAllSlots(previous);
         setError(err.response?.data?.error || err.message);
       }
     },
