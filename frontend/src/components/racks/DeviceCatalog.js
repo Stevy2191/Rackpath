@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { RACK_CATALOG, CATALOG_CATEGORIES } from './rackCatalog';
+import { RACK_CATALOG, CATALOG_CATEGORIES, CATALOG_VENDOR_OPTIONS, CATALOG_TYPE_OPTIONS, vendorBucket } from './rackCatalog';
 import DeviceFacePlate from './DeviceFacePlate';
 import CustomDeviceModal from './CustomDeviceModal';
 import './DeviceCatalog.css';
@@ -41,6 +41,9 @@ export default function DeviceCatalog({
 }) {
   const [category, setCategory] = useState('all');
   const [customDeviceModalOpen, setCustomDeviceModalOpen] = useState(false);
+  const [vendorFilter, setVendorFilter] = useState('All Vendors');
+  const [typeFilter, setTypeFilter] = useState('All Types');
+  const [search, setSearch] = useState('');
 
   if (!open) return null;
 
@@ -49,7 +52,15 @@ export default function DeviceCatalog({
   const rackedDeviceIds = new Set(allSlots.map((s) => s.device_id).filter(Boolean));
   const unrackedDevices = devices.filter((d) => !rackedDeviceIds.has(d.id));
 
-  const entries = category === 'all' ? RACK_CATALOG : RACK_CATALOG.filter((e) => e.category === category);
+  const categoryEntries = category === 'all' ? RACK_CATALOG : RACK_CATALOG.filter((e) => e.category === category);
+
+  const searchTerm = search.trim().toLowerCase();
+  const entries = categoryEntries.filter((e) => {
+    if (vendorFilter !== 'All Vendors' && vendorBucket(e.vendor) !== vendorFilter) return false;
+    if (typeFilter !== 'All Types' && (e.type || 'Other') !== typeFilter) return false;
+    if (searchTerm && !e.name.toLowerCase().includes(searchTerm)) return false;
+    return true;
+  });
 
   const previewSlot = (entry) => ({
     item_type: entry.renderType,
@@ -141,6 +152,42 @@ export default function DeviceCatalog({
         ))}
       </div>
 
+      {category !== 'custom' && (
+        <div className="device-catalog-filters">
+          <input
+            type="text"
+            className="device-catalog-search"
+            placeholder="Search devices..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="device-catalog-filter-selects">
+            <select
+              className={vendorFilter !== 'All Vendors' ? 'active' : ''}
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
+            >
+              {CATALOG_VENDOR_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+            <select
+              className={typeFilter !== 'All Types' ? 'active' : ''}
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
+              {CATALOG_TYPE_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
       <div className="device-catalog-list">
         {category === 'all' && unrackedDevices.length > 0 && (
           <div className="device-catalog-section">
@@ -228,6 +275,7 @@ export default function DeviceCatalog({
                 </div>
               </div>
             ))}
+            {entries.length === 0 && <p className="device-catalog-empty">No devices match these filters.</p>}
           </div>
         )}
       </div>

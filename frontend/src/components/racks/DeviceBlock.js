@@ -9,7 +9,7 @@ const STATUS_LED_CLASS = { up: 'led-online', down: 'led-offline' };
 // One occupied rack slot: faceplate graphic, name/vendor labels, status LED,
 // and hover actions (topology link, context menu). Draggable to move within
 // or between racks/sides.
-export default function DeviceBlock({ slot, side, highlighted, setDraggingMeta, actions }) {
+export default function DeviceBlock({ slot, side, uHeight, highlighted, setDraggingMeta, actions }) {
   const navigate = useNavigate();
 
   const isDevice = slot.item_type === 'device';
@@ -32,7 +32,7 @@ export default function DeviceBlock({ slot, side, highlighted, setDraggingMeta, 
   return (
     <div
       className={`device-block${highlighted ? ' device-block-highlighted' : ''}`}
-      style={{ height: `${slot.u_size * 44}px` }}
+      style={{ height: `${slot.u_size * (uHeight || 44)}px` }}
       draggable
       onDragStart={handleDragStart}
       onDragEnd={() => setDraggingMeta(null)}

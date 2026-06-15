@@ -89,6 +89,52 @@
   color: #4adede;
 }
 
+.device-catalog-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #2a2e38;
+}
+
+.device-catalog-search {
+  padding: 6px 8px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  background: #0e0f13;
+  color: #d4d8e0;
+  font-family: inherit;
+  font-size: 0.78rem;
+}
+
+.device-catalog-search:focus {
+  outline: none;
+  border-color: #4adede;
+}
+
+.device-catalog-filter-selects {
+  display: flex;
+  gap: 6px;
+}
+
+.device-catalog-filter-selects select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  background: #0e0f13;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.device-catalog-filter-selects select.active {
+  border-color: #4adede;
+  color: #4adede;
+}
+
 .device-catalog-list {
   flex: 1;
   overflow-y: auto;

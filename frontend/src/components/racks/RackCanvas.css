@@ -8,6 +8,43 @@
   position: relative;
 }
 
+.rack-zoom-control {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #2a2e38;
+  border-radius: 6px;
+  background: rgba(18, 20, 26, 0.9);
+}
+
+.rack-zoom-control button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #8b91a1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rack-zoom-control button:hover:not(:disabled) {
+  background: rgba(74, 222, 222, 0.12);
+  color: #4adede;
+}
+
+.rack-zoom-control button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .rack-add-card {
   flex-shrink: 0;
   width: 120px;

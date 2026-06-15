@@ -188,7 +188,7 @@
 }
 
 .rack-rail-number {
-  height: 44px;
+  height: var(--u-height, 44px);
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -222,7 +222,7 @@
 
 /* --- Empty U slot ------------------------------------------------------------ */
 .rack-unit-slot {
-  height: 44px;
+  height: var(--u-height, 44px);
   box-sizing: border-box;
   border-bottom: 1px dotted rgba(255, 255, 255, 0.06);
   display: flex;

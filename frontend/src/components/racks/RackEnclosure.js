@@ -26,8 +26,28 @@ export default function RackEnclosure({
   onDrop,
   onFocus,
   isFocused,
+  uHeight,
 }) {
-  const [side, setSide] = useState('front');
+  // The view side ("which face of the rack am I looking at") is per-rack UI
+  // state, persisted to localStorage so it survives reloads but never hits
+  // the DB.
+  const [side, setSide] = useState(() => {
+    try {
+      return window.localStorage.getItem(`rack-view-side-${rack.id}`) === 'back' ? 'back' : 'front';
+    } catch {
+      return 'front';
+    }
+  });
+
+  const changeSide = (next) => {
+    setSide(next);
+    try {
+      window.localStorage.setItem(`rack-view-side-${rack.id}`, next);
+    } catch {
+      // ignore (e.g. localStorage disabled)
+    }
+  };
+
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -36,10 +56,30 @@ export default function RackEnclosure({
   useEffect(() => {
     if (highlightedSlotId == null) return;
     const slot = slots.find((s) => s.id === highlightedSlotId);
-    if (slot) setSide(slot.front_back === 'back' ? 'back' : 'front');
+    if (slot) changeSide(slot.front_back === 'back' ? 'back' : 'front');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightedSlotId, slots]);
 
-  const visibleSlots = slots.filter((s) => (s.front_back || 'front') === side);
+  // The Front/Back toggle is a *view* of the rack, not a filter: every device
+  // stays visible and just switches between its front and back faceplate
+  // (LEDs/ports vs PSU/exhaust). The only time a slot is hidden is when
+  // another slot mounted on the opposite rail occupies the same U range -
+  // then the slot matching the current view side wins.
+  const primarySlots = slots.filter((s) => (s.front_back || 'front') === side);
+  const primaryCovered = new Set();
+  for (const s of primarySlots) {
+    for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) primaryCovered.add(u);
+  }
+  const otherSide = side === 'front' ? 'back' : 'front';
+  const secondarySlots = slots.filter((s) => {
+    if ((s.front_back || 'front') !== otherSide) return false;
+    for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) {
+      if (primaryCovered.has(u)) return false;
+    }
+    return true;
+  });
+  const visibleSlots = [...primarySlots, ...secondarySlots];
+
   const slotsByTop = {};
   const covered = new Set();
   const occupiedByU = new Map();
@@ -118,7 +158,7 @@ export default function RackEnclosure({
               className={side === 'front' ? 'active' : ''}
               onClick={(e) => {
                 e.stopPropagation();
-                setSide('front');
+                changeSide('front');
               }}
             >
               Front
@@ -128,7 +168,7 @@ export default function RackEnclosure({
               className={side === 'back' ? 'active' : ''}
               onClick={(e) => {
                 e.stopPropagation();
-                setSide('back');
+                changeSide('back');
               }}
             >
               Back
@@ -218,7 +258,7 @@ export default function RackEnclosure({
         </form>
       )}
 
-      <div className="rack-frame" ref={frameRef}>
+      <div className="rack-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }}>
         <div className="rack-panel rack-panel-top" />
         <div className="rack-body">
           <div className="rack-rail rack-rail-left">
@@ -237,6 +277,7 @@ export default function RackEnclosure({
                     key={slot.id}
                     slot={slot}
                     side={side}
+                    uHeight={uHeight}
                     highlighted={slot.id === highlightedSlotId}
                     setDraggingMeta={setDraggingMeta}
                     actions={actions}
