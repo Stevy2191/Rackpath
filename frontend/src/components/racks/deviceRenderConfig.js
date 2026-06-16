@@ -1,5 +1,4 @@
-// Flat faceplate color map and render-type resolver.
-// Rendering logic lives in DeviceFacePlate.js (flat block + icon + name).
+import { Server, Network, Shield, HardDrive, Zap, Plug, Cable, Monitor, Wifi, Box, Minus } from 'lucide-react';
 
 export const CATEGORY_CONFIG = {
   switch:           '#2563EB',
@@ -14,6 +13,21 @@ export const CATEGORY_CONFIG = {
   kvm:              '#0891B2',
   ap:               '#059669',
   other:            '#0D9488',
+};
+
+export const CATEGORY_ICONS = {
+  switch:           Network,
+  firewall:         Shield,
+  server:           Server,
+  storage:          HardDrive,
+  ups:              Zap,
+  pdu:              Plug,
+  'patch-panel':    Cable,
+  'cable-manager':  Cable,
+  blank:            Minus,
+  kvm:              Monitor,
+  ap:               Wifi,
+  other:            Box,
 };
 
 const KEYWORD_RULES = [
@@ -41,4 +55,14 @@ export function resolveRenderType(slot) {
   if (slot.item_type === 'blank') return 'blank';
   if (slot.item_type === 'cable-manager') return 'cable-manager';
   return 'other';
+}
+
+// Returns { color, Icon } for the given slot/entry. Pass any object with
+// custom_type, device_type, or item_type set.
+export function getCategoryStyle(slot) {
+  const type = resolveRenderType(slot);
+  return {
+    color: CATEGORY_CONFIG[type] || CATEGORY_CONFIG.other,
+    Icon: CATEGORY_ICONS[type] || Box,
+  };
 }

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
 import {
   RACK_CATALOG, CATALOG_CATEGORIES, CATALOG_VENDORS,
   VENDOR_COLORS, groupByVendor, groupByCategory,
 } from './rackCatalog';
-import DeviceFacePlate from './DeviceFacePlate';
+import { getCategoryStyle } from './deviceRenderConfig';
 import CustomDeviceModal from './CustomDeviceModal';
 import './DeviceCatalog.css';
 
@@ -14,7 +14,6 @@ function findNextFreeU(rack, allSlots, uSize, mountedFace) {
     if (s.rack_id !== rack.id) continue;
     const face = s.mounted_face || s.front_back || 'front';
     const targetFace = mountedFace === 'rear' ? 'rear' : 'front';
-    // slots with face 'both' block all faces
     if (face !== 'both' && face !== targetFace) continue;
     for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) occupied.add(u);
   }
@@ -28,23 +27,9 @@ function findNextFreeU(rack, allSlots, uSize, mountedFace) {
   return null;
 }
 
-function VendorBadge({ vendor }) {
-  const color = VENDOR_COLORS[vendor] || '#555';
-  const initials = vendor.replace(/[^A-Z0-9]/gi, '').slice(0, 3).toUpperCase();
-  return (
-    <span className="dc-vendor-badge" style={{ background: color }} title={vendor}>
-      {initials}
-    </span>
-  );
-}
-
 function CatalogCard({ entry, onClick }) {
-  const previewSlot = {
-    item_type: entry.renderType,
-    custom_type: entry.renderType,
-    u_size: entry.uSize,
-    vendor: entry.vendor,
-  };
+  const { color, Icon } = getCategoryStyle({ custom_type: entry.renderType });
+  const iconBoxStyle = { borderColor: `${color}55`, background: `${color}18` };
 
   return (
     <div
@@ -54,16 +39,16 @@ function CatalogCard({ entry, onClick }) {
       onClick={onClick}
       title={`${entry.name} · ${entry.uSize}U${entry.mountedFace === 'rear' ? ' · Rear' : ''}`}
     >
-      <div className="dc-card-preview">
-        <DeviceFacePlate slot={previewSlot} side="front" />
+      <GripVertical size={12} className="dc-card-grip" />
+      <div className="dc-card-icon-box" style={iconBoxStyle}>
+        <Icon size={13} color={color} />
       </div>
-      <div className="dc-card-info">
-        <span className="dc-card-name">{entry.name}</span>
-        <div className="dc-card-meta">
-          <VendorBadge vendor={entry.vendor} />
-          <span className="dc-card-usize">{entry.uSize}U</span>
-          {entry.mountedFace === 'rear' && <span className="dc-card-rear">Rear</span>}
-        </div>
+      <span className="dc-card-name">{entry.name}</span>
+      <div className="dc-card-badges">
+        <span className="dc-card-badge">{entry.uSize}U</span>
+        {entry.halfWidth && <span className="dc-card-badge dc-card-badge-accent">½W</span>}
+        {entry.halfDepth && <span className="dc-card-badge dc-card-badge-accent">½D</span>}
+        {entry.mountedFace === 'rear' && <span className="dc-card-badge dc-card-badge-rear">Rear</span>}
       </div>
     </div>
   );
@@ -216,41 +201,40 @@ export default function DeviceCatalog({
 
   const renderCustomTab = () => (
     <div className="dc-custom-section">
-      {rackCustomDevices.map((custom) => (
-        <div
-          key={custom.id}
-          className="dc-card"
-          draggable
-          onDragStart={(e) => e.dataTransfer.setData('text/custom-device-id', String(custom.id))}
-          onClick={() => addCustomDevice(custom)}
-        >
-          <div className="dc-card-preview">
-            {custom.image_url ? (
-              <img src={custom.image_url} alt={custom.name} />
-            ) : (
-              <DeviceFacePlate
-                slot={{ item_type: custom.type, custom_type: custom.type, u_size: custom.u_size }}
-                side="front"
-              />
-            )}
-          </div>
-          <div className="dc-card-info">
-            <span className="dc-card-name">{custom.name}</span>
-            <div className="dc-card-meta">
-              {custom.vendor && <VendorBadge vendor={custom.vendor} />}
-              <span className="dc-card-usize">{custom.u_size}U</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="dc-card-delete"
-            title="Delete"
-            onClick={(e) => { e.stopPropagation(); onCustomDeviceDeleted(custom.id); }}
+      {rackCustomDevices.map((custom) => {
+        const { color, Icon } = getCategoryStyle({ custom_type: custom.type });
+        const iconBoxStyle = { borderColor: `${color}55`, background: `${color}18` };
+        return (
+          <div
+            key={custom.id}
+            className="dc-card"
+            draggable
+            onDragStart={(e) => e.dataTransfer.setData('text/custom-device-id', String(custom.id))}
+            onClick={() => addCustomDevice(custom)}
           >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      ))}
+            <GripVertical size={12} className="dc-card-grip" />
+            {custom.image_url ? (
+              <img src={custom.image_url} alt={custom.name} className="dc-card-icon-box dc-card-icon-img" />
+            ) : (
+              <div className="dc-card-icon-box" style={iconBoxStyle}>
+                <Icon size={13} color={color} />
+              </div>
+            )}
+            <span className="dc-card-name">{custom.name}</span>
+            <div className="dc-card-badges">
+              <span className="dc-card-badge">{custom.u_size}U</span>
+            </div>
+            <button
+              type="button"
+              className="dc-card-delete"
+              title="Delete"
+              onClick={(e) => { e.stopPropagation(); onCustomDeviceDeleted(custom.id); }}
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        );
+      })}
       {rackCustomDevices.length === 0 && <p className="dc-empty">No custom devices yet.</p>}
       <button type="button" className="dc-add-custom-btn" onClick={() => setCustomDeviceModalOpen(true)}>
         <Plus size={13} /> Add Custom Device
@@ -299,7 +283,6 @@ export default function DeviceCatalog({
       )}
 
       <div className="dc-list">
-        {/* Unracked devices section (shown on brand/category/az tabs) */}
         {tab !== 'custom' && (
           <div className="dc-group dc-group-unracked">
             <button type="button" className="dc-group-header" onClick={() => setUnrackedOpen((v) => !v)}>
@@ -312,20 +295,28 @@ export default function DeviceCatalog({
                 <p className="dc-empty">No unracked devices.</p>
               ) : (
                 <div className="dc-group-body">
-                  {unrackedDevices.map((device) => (
-                    <div
-                      key={device.id}
-                      className="dc-card dc-card-device"
-                      draggable
-                      onDragStart={(e) => e.dataTransfer.setData('text/device-id', String(device.id))}
-                      onClick={() => addUnrackedDevice(device)}
-                    >
-                      <div className="dc-card-info">
+                  {unrackedDevices.map((device) => {
+                    const { color, Icon } = getCategoryStyle({ device_type: device.type, item_type: 'device' });
+                    const iconBoxStyle = { borderColor: `${color}55`, background: `${color}18` };
+                    return (
+                      <div
+                        key={device.id}
+                        className="dc-card"
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData('text/device-id', String(device.id))}
+                        onClick={() => addUnrackedDevice(device)}
+                      >
+                        <GripVertical size={12} className="dc-card-grip" />
+                        <div className="dc-card-icon-box" style={iconBoxStyle}>
+                          <Icon size={13} color={color} />
+                        </div>
                         <span className="dc-card-name">{device.hostname || device.ip || `Device ${device.id}`}</span>
-                        <span className="dc-card-meta-text">{device.type || 'Device'} · 1U</span>
+                        <div className="dc-card-badges">
+                          <span className="dc-card-badge">1U</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )
             )}

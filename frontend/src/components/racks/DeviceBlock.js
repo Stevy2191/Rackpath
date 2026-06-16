@@ -1,14 +1,13 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Share2, MoreVertical } from 'lucide-react';
-import DeviceFacePlate from './DeviceFacePlate';
+import { GripVertical, Share2, MoreVertical } from 'lucide-react';
+import { getCategoryStyle } from './deviceRenderConfig';
 import './DeviceBlock.css';
 
 export function getDeviceLabel(slot) {
   const isDevice = slot.item_type === 'device';
   const name = isDevice ? slot.hostname || slot.ip || `Device ${slot.device_id}` : slot.item_label || 'Device';
-  const subtitle = slot.vendor || slot.custom_type || null;
-  return { name, subtitle };
+  return { name };
 }
 
 export default function DeviceBlock({
@@ -56,6 +55,13 @@ export default function DeviceBlock({
     );
   }
 
+  const imageUrl = side === 'rear'
+    ? (slot.rear_image_url || slot.custom_image_url)
+    : (slot.front_image_url || slot.custom_image_url);
+
+  const { color, Icon } = getCategoryStyle(slot);
+  const iconBoxStyle = { borderColor: `${color}55`, background: `${color}18` };
+
   return (
     <div
       className={[
@@ -76,13 +82,31 @@ export default function DeviceBlock({
       data-slot-id={slot.id}
       data-device-id={slot.device_id || ''}
     >
-      <DeviceFacePlate slot={slot} side={side} />
+      {imageUrl ? (
+        <div className="device-block-image-wrap">
+          <img src={imageUrl} alt={name} className="device-block-image" />
+          <span className="device-block-image-label">{name}</span>
+        </div>
+      ) : (
+        <>
+          <GripVertical size={12} className="device-block-grip" />
+          <div className="device-block-icon-box" style={iconBoxStyle}>
+            <Icon size={13} color={color} />
+          </div>
+          <span className="device-block-name">{name}</span>
+          <div className="device-block-badges">
+            <span className="device-block-badge">{slot.u_size}U</span>
+            {slot.half_width ? <span className="device-block-badge device-block-badge-accent">½W</span> : null}
+            {slot.half_depth ? <span className="device-block-badge device-block-badge-accent">½D</span> : null}
+          </div>
+        </>
+      )}
 
       <div className="device-block-actions">
         {slot.device_id && (
           <button
             type="button"
-            className="device-block-icon-btn"
+            className="device-block-action-btn"
             title="View in Topology"
             onClick={(e) => {
               e.preventDefault();
@@ -94,7 +118,7 @@ export default function DeviceBlock({
         )}
         <button
           type="button"
-          className="device-block-icon-btn"
+          className="device-block-action-btn"
           title="Options"
           onClick={(e) => {
             e.preventDefault();

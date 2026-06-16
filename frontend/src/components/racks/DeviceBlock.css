@@ -1,40 +1,91 @@
+/* ─── Device block — rack canvas row ────────────────────────── */
 .device-block {
   display: flex;
-  align-items: stretch;
-  border-radius: 2px;
-  border: 1px solid #05060a;
-  background: linear-gradient(180deg, #3a3f48 0%, #1c1f25 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 4px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.22);
+  background: transparent;
   cursor: grab;
   position: relative;
-  overflow: hidden;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   color: #d7dbe2;
   width: 100%;
   box-sizing: border-box;
-  transition: outline 0.1s ease;
+  transition: background 0.1s;
 }
 
-.device-block:active {
-  cursor: grabbing;
-}
+.device-block:active { cursor: grabbing; }
 
-.device-block-selected {
-  outline: 2px solid #4adede;
-  outline-offset: -1px;
-  z-index: 1;
-}
+.device-block:hover { background: rgba(255, 255, 255, 0.04); }
+
+.device-block-selected { background: rgba(255, 255, 255, 0.07); }
 
 .device-block-highlighted {
   animation: device-block-pulse 1.4s ease-in-out 2;
 }
 
 @keyframes device-block-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px #4adede, 0 0 6px rgba(74, 222, 222, 0.4); }
-  50%       { box-shadow: 0 0 0 2px #4adede, 0 0 18px rgba(74, 222, 222, 0.9); }
+  0%, 100% { background: rgba(74, 222, 222, 0.06); }
+  50%       { background: rgba(74, 222, 222, 0.15); }
 }
 
-/* Half-depth crosshatch — shown in opposite panel only, no text */
+/* ─── Drag grip ─────────────────────────────────────────────── */
+.device-block-grip {
+  flex-shrink: 0;
+  color: #3a4050;
+}
+
+/* ─── Colored icon swatch ───────────────────────────────────── */
+.device-block-icon-box {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Device name ───────────────────────────────────────────── */
+.device-block-name {
+  flex: 1;
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: #d4d8e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ─── Pill badges (U size, ½W, ½D) ─────────────────────────── */
+.device-block-badges {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.device-block-badge {
+  font-size: 0.59rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(30, 33, 40, 0.9);
+  color: #6b7280;
+  border: 1px solid #2a2e38;
+  letter-spacing: 0.02em;
+}
+
+.device-block-badge-accent {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+/* ─── Half-depth crosshatch (opposite panel) ────────────────── */
 .device-block-halfdepth-stripe {
   background-color: rgba(55, 6, 6, 0.95);
   background-image:
@@ -56,28 +107,57 @@
   cursor: default;
 }
 
-/* Hover action buttons */
+/* ─── Image mode (uploaded faceplate) ───────────────────────── */
+.device-block-image-wrap {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.device-block-image {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+}
+
+.device-block-image-label {
+  position: absolute;
+  right: 6px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+/* ─── Hover action buttons ──────────────────────────────────── */
 .device-block-actions {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
   display: flex;
   gap: 2px;
   opacity: 0;
   transition: opacity 0.15s;
 }
 
-.device-block:hover .device-block-actions {
-  opacity: 1;
-}
+.device-block:hover .device-block-actions { opacity: 1; }
 
-.device-block-icon-btn {
+.device-block-action-btn {
   border: none;
-  background: rgba(0, 0, 0, 0.5);
-  color: #cbd5e1;
-  border-radius: 2px;
-  width: 15px;
-  height: 15px;
+  background: rgba(10, 12, 18, 0.8);
+  color: #9ca3af;
+  border-radius: 3px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -85,12 +165,12 @@
   padding: 0;
 }
 
-.device-block-icon-btn:hover {
-  background: rgba(0, 0, 0, 0.75);
+.device-block-action-btn:hover {
+  background: rgba(10, 12, 18, 0.95);
   color: #fff;
 }
 
-/* Hover tooltip */
+/* ─── Hover tooltip ─────────────────────────────────────────── */
 .device-block-tooltip {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -114,16 +194,6 @@
   word-break: break-word;
 }
 
-.device-block-tooltip strong {
-  font-weight: 700;
-  color: #fff;
-}
-
-.device-block-tooltip span {
-  color: #9ca3af;
-}
-
-.device-block-tooltip-notes {
-  color: #6b7280 !important;
-  font-style: italic;
-}
+.device-block-tooltip strong { font-weight: 700; color: #fff; }
+.device-block-tooltip span   { color: #9ca3af; }
+.device-block-tooltip-notes  { color: #6b7280 !important; font-style: italic; }
