@@ -1,18 +1,7 @@
-import React, { useRef, useState } from 'react';
-import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
-import { Pencil, Trash2, Download, FileDown } from 'lucide-react';
+import React from 'react';
 import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import './RackEnclosure.css';
-
-const RACK_TYPES = [
-  { value: '4-post', label: '4-Post Rack' },
-  { value: '2-post', label: '2-Post Rack' },
-  { value: 'wall-mount', label: 'Wall Mount' },
-  { value: 'open-frame', label: 'Open Frame' },
-  { value: 'blade-enclosure', label: 'Blade Enclosure' },
-];
 
 // Resolve the canonical mounted face for a slot, handling legacy front_back/side columns.
 function resolveface(s) {
@@ -44,6 +33,26 @@ function buildUMap(slots, face) {
   return { slotsByTop, covered, occupiedByU };
 }
 
+// Groups a Set of U row numbers into contiguous blocks.
+// Returns Map<topU, { u_position, u_size }> — one entry per contiguous run.
+function groupStripeRows(rowSet) {
+  if (rowSet.size === 0) return new Map();
+  const sorted = [...rowSet].sort((a, b) => a - b);
+  const result = new Map();
+  let i = 0;
+  while (i < sorted.length) {
+    const start = sorted[i];
+    let size = 1;
+    while (i + 1 < sorted.length && sorted[i + 1] === sorted[i] + size) {
+      size++;
+      i++;
+    }
+    result.set(start + size - 1, { u_position: start, u_size: size });
+    i++;
+  }
+  return result;
+}
+
 // One face panel (front or rear)
 function RackPanel({
   face,
@@ -64,6 +73,14 @@ function RackPanel({
   onDrop,
   onSelectSlot,
 }) {
+  // Rows covered by the non-top portion of multi-U stripe blocks (return null for these).
+  const stripesCovered = new Set();
+  for (const [topU, { u_position }] of halfDepthStripes) {
+    for (let u = u_position; u < topU; u++) {
+      stripesCovered.add(u);
+    }
+  }
+
   return (
     <div className={`rack-panel-frame rack-panel-frame-${face}`}>
       <div className="rack-panel-label">{face === 'front' ? 'FRONT' : 'REAR'}</div>
@@ -95,14 +112,15 @@ function RackPanel({
               );
             }
             if (covered.has(u)) return null;
+            if (stripesCovered.has(u)) return null;
 
-            // Half-depth stripe from opposite panel
+            // Half-depth stripe from opposite panel — one continuous block per group.
             if (halfDepthStripes.has(u)) {
-              const stripeSlot = halfDepthStripes.get(u);
+              const { u_position, u_size } = halfDepthStripes.get(u);
               return (
                 <DeviceBlock
                   key={`stripe-${u}`}
-                  slot={{ ...stripeSlot, halfDepthStripe: true }}
+                  slot={{ id: `stripe-${u}`, halfDepthStripe: true, u_position, u_size }}
                   side={face}
                   uHeight={uHeight}
                   highlighted={false}
@@ -153,91 +171,34 @@ export default function RackEnclosure({
   uHeight,
   onSelectSlot,
 }) {
-  const [editing, setEditing] = useState(false);
-  const [edits, setEdits] = useState(null);
-  const [exporting, setExporting] = useState(false);
-  const frameRef = useRef(null);
-
   const uRows = Array.from({ length: rack.u_height }, (_, i) => rack.u_height - i);
 
   const frontMap = buildUMap(slots, 'front');
   const rearMap  = buildUMap(slots, 'rear');
 
-  // Half-depth front devices → show 1U stripe per occupied row in rear panel.
-  // Each entry must be 1U tall so that N occupied rows produce exactly N×uHeight
-  // of visual space — matching the device's own height in the front panel.
-  // (Storing the full slot object here caused each row to render at u_size×uHeight,
-  // creating N² total height instead of N, displacing every device below.)
-  const rearStripes = new Map();
+  // Half-depth front devices → rear panel stripes (grouped into contiguous blocks)
+  const rearStripeRows = new Set();
   for (const s of slots) {
-    const mf = resolveface(s);
-    if (mf === 'front' && s.half_depth) {
+    if (resolveface(s) === 'front' && s.half_depth) {
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {
-        if (!rearMap.covered.has(u)) rearStripes.set(u, { ...s, u_size: 1 });
+        if (!rearMap.covered.has(u)) rearStripeRows.add(u);
       }
     }
   }
+  const rearStripes = groupStripeRows(rearStripeRows);
 
-  // Half-depth rear devices → show 1U stripe per occupied row in front panel.
-  const frontStripes = new Map();
+  // Half-depth rear devices → front panel stripes
+  const frontStripeRows = new Set();
   for (const s of slots) {
-    const mf = resolveface(s);
-    if (mf === 'rear' && s.half_depth) {
+    if (resolveface(s) === 'rear' && s.half_depth) {
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {
-        if (!frontMap.covered.has(u)) frontStripes.set(u, { ...s, u_size: 1 });
+        if (!frontMap.covered.has(u)) frontStripeRows.add(u);
       }
     }
   }
-
-  const startEdit = () => {
-    setEdits({
-      name: rack.name,
-      location: rack.location || '',
-      u_height: rack.u_height,
-      rack_type: rack.rack_type || '4-post',
-      notes: rack.notes || '',
-    });
-    setEditing(true);
-  };
-
-  const submitEdit = (e) => {
-    e.preventDefault();
-    actions.onRackSave(rack.id, edits);
-    setEditing(false);
-  };
-
-  const handleDelete = () => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(`Delete rack "${rack.name}" and all its slots? This cannot be undone.`)) return;
-    actions.onRackDelete(rack.id);
-  };
-
-  const handleExport = async (format) => {
-    if (!frameRef.current) return;
-    setExporting(true);
-    try {
-      const el = frameRef.current;
-      const dataUrl = await toPng(el, { backgroundColor: '#0a0a0f', width: el.offsetWidth, height: el.offsetHeight });
-      const filename = rack.name.trim().replace(/\s+/g, '-').toLowerCase() || 'rack';
-      if (format === 'pdf') {
-        const pdf = new jsPDF({ orientation: el.offsetWidth >= el.offsetHeight ? 'landscape' : 'portrait', unit: 'px', format: [el.offsetWidth, el.offsetHeight] });
-        pdf.addImage(dataUrl, 'PNG', 0, 0, el.offsetWidth, el.offsetHeight);
-        pdf.save(`rack-${filename}.pdf`);
-      } else {
-        const a = document.createElement('a');
-        a.download = `rack-${filename}.png`;
-        a.href = dataUrl;
-        a.click();
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Rack export failed', err);
-    } finally {
-      setExporting(false);
-    }
-  };
+  const frontStripes = groupStripeRows(frontStripeRows);
 
   const panelProps = {
     uRows,
@@ -254,49 +215,7 @@ export default function RackEnclosure({
 
   return (
     <div className={`rack-enclosure${isFocused ? ' rack-enclosure-focused' : ''}`} id={`rack-${rack.id}`}>
-      {/* Header: rack name + actions. Sticky while scrolling. */}
-      <div className="rack-header" onClick={onFocus}>
-        <div className="rack-badge">
-          <span className="rack-badge-name">{rack.name}</span>
-          {rack.location && <span className="rack-badge-loc">{rack.location}</span>}
-          <span className="rack-badge-u">{rack.u_height}U</span>
-          <div className="rack-badge-actions">
-            <button type="button" className="rack-badge-icon-btn" title="Export PNG" disabled={exporting}
-              onClick={(e) => { e.stopPropagation(); handleExport('png'); }}>
-              <Download size={13} />
-            </button>
-            <button type="button" className="rack-badge-icon-btn" title="Export PDF" disabled={exporting}
-              onClick={(e) => { e.stopPropagation(); handleExport('pdf'); }}>
-              <FileDown size={13} />
-            </button>
-            <button type="button" className="rack-badge-icon-btn" title="Edit rack"
-              onClick={(e) => { e.stopPropagation(); startEdit(); }}>
-              <Pencil size={13} />
-            </button>
-            <button type="button" className="rack-badge-icon-btn rack-badge-danger" title="Delete rack"
-              onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
-              <Trash2 size={13} />
-            </button>
-          </div>
-        </div>
-
-        {editing && (
-          <form className="rack-edit-form" onSubmit={submitEdit} onClick={(e) => e.stopPropagation()}>
-            <input value={edits.name} onChange={(e) => setEdits({ ...edits, name: e.target.value })} placeholder="Name" required />
-            <input value={edits.location} onChange={(e) => setEdits({ ...edits, location: e.target.value })} placeholder="Location" />
-            <input type="number" min="1" max="100" value={edits.u_height}
-              onChange={(e) => setEdits({ ...edits, u_height: Number(e.target.value) })} placeholder="U Height" />
-            <select value={edits.rack_type} onChange={(e) => setEdits({ ...edits, rack_type: e.target.value })}>
-              {RACK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <button type="submit">Save</button>
-            <button type="button" onClick={() => setEditing(false)}>Cancel</button>
-          </form>
-        )}
-      </div>
-
-      {/* Dual-panel rack frame */}
-      <div className="rack-dual-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
+      <div className="rack-dual-frame" style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
         <RackPanel
           face="front"
           showLeftRail

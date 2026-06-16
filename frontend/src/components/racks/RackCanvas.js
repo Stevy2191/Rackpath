@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
-import { Plus, Minus, Maximize2 } from 'lucide-react';
+import { Plus, Minus, Maximize2, Settings } from 'lucide-react';
 import RackEnclosure from './RackEnclosure';
 import CableOverlay from './CableOverlay';
 import './RackCanvas.css';
@@ -41,6 +41,8 @@ export default function RackCanvas({
   focusedRackId,
   onFocusRack,
   onSelectSlot,
+  onEditRack,
+  rackEditOpen,
 }) {
   const [draggingMeta, setDraggingMeta] = useState(null);
   const [vp, setVp]       = useState({ zoom: 1, tx: 0, ty: 0 });
@@ -121,6 +123,14 @@ export default function RackCanvas({
     panStart.current = { x: e.clientX - vpRef.current.tx, y: e.clientY - vpRef.current.ty };
     setIsPanning(true);
   }, []);
+
+  // Click (not drag) on empty canvas background → deselect rack.
+  const handleCanvasClick = useCallback((e) => {
+    const t = e.target;
+    if (t === viewportRef.current || t === contentRef.current) {
+      onFocusRack(null);
+    }
+  }, [onFocusRack]);
 
   useEffect(() => {
     if (!isPanning) return;
@@ -236,6 +246,7 @@ export default function RackCanvas({
       className={`rack-canvas${isPanning ? ' rack-canvas-panning' : ''}`}
       ref={viewportRef}
       onMouseDown={handleMouseDown}
+      onClick={handleCanvasClick}
     >
       <div
         className="rack-canvas-content"
@@ -267,6 +278,16 @@ export default function RackCanvas({
 
         {cableViewEnabled && <CableOverlay racks={sortedRacks} allSlots={allSlots} />}
       </div>
+
+      {focusedRackId && (
+        <button
+          type="button"
+          className={`rack-edit-rack-btn${rackEditOpen ? ' active' : ''}`}
+          onClick={onEditRack}
+        >
+          <Settings size={13} /> Edit Rack
+        </button>
+      )}
 
       <ZoomControls
         zoom={vp.zoom}

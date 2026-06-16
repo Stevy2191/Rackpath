@@ -6,116 +6,6 @@
   width: auto;
 }
 
-/* ─── Header: rack name badge (sticky) ───────────────────── */
-.rack-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  cursor: pointer;
-  margin-bottom: 0.5rem;
-}
-
-.rack-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.45rem 0.75rem;
-  background: linear-gradient(180deg, #2a2d35 0%, #1a1c22 100%);
-  border: 1px solid #3a3f4a;
-  border-radius: 6px;
-  color: #e8ebf0;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
-}
-
-.rack-badge-name {
-  font-weight: 700;
-  font-size: 0.88rem;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rack-badge-loc {
-  font-size: 0.68rem;
-  color: #8a93a3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100px;
-}
-
-.rack-badge-u {
-  font-size: 0.68rem;
-  color: #8a93a3;
-  background: rgba(0,0,0,0.3);
-  padding: 2px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.rack-badge-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.rack-badge-icon-btn {
-  border: none;
-  background: rgba(255,255,255,0.06);
-  color: #cbd5e1;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.rack-badge-icon-btn:hover  { background: rgba(255,255,255,0.15); }
-.rack-badge-icon-btn:disabled { opacity: 0.5; cursor: default; }
-.rack-badge-danger:hover    { background: rgba(255,87,87,0.25); color: #ff5757; }
-
-.rack-edit-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  padding: 0.5rem;
-  margin-top: 0.5rem;
-  background: #1a1c22;
-  border: 1px solid #3a3f4a;
-  border-radius: 6px;
-}
-
-.rack-edit-form input,
-.rack-edit-form select {
-  padding: 0.3rem 0.5rem;
-  border: 1px solid #3a3f4a;
-  border-radius: 4px;
-  background: #0e0f13;
-  color: #e8ebf0;
-  font-size: 0.8rem;
-}
-
-.rack-edit-form button {
-  padding: 0.3rem 0.7rem;
-  border: none;
-  border-radius: 4px;
-  background: #4adede;
-  color: #0a0a0f;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-
-.rack-edit-form button[type='button'] {
-  background: #3a3f4a;
-  color: #cbd5e1;
-}
-
 /* ─── Dual-panel frame ───────────────────────────────────── */
 .rack-dual-frame {
   display: flex;
@@ -247,7 +137,7 @@
 .rack-unit-slot.drop-ok        { background: rgba(74,158,255,0.2);  box-shadow: inset 0 0 0 1px rgba(74,158,255,0.7); }
 .rack-unit-slot.drop-collision { background: rgba(255,87,87,0.2);   box-shadow: inset 0 0 0 1px rgba(255,87,87,0.7); }
 
-.rack-units .device-block {
+.rack-units .device-block:not(.device-block-halfdepth-stripe) {
   box-sizing: border-box;
   border-bottom: 1px solid #05060a;
 }

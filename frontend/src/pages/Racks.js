@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Cable, LayoutGrid, Plus } from 'lucide-react';
+import { Cable, Download, FileDown, LayoutGrid, Plus } from 'lucide-react';
+import { toPng } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import client from '../api/client';
 import PortEditorModal from '../components/PortEditorModal';
 import RackCanvas from '../components/racks/RackCanvas';
 import DeviceCatalog from '../components/racks/DeviceCatalog';
 import DevicePropertiesPanel from '../components/racks/DevicePropertiesPanel';
+import RackEditPanel from '../components/racks/RackEditPanel';
 import AddRackModal from '../components/racks/AddRackModal';
 import RackDeviceContextMenu from '../components/racks/RackDeviceContextMenu';
 import './Racks.css';
@@ -25,6 +28,8 @@ export default function RacksPage() {
   const [error, setError] = useState(null);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [focusedRackId, setFocusedRackId] = useState(null);
+  const [rackEditOpen, setRackEditOpen] = useState(false);
+  const [exportingRack, setExportingRack] = useState(false);
   const [highlightedSlotId, setHighlightedSlotId] = useState(null);
   const [selectedSlotId, setSelectedSlotId] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -75,15 +80,26 @@ export default function RacksPage() {
     );
   }, [allSlots, searchParams, setSearchParams]);
 
-  // Close properties panel with Escape
+  // Close properties panels with Escape
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') setSelectedSlotId(null); };
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        setSelectedSlotId(null);
+        setRackEditOpen(false);
+      }
+    };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
+  // Close rack edit panel when rack is deselected
+  useEffect(() => {
+    if (focusedRackId === null) setRackEditOpen(false);
+  }, [focusedRackId]);
+
   const selectedSlot = selectedSlotId ? allSlots.find((s) => s.id === selectedSlotId) || null : null;
   const selectedSlotRack = selectedSlot ? racks.find((r) => r.id === selectedSlot.rack_id) || null : null;
+  const focusedRack = focusedRackId ? racks.find((r) => r.id === focusedRackId) || null : null;
 
   const actions = {
     onSlotCreate: async (payload) => {
@@ -143,9 +159,52 @@ export default function RacksPage() {
       try {
         await client.delete(`/racks/${rackId}`);
         setFocusedRackId((cur) => (cur === rackId ? null : cur));
+        setRackEditOpen(false);
         setSelectedSlotId(null);
         loadRacks();
         loadAllSlots();
+      } catch (err) {
+        setError(err.response?.data?.error || err.message);
+      }
+    },
+    onRackDuplicate: async (rackId) => {
+      const rack = racks.find((r) => r.id === rackId);
+      if (!rack) return;
+      const rackSlots = allSlots.filter((s) => s.rack_id === rackId);
+      try {
+        const res = await client.post('/racks', {
+          name: `${rack.name} (copy)`,
+          location: rack.location,
+          u_height: rack.u_height,
+          rack_type: rack.rack_type,
+          notes: rack.notes,
+        });
+        const newRackId = res.data.id;
+        for (const slot of rackSlots) {
+          // eslint-disable-next-line no-await-in-loop
+          await client.post('/rack-slots', {
+            rack_id: newRackId,
+            device_id: slot.device_id || null,
+            item_type: slot.item_type,
+            item_label: slot.item_label,
+            vendor: slot.vendor,
+            catalog_id: slot.catalog_id,
+            custom_type: slot.custom_type,
+            custom_image_url: slot.custom_image_url,
+            u_position: slot.u_position,
+            u_size: slot.u_size,
+            mounted_face: slot.mounted_face || slot.front_back || 'front',
+            half_depth: slot.half_depth,
+            half_width: slot.half_width,
+            color: slot.color,
+            ip_address: slot.ip_address,
+            slot_notes: slot.slot_notes,
+          });
+        }
+        loadRacks();
+        loadAllSlots();
+        setFocusedRackId(newRackId);
+        scrollRackIntoView(newRackId);
       } catch (err) {
         setError(err.response?.data?.error || err.message);
       }
@@ -169,6 +228,52 @@ export default function RacksPage() {
     setSelectedSlotId((cur) => (cur === slotId ? null : slotId));
   };
 
+  const handleExportRack = async (format) => {
+    if (!focusedRackId) return;
+    const rack = racks.find((r) => r.id === focusedRackId);
+    if (!rack) return;
+    const frame = document.querySelector(`#rack-${focusedRackId} .rack-dual-frame`);
+    if (!frame) return;
+    setExportingRack(true);
+    try {
+      const dataUrl = await toPng(frame, { backgroundColor: '#0a0a0f', width: frame.offsetWidth, height: frame.offsetHeight });
+      const filename = rack.name.trim().replace(/\s+/g, '-').toLowerCase() || 'rack';
+      if (format === 'pdf') {
+        const pdf = new jsPDF({ orientation: frame.offsetWidth >= frame.offsetHeight ? 'landscape' : 'portrait', unit: 'px', format: [frame.offsetWidth, frame.offsetHeight] });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, frame.offsetWidth, frame.offsetHeight);
+        pdf.save(`rack-${filename}.pdf`);
+      } else {
+        const a = document.createElement('a');
+        a.download = `rack-${filename}.png`;
+        a.href = dataUrl;
+        a.click();
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Rack export failed', err);
+    } finally {
+      setExportingRack(false);
+    }
+  };
+
+  const rightPanel = selectedSlot ? (
+    <DevicePropertiesPanel
+      slot={selectedSlot}
+      rackHeight={selectedSlotRack?.u_height || 42}
+      rackSlots={allSlots.filter((s) => s.rack_id === selectedSlot.rack_id)}
+      onClose={() => setSelectedSlotId(null)}
+      onUpdated={handleSlotUpdatedFromPanel}
+    />
+  ) : (focusedRack && rackEditOpen) ? (
+    <RackEditPanel
+      rack={focusedRack}
+      onClose={() => setRackEditOpen(false)}
+      onSave={(edits) => actions.onRackSave(focusedRackId, edits)}
+      onDuplicate={() => actions.onRackDuplicate(focusedRackId)}
+      onDelete={() => actions.onRackDelete(focusedRackId)}
+    />
+  ) : null;
+
   return (
     <div className="racks-page">
       {error && (
@@ -178,6 +283,22 @@ export default function RacksPage() {
       <div className="racks-toolbar">
         <h2>Rack Builder</h2>
         <div className="racks-toolbar-actions">
+          <button
+            type="button"
+            disabled={!focusedRackId || exportingRack}
+            onClick={() => handleExportRack('png')}
+            title="Export focused rack as PNG"
+          >
+            <Download size={14} />
+          </button>
+          <button
+            type="button"
+            disabled={!focusedRackId || exportingRack}
+            onClick={() => handleExportRack('pdf')}
+            title="Export focused rack as PDF"
+          >
+            <FileDown size={14} />
+          </button>
           <button type="button" className={cableViewEnabled ? 'active' : ''} onClick={() => setCableViewEnabled((v) => !v)}>
             <Cable size={14} /> Show Cables
           </button>
@@ -222,19 +343,13 @@ export default function RacksPage() {
           actions={actions}
           cableViewEnabled={cableViewEnabled}
           focusedRackId={focusedRackId}
-          onFocusRack={(id) => setFocusedRackId((cur) => (cur === id ? null : id))}
+          onFocusRack={setFocusedRackId}
           onSelectSlot={handleSelectSlot}
+          onEditRack={() => setRackEditOpen((v) => !v)}
+          rackEditOpen={rackEditOpen}
         />
 
-        {selectedSlot && (
-          <DevicePropertiesPanel
-            slot={selectedSlot}
-            rackHeight={selectedSlotRack?.u_height || 42}
-            rackSlots={allSlots.filter((s) => s.rack_id === selectedSlot.rack_id)}
-            onClose={() => setSelectedSlotId(null)}
-            onUpdated={handleSlotUpdatedFromPanel}
-          />
-        )}
+        {rightPanel}
       </div>
 
       {contextMenu && (

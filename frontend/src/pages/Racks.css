@@ -50,10 +50,12 @@
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.racks-toolbar-actions button:hover      { border-color: #3a3f4a; color: #d4d8e0; }
-.racks-toolbar-actions button.active     { background: rgba(74,222,222,0.12); border-color: var(--rack-accent); color: var(--rack-accent); }
-.racks-toolbar-actions button.primary    { background: rgba(74,222,222,0.12); border-color: var(--rack-accent); color: var(--rack-accent); }
-.racks-toolbar-actions button.primary:hover { background: rgba(74,222,222,0.2); }
+.racks-toolbar-actions button:hover           { border-color: #3a3f4a; color: #d4d8e0; }
+.racks-toolbar-actions button:disabled        { opacity: 0.35; cursor: not-allowed; }
+.racks-toolbar-actions button:disabled:hover  { border-color: var(--rack-border); color: #8b91a1; }
+.racks-toolbar-actions button.active          { background: rgba(74,222,222,0.12); border-color: var(--rack-accent); color: var(--rack-accent); }
+.racks-toolbar-actions button.primary         { background: rgba(74,222,222,0.12); border-color: var(--rack-accent); color: var(--rack-accent); }
+.racks-toolbar-actions button.primary:hover   { background: rgba(74,222,222,0.2); }
 
 /* ─── Three-column canvas area ───────────────────────────── */
 .racks-main {

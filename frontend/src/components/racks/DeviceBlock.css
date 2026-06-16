@@ -105,6 +105,7 @@
     );
   border: 1px solid rgba(185, 28, 28, 0.45);
   cursor: default;
+  pointer-events: none;
 }
 
 /* ─── Image mode (uploaded faceplate) ───────────────────────── */

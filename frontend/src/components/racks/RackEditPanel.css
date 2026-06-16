@@ -1,0 +1,193 @@
+.rack-edit-panel {
+  flex-shrink: 0;
+  width: 260px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #12141a;
+  border-left: 1px solid #2a2e38;
+  color: #d4d8e0;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  overflow: hidden;
+}
+
+.rack-edit-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #2a2e38;
+  gap: 8px;
+}
+
+.rack-edit-panel-title {
+  flex: 1;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #e6e9f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rack-edit-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #8b91a1;
+  cursor: pointer;
+}
+
+.rack-edit-panel-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e6e9f0;
+}
+
+.rack-edit-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ─── Fields ─────────────────────────────────────────────── */
+.rep-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rep-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+}
+
+.rep-input {
+  padding: 6px 8px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  background: #0e0f13;
+  color: #e6e9f0;
+  font-family: inherit;
+  font-size: 0.8rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rep-input:focus {
+  outline: none;
+  border-color: #4adede;
+}
+
+.rep-textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+/* ─── U Height stepper ───────────────────────────────────── */
+.rep-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rep-stepper button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  background: #0e0f13;
+  color: #8b91a1;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.rep-stepper button:hover:not(:disabled) {
+  border-color: #4adede;
+  color: #4adede;
+}
+
+.rep-stepper button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.rep-stepper-val {
+  min-width: 38px;
+  text-align: center;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #e6e9f0;
+}
+
+/* ─── Save button ────────────────────────────────────────── */
+.rep-save-btn {
+  width: 100%;
+  padding: 7px 12px;
+  border: 1px solid #4adede;
+  border-radius: 4px;
+  background: rgba(74, 222, 222, 0.1);
+  color: #4adede;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rep-save-btn:hover:not(:disabled) {
+  background: rgba(74, 222, 222, 0.18);
+}
+
+.rep-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Danger actions ─────────────────────────────────────── */
+.rep-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid #2a2e38;
+}
+
+.rep-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  background: transparent;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.rep-action-btn:hover {
+  border-color: #3a3f4a;
+  color: #d4d8e0;
+}
+
+.rep-action-danger:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
