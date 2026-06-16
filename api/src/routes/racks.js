@@ -5,14 +5,18 @@ const { logActivity } = require('../services/activityLog');
 const router = express.Router();
 
 const RACK_TYPES = ['4-post', '2-post', 'wall-mount', 'open-frame', 'blade-enclosure'];
+const LAYOUT_TYPES = ['column', 'bayed'];
 
 function validateRackFields(body) {
-  const { rack_type, u_height } = body;
+  const { rack_type, u_height, layout_type } = body;
   if (rack_type !== undefined && rack_type !== null && !RACK_TYPES.includes(rack_type)) {
     return 'Invalid rack_type';
   }
-  if (u_height !== undefined && u_height !== null && (u_height < 4 || u_height > 52)) {
-    return 'u_height must be between 4 and 52';
+  if (u_height !== undefined && u_height !== null && (u_height < 1 || u_height > 100)) {
+    return 'u_height must be between 1 and 100';
+  }
+  if (layout_type !== undefined && layout_type !== null && !LAYOUT_TYPES.includes(layout_type)) {
+    return 'Invalid layout_type';
   }
   return null;
 }
@@ -62,9 +66,10 @@ router.post('/', async (req, res, next) => {
     const validationError = validateRackFields(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
+    const { rack_width, layout_type } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO racks (project_id, name, location, u_height, rack_type, notes) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.projectId, name, location || null, u_height || 42, rack_type || '4-post', notes || null]
+      'INSERT INTO racks (project_id, name, location, u_height, rack_type, notes, rack_width, layout_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.projectId, name, location || null, u_height || 42, rack_type || '4-post', notes || null, rack_width || '19"', layout_type || 'column']
     );
     const [rows] = await pool.query('SELECT * FROM racks WHERE id = ?', [result.insertId]);
     logActivity(req.projectId, req.user.id, 'rack.created', rows[0].name);
@@ -77,14 +82,14 @@ router.post('/', async (req, res, next) => {
 // PUT /api/racks/:id - update rack
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, location, u_height, rack_type, notes } = req.body;
+    const { name, location, u_height, rack_type, notes, rack_width, layout_type } = req.body;
 
     const validationError = validateRackFields(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
     const [result] = await pool.query(
-      'UPDATE racks SET name = ?, location = ?, u_height = ?, rack_type = ?, notes = ? WHERE id = ? AND project_id = ?',
-      [name, location || null, u_height || 42, rack_type || '4-post', notes || null, req.params.id, req.projectId]
+      'UPDATE racks SET name = ?, location = ?, u_height = ?, rack_type = ?, notes = ?, rack_width = ?, layout_type = ? WHERE id = ? AND project_id = ?',
+      [name, location || null, u_height || 42, rack_type || '4-post', notes || null, rack_width || '19"', layout_type || 'column', req.params.id, req.projectId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack not found' });
     const [rows] = await pool.query('SELECT * FROM racks WHERE id = ?', [req.params.id]);
