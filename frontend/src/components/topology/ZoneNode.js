@@ -29,8 +29,8 @@ function ZoneNode({ id, data, selected }) {
   const vlan = data.vlan_id != null ? vlans.find((v) => v.id === data.vlan_id) : null;
 
   const colorPalette = ZONE_COLORS[data.color] || ZONE_COLORS.blue;
-  const vlanFill = vlan ? hexToRgba(vlan.color, 0.15) : null;
-  const vlanBorder = vlan ? hexToRgba(vlan.color, 0.6) : null;
+  const vlanFill = vlan ? hexToRgba(vlan.color, 0.3) : null;
+  const vlanBorder = vlan ? hexToRgba(vlan.color, 0.65) : null;
   const palette = vlan && vlanFill && vlanBorder ? { fill: vlanFill, border: vlanBorder } : colorPalette;
   const borderStyle = data.border_style === 'dotted' ? 'dotted' : 'solid';
 
@@ -104,9 +104,13 @@ function ZoneNode({ id, data, selected }) {
                 type="button"
                 aria-label={c}
                 title={c}
-                className={`zone-editor-swatch${data.color === c ? ' selected' : ''}`}
+                className={`zone-editor-swatch${data.color === c && !data.vlan_id ? ' selected' : ''}`}
                 style={{ background: ZONE_COLORS[c].border }}
-                onClick={() => data.onUpdate?.(id, { color: c })}
+                onClick={() => {
+                  const patch = { color: c };
+                  if (data.vlan_id != null) patch.vlan_id = null;
+                  data.onUpdate?.(id, patch);
+                }}
               />
             ))}
           </div>

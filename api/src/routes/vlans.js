@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { logActivity } = require('../services/activityLog');
+const { nextVlanColor } = require('../utils/vlanColors');
 
 const router = express.Router();
 
@@ -25,16 +26,21 @@ router.get('/projects/:projectId/vlans', async (req, res, next) => {
 // POST /api/projects/:projectId/vlans - create a VLAN definition
 router.post('/projects/:projectId/vlans', async (req, res, next) => {
   try {
-    const { vlan_id, name, description, subnet, color } = req.body || {};
+    const { vlan_id, name, description, subnet, color, user_modified_color } = req.body || {};
     if (!isValidVlanId(vlan_id)) {
       return res.status(400).json({ error: 'vlan_id must be an integer between 1 and 4094' });
     }
     if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
 
+    // Auto-assign a palette color when the client doesn't supply one; if the
+    // client explicitly supplied a color, treat it as user-modified.
+    const colorToUse = color || (await nextVlanColor(pool, req.params.projectId));
+    const userModified = color ? (user_modified_color ? 1 : 1) : 0;
+
     const [result] = await pool.query(
-      `INSERT INTO project_vlans (project_id, vlan_id, name, description, subnet, color)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [req.params.projectId, Number(vlan_id), name.trim(), description || null, subnet || null, color || '#4A90E2']
+      `INSERT INTO project_vlans (project_id, vlan_id, name, description, subnet, color, user_modified_color)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [req.params.projectId, Number(vlan_id), name.trim(), description || null, subnet || null, colorToUse, userModified]
     );
 
     const [rows] = await pool.query('SELECT * FROM project_vlans WHERE id = ?', [result.insertId]);
@@ -48,7 +54,7 @@ router.post('/projects/:projectId/vlans', async (req, res, next) => {
 // PUT /api/vlans/:id - update a VLAN definition
 router.put('/vlans/:id', async (req, res, next) => {
   try {
-    const allowedFields = ['vlan_id', 'name', 'description', 'subnet', 'color'];
+    const allowedFields = ['vlan_id', 'name', 'description', 'subnet', 'color', 'user_modified_color'];
     const updates = [];
     const values = [];
 
@@ -65,6 +71,9 @@ router.put('/vlans/:id', async (req, res, next) => {
         if (!req.body.name || !req.body.name.trim()) return res.status(400).json({ error: 'name is required' });
         updates.push('name = ?');
         values.push(req.body.name.trim());
+      } else if (field === 'user_modified_color') {
+        updates.push('user_modified_color = ?');
+        values.push(req.body.user_modified_color ? 1 : 0);
       } else {
         updates.push(`${field} = ?`);
         values.push(req.body[field]);

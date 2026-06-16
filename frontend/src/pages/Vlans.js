@@ -2,16 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { Pencil, Trash2, Check, X } from 'lucide-react';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
+import { nextVlanColor } from '../utils/vlanColors';
 import './Vlans.css';
 
-const emptyVlan = { vlan_id: '', name: '', description: '', subnet: '', color: '#4A90E2' };
+function emptyDraft(vlans) {
+  return {
+    vlan_id: '',
+    name: '',
+    description: '',
+    subnet: '',
+    color: nextVlanColor(vlans),
+    _colorChanged: false,
+  };
+}
 
 export default function VlansPage() {
   const { currentProjectId } = useProject();
   const [vlans, setVlans] = useState([]);
   const [error, setError] = useState(null);
-  const [editingId, setEditingId] = useState(null); // VLAN row id, or 'new'
-  const [draft, setDraft] = useState(emptyVlan);
+  const [editingId, setEditingId] = useState(null); // row id or 'new'
+  const [draft, setDraft] = useState(() => emptyDraft([]));
 
   const load = () => {
     if (!currentProjectId) return;
@@ -27,7 +37,7 @@ export default function VlansPage() {
   }, [currentProjectId]);
 
   const startAdd = () => {
-    setDraft(emptyVlan);
+    setDraft(emptyDraft(vlans));
     setEditingId('new');
   };
 
@@ -38,29 +48,46 @@ export default function VlansPage() {
       description: vlan.description || '',
       subnet: vlan.subnet || '',
       color: vlan.color || '#4A90E2',
+      _colorChanged: false,
     });
     setEditingId(vlan.id);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setDraft(emptyVlan);
+    setDraft(emptyDraft(vlans));
+    setError(null);
   };
 
   const saveDraft = async () => {
+    const { _colorChanged, ...rest } = draft;
     const payload = {
-      ...draft,
-      vlan_id: draft.vlan_id === '' ? null : Number(draft.vlan_id),
+      ...rest,
+      vlan_id: rest.vlan_id === '' ? null : Number(rest.vlan_id),
     };
+    if (_colorChanged) payload.user_modified_color = true;
+
     try {
       if (editingId === 'new') {
         const res = await client.post(`/projects/${currentProjectId}/vlans`, payload);
         setVlans((prev) => [...prev, res.data].sort((a, b) => a.vlan_id - b.vlan_id));
       } else {
         const res = await client.put(`/vlans/${editingId}`, payload);
-        setVlans((prev) => prev.map((v) => (v.id === editingId ? res.data : v)).sort((a, b) => a.vlan_id - b.vlan_id));
+        setVlans((prev) =>
+          prev.map((v) => (v.id === editingId ? res.data : v)).sort((a, b) => a.vlan_id - b.vlan_id)
+        );
       }
       cancelEdit();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  // Quick inline color change from the read-row swatch click.
+  const handleColorChange = async (id, color) => {
+    try {
+      const res = await client.put(`/vlans/${id}`, { color, user_modified_color: true });
+      setVlans((prev) => prev.map((v) => (v.id === id ? res.data : v)));
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
@@ -142,7 +169,7 @@ export default function VlansPage() {
                   type="color"
                   className="vlans-color-input"
                   value={draft.color}
-                  onChange={(e) => setDraft({ ...draft, color: e.target.value })}
+                  onChange={(e) => setDraft({ ...draft, color: e.target.value, _colorChanged: true })}
                 />
               </td>
               <td className="vlans-actions">
@@ -195,7 +222,7 @@ export default function VlansPage() {
                     type="color"
                     className="vlans-color-input"
                     value={draft.color}
-                    onChange={(e) => setDraft({ ...draft, color: e.target.value })}
+                    onChange={(e) => setDraft({ ...draft, color: e.target.value, _colorChanged: true })}
                   />
                 </td>
                 <td className="vlans-actions">
@@ -214,7 +241,20 @@ export default function VlansPage() {
                 <td>{vlan.description}</td>
                 <td>{vlan.subnet}</td>
                 <td>
-                  <span className="vlans-color-swatch" style={{ background: vlan.color }} title={vlan.color} />
+                  <div className="vlans-color-cell">
+                    <label className="vlans-color-swatch-label" title="Click to change color">
+                      <span className="vlans-color-swatch" style={{ background: vlan.color }} />
+                      <input
+                        type="color"
+                        className="vlans-color-hidden-input"
+                        value={vlan.color}
+                        onChange={(e) => handleColorChange(vlan.id, e.target.value)}
+                      />
+                    </label>
+                    <span className={`vlans-badge ${vlan.user_modified_color ? 'vlans-badge-custom' : 'vlans-badge-auto'}`}>
+                      {vlan.user_modified_color ? 'Custom' : 'Auto'}
+                    </span>
+                  </div>
                 </td>
                 <td className="vlans-actions">
                   <button

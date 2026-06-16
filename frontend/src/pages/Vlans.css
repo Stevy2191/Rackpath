@@ -82,12 +82,59 @@
   cursor: pointer;
 }
 
+.vlans-color-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.vlans-color-swatch-label {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.vlans-color-swatch-label:hover .vlans-color-swatch {
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 .vlans-color-swatch {
   display: inline-block;
-  width: 1.2rem;
-  height: 1.2rem;
-  border-radius: 50%;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 4px;
   border: 1px solid var(--color-border-strong);
+  transition: box-shadow 0.15s;
+}
+
+.vlans-color-hidden-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vlans-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.vlans-badge-auto {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.vlans-badge-custom {
+  background: rgba(74, 144, 226, 0.12);
+  color: #4A90E2;
+  border: 1px solid rgba(74, 144, 226, 0.3);
 }
 
 .vlans-actions {

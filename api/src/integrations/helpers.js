@@ -1,6 +1,8 @@
 // Shared helpers used by platform adapters to write discovered devices and
 // VLANs into Rackpath's schema.
 
+const { nextVlanColor } = require('../utils/vlanColors');
+
 const DEVICE_FIELDS = ['hostname', 'ip', 'mac', 'type', 'model', 'serial_number', 'status'];
 
 // Insert or update a device discovered by an integration sync. Devices are
@@ -63,7 +65,8 @@ async function upsertDevice(db, projectId, integrationId, device) {
 }
 
 // Insert or update a VLAN definition discovered by an integration sync,
-// matched on (project_id, vlan_id).
+// matched on (project_id, vlan_id).  Color is never overwritten on update
+// so user-customised or auto-assigned colors survive repeated syncs.
 async function upsertVlan(db, projectId, vlan) {
   if (!vlan.vlan_id || !Number.isFinite(Number(vlan.vlan_id))) return false;
 
@@ -79,9 +82,10 @@ async function upsertVlan(db, projectId, vlan) {
       existing[0].id,
     ]);
   } else {
+    const color = await nextVlanColor(db, projectId);
     await db.query(
-      `INSERT INTO project_vlans (project_id, vlan_id, name, subnet) VALUES (?, ?, ?, ?)`,
-      [projectId, vlan.vlan_id, vlan.name || `VLAN ${vlan.vlan_id}`, vlan.subnet || null]
+      `INSERT INTO project_vlans (project_id, vlan_id, name, subnet, color) VALUES (?, ?, ?, ?, ?)`,
+      [projectId, vlan.vlan_id, vlan.name || `VLAN ${vlan.vlan_id}`, vlan.subnet || null, color]
     );
   }
   return true;
