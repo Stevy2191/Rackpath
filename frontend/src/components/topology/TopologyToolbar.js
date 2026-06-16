@@ -1,24 +1,38 @@
 import React from 'react';
-import { MousePointer2, Link as LinkIcon, Type, Square, Calculator, Image } from 'lucide-react';
+import { MousePointer2, Link as LinkIcon, Type, BoxSelect, Calculator, Image, Shapes } from 'lucide-react';
+import { SHAPE_TYPES } from './ShapeNode';
 import './TopologyToolbar.css';
 
 const MODES = [
   { id: 'select', label: 'Select', icon: MousePointer2, hint: 'Select and move nodes' },
-  { id: 'link', label: 'Link', icon: LinkIcon, hint: 'Click a node, then another, to connect' },
-  { id: 'text', label: 'Text', icon: Type, hint: 'Click the canvas to add a text label' },
-  { id: 'shape', label: 'Shape', icon: Square, hint: 'Click the canvas to add a zone' },
+  { id: 'link',   label: 'Link',   icon: LinkIcon,       hint: 'Click a node, then another, to connect' },
+  { id: 'text',   label: 'Text',   icon: Type,           hint: 'Click the canvas to add a text label' },
+  { id: 'zone',   label: 'Zone',   icon: BoxSelect,      hint: 'Click the canvas to add a zone' },
 ];
 
 const BACKGROUNDS = [
-  { id: 'dots', label: 'Dot grid' },
-  { id: 'lines', label: 'Lines' },
-  { id: 'solid', label: 'Solid' },
-  { id: 'none', label: 'None' },
+  { id: 'dots',  label: 'Dot grid' },
+  { id: 'lines', label: 'Lines'    },
+  { id: 'solid', label: 'Solid'    },
+  { id: 'none',  label: 'None'     },
 ];
+
+const SHAPE_ICONS = {
+  rect:          '▭',
+  circle:        '◯',
+  diamond:       '◇',
+  hexagon:       '⬡',
+  cylinder:      '⬭',
+  parallelogram: '▱',
+};
 
 export default function TopologyToolbar({
   mode,
   onModeChange,
+  shapeType,
+  onShapeTypeChange,
+  shapeMenuOpen,
+  onToggleShapeMenu,
   calcOpen,
   onToggleCalc,
   background,
@@ -50,6 +64,37 @@ export default function TopologyToolbar({
             <span>{label}</span>
           </button>
         ))}
+
+        {/* Shape button with type submenu */}
+        <div className="topology-toolbar-popover-anchor">
+          <button
+            type="button"
+            className={`topology-mode-btn${mode === 'shape' ? ' active' : ''}`}
+            onClick={onToggleShapeMenu}
+            title="Click the canvas to add a shape"
+            aria-pressed={mode === 'shape'}
+          >
+            <Shapes size={16} strokeWidth={2} />
+            <span>Shape{mode === 'shape' ? ` · ${SHAPE_ICONS[shapeType] || '▭'}` : ''} ▾</span>
+          </button>
+          {shapeMenuOpen && (
+            <div className="topology-toolbar-menu">
+              {SHAPE_TYPES.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={shapeType === id ? 'selected' : ''}
+                  onClick={() => {
+                    onShapeTypeChange(id);
+                    onModeChange('shape');
+                  }}
+                >
+                  {SHAPE_ICONS[id]} {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <button
           type="button"

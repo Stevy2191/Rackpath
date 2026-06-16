@@ -13,6 +13,7 @@ const SCOPED_TABLES = [
   'topology_edges',
   'topology_nodes',
   'topology_zones',
+  'topology_shapes',
   'topology_layout',
   'rack_slots',
   'rack_custom_devices',

@@ -80,6 +80,7 @@ router.delete('/all', async (req, res, next) => {
     await pool.query('DELETE FROM topology_edges WHERE project_id = ?', [req.projectId]);
     await pool.query('DELETE FROM topology_zones WHERE project_id = ?', [req.projectId]);
     await pool.query('DELETE FROM topology_labels WHERE project_id = ?', [req.projectId]);
+    await pool.query('DELETE FROM topology_shapes WHERE project_id = ?', [req.projectId]);
     await pool.query('DELETE FROM topology_nodes WHERE project_id = ?', [req.projectId]);
     res.status(204).send();
   } catch (err) {
@@ -715,6 +716,69 @@ router.delete('/labels/:id', async (req, res, next) => {
       req.projectId,
     ]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Label not found' });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/topology/shapes
+router.get('/shapes', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM topology_shapes WHERE project_id = ? ORDER BY id ASC', [req.projectId]);
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/topology/shapes
+router.post('/shapes', async (req, res, next) => {
+  try {
+    const { shape_type, x, y, width, height, fill_color, border_color, label } = req.body;
+    const [result] = await pool.query(
+      `INSERT INTO topology_shapes (project_id, shape_type, x, y, width, height, fill_color, border_color, label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.projectId, shape_type || 'rect', x || 0, y || 0, width || 160, height || 100,
+       fill_color || '#3b82f620', border_color || '#3b82f6', label || null]
+    );
+    const [rows] = await pool.query('SELECT * FROM topology_shapes WHERE id = ?', [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/topology/shapes/:id
+router.patch('/shapes/:id', async (req, res, next) => {
+  try {
+    const allowed = ['shape_type', 'x', 'y', 'width', 'height', 'fill_color', 'border_color', 'label'];
+    const updates = [];
+    const values = [];
+    for (const key of allowed) {
+      if (key in req.body) {
+        updates.push(`${key} = ?`);
+        values.push(req.body[key]);
+      }
+    }
+    if (updates.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
+    values.push(req.params.id, req.projectId);
+    await pool.query(`UPDATE topology_shapes SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`, values);
+    const [rows] = await pool.query('SELECT * FROM topology_shapes WHERE id = ?', [req.params.id]);
+    res.json(rows[0] || {});
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/topology/shapes/:id
+router.delete('/shapes/:id', async (req, res, next) => {
+  try {
+    const [result] = await pool.query('DELETE FROM topology_shapes WHERE id = ? AND project_id = ?', [
+      req.params.id,
+      req.projectId,
+    ]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Shape not found' });
     res.status(204).send();
   } catch (err) {
     next(err);

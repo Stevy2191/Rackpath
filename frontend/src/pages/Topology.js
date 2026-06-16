@@ -21,6 +21,7 @@ import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
 import DeviceNode from '../components/DeviceNode';
 import ZoneNode from '../components/topology/ZoneNode';
+import ShapeNode from '../components/topology/ShapeNode';
 import TextLabelNode from '../components/topology/TextLabelNode';
 import ConnectionEdge from '../components/topology/ConnectionEdge';
 import DevicePicker, {
@@ -36,7 +37,7 @@ import TopologyToolbar from '../components/topology/TopologyToolbar';
 import { getLayoutedElements } from '../utils/layout';
 import './Topology.css';
 
-const nodeTypes = { device: DeviceNode, zone: ZoneNode, text: TextLabelNode };
+const nodeTypes = { device: DeviceNode, zone: ZoneNode, shape: ShapeNode, text: TextLabelNode };
 const edgeTypes = { connection: ConnectionEdge };
 
 function buildDeviceNode(node, callbacks) {
@@ -69,7 +70,6 @@ function buildZoneNode(zone, callbacks, vlans) {
     type: 'zone',
     position: { x: zone.x, y: zone.y },
     style: { width: zone.width, height: zone.height },
-    zIndex: -1,
     data: {
       id: zone.id,
       name: zone.name,
@@ -80,6 +80,25 @@ function buildZoneNode(zone, callbacks, vlans) {
       onResizeEnd: callbacks.onZoneResizeEnd,
       onDelete: callbacks.onZoneDelete,
       onUpdate: callbacks.onZoneUpdate,
+    },
+  };
+}
+
+function buildShapeNode(shape, callbacks) {
+  return {
+    id: `shape-${shape.id}`,
+    type: 'shape',
+    position: { x: shape.x, y: shape.y },
+    style: { width: shape.width, height: shape.height },
+    data: {
+      id: shape.id,
+      shape_type: shape.shape_type || 'rect',
+      fill_color: shape.fill_color,
+      border_color: shape.border_color,
+      label: shape.label || null,
+      onResizeEnd: callbacks.onShapeResizeEnd,
+      onDelete: callbacks.onShapeDelete,
+      onUpdate: callbacks.onShapeUpdate,
     },
   };
 }
@@ -148,6 +167,10 @@ function labelIdFromNodeId(nodeId) {
   return Number(nodeId.replace('label-', ''));
 }
 
+function shapeIdFromNodeId(nodeId) {
+  return Number(nodeId.replace('shape-', ''));
+}
+
 // Pick which side of each node an auto-drawn connection should attach to,
 // based on the relative positions of the two nodes' centres.
 function nodeCenter(node) {
@@ -203,6 +226,8 @@ function TopologyCanvas() {
   const [background, setBackground] = useState('dots');
   const [backgroundMenuOpen, setBackgroundMenuOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [shapeType, setShapeType] = useState('rect');
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
 
   const handleDeviceResizeEnd = useCallback(
     (nodeId, params) => {
@@ -306,15 +331,47 @@ function TopologyCanvas() {
     [reactFlowInstance]
   );
 
+  const handleShapeResizeEnd = useCallback((nodeId, params) => {
+    const shapeId = shapeIdFromNodeId(nodeId);
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === nodeId
+          ? {
+              ...n,
+              position: { x: params.x, y: params.y },
+              style: { ...n.style, width: params.width, height: params.height },
+            }
+          : n
+      )
+    );
+    client
+      .patch(`/topology/shapes/${shapeId}`, { x: params.x, y: params.y, width: params.width, height: params.height })
+      .catch((err) => setError(err.message));
+  }, []);
+
+  const handleShapeDelete = useCallback(
+    (nodeId) => {
+      reactFlowInstance.deleteElements({ nodes: [{ id: nodeId }] });
+    },
+    [reactFlowInstance]
+  );
+
+  const handleShapeUpdate = useCallback((nodeId, patch) => {
+    const shapeId = shapeIdFromNodeId(nodeId);
+    setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)));
+    client.patch(`/topology/shapes/${shapeId}`, patch).catch((err) => setError(err.message));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        const [topoRes, edgesRes, zonesRes, labelsRes, pointsRes, unplacedRes, vlansRes] = await Promise.all([
+        const [topoRes, edgesRes, zonesRes, shapesRes, labelsRes, pointsRes, unplacedRes, vlansRes] = await Promise.all([
           client.get('/topology'),
           client.get('/topology/edges'),
           client.get('/topology/zones'),
+          client.get('/topology/shapes'),
           client.get('/topology/labels'),
           client.get('/topology/connection-points'),
           client.get('/devices', { params: { unplaced: true } }),
@@ -335,6 +392,13 @@ function TopologyCanvas() {
             projectVlans
           )
         );
+        const shapeNodes = (shapesRes.data || []).map((shape) =>
+          buildShapeNode(shape, {
+            onShapeResizeEnd: handleShapeResizeEnd,
+            onShapeDelete: handleShapeDelete,
+            onShapeUpdate: handleShapeUpdate,
+          })
+        );
         const labelNodes = (labelsRes.data || []).map((label) =>
           buildTextNode(label, { onLabelChange: handleLabelChange, onLabelDelete: handleLabelDelete })
         );
@@ -345,7 +409,7 @@ function TopologyCanvas() {
         });
         setConnectionPointsByDevice(cpByDevice);
 
-        setNodes([...zoneNodes, ...deviceNodes, ...labelNodes]);
+        setNodes([...zoneNodes, ...shapeNodes, ...deviceNodes, ...labelNodes]);
         setEdges(
           (edgesRes.data || []).map((edge) =>
             buildEdge(edge, true, {
@@ -372,6 +436,9 @@ function TopologyCanvas() {
     handleZoneResizeEnd,
     handleZoneDelete,
     handleZoneUpdate,
+    handleShapeResizeEnd,
+    handleShapeDelete,
+    handleShapeUpdate,
     handleDeviceResizeEnd,
     handleEdgeEdit,
     handleEdgeDelete,
@@ -432,6 +499,9 @@ function TopologyCanvas() {
         } else if (change.id.startsWith('label-')) {
           const labelId = labelIdFromNodeId(change.id);
           client.delete(`/topology/labels/${labelId}`).catch((err) => setError(err.message));
+        } else if (change.id.startsWith('shape-')) {
+          const shapeId = shapeIdFromNodeId(change.id);
+          client.delete(`/topology/shapes/${shapeId}`).catch((err) => setError(err.message));
         }
       });
 
@@ -621,6 +691,10 @@ function TopologyCanvas() {
       client
         .patch(`/topology/labels/${labelIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y })
         .catch((err) => setError(err.message));
+    } else if (node.type === 'shape') {
+      client
+        .patch(`/topology/shapes/${shapeIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y })
+        .catch((err) => setError(err.message));
     }
   }, []);
 
@@ -711,30 +785,61 @@ function TopologyCanvas() {
     [handleZoneResizeEnd, handleZoneDelete, handleZoneUpdate, vlans]
   );
 
+  const addShapeAt = useCallback(
+    async (position, type) => {
+      try {
+        const res = await client.post('/topology/shapes', {
+          shape_type: type || 'rect',
+          x: position.x,
+          y: position.y,
+          width: 160,
+          height: 100,
+        });
+        setNodes((nds) => [
+          ...nds,
+          buildShapeNode(res.data, {
+            onShapeResizeEnd: handleShapeResizeEnd,
+            onShapeDelete: handleShapeDelete,
+            onShapeUpdate: handleShapeUpdate,
+          }),
+        ]);
+      } catch (err) {
+        setError(err.message);
+      }
+    },
+    [handleShapeResizeEnd, handleShapeDelete, handleShapeUpdate]
+  );
+
   const onPaneClick = useCallback(
     (event) => {
       setExportMenuOpen(false);
       setBackgroundMenuOpen(false);
+      setShapeMenuOpen(false);
       setLinkSourceId(null);
 
       if (mode === 'text') {
         addLabelAt(projectFromEvent(event));
         return;
       }
-      if (mode === 'shape') {
+      if (mode === 'zone') {
         addZoneAt(projectFromEvent(event));
+        return;
+      }
+      if (mode === 'shape') {
+        addShapeAt(projectFromEvent(event), shapeType);
         return;
       }
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
     },
-    [mode, addLabelAt, addZoneAt, projectFromEvent]
+    [mode, shapeType, addLabelAt, addZoneAt, addShapeAt, projectFromEvent]
   );
 
   const handleModeChange = useCallback((next) => {
     setMode(next);
     setLinkSourceId(null);
     setBackgroundMenuOpen(false);
+    setShapeMenuOpen(false);
   }, []);
 
   const handleConnectionPointsChange = useCallback((deviceId, points) => {
@@ -851,6 +956,7 @@ function TopologyCanvas() {
     try {
       const deviceNodes = nodes.filter((n) => n.type === 'device');
       const zoneNodes = nodes.filter((n) => n.type === 'zone');
+      const shapeNodes = nodes.filter((n) => n.type === 'shape');
 
       if (deviceNodes.length > 0) {
         await client.patch('/topology/layout', {
@@ -864,16 +970,24 @@ function TopologyCanvas() {
         });
       }
 
-      await Promise.all(
-        zoneNodes.map((n) =>
+      await Promise.all([
+        ...zoneNodes.map((n) =>
           client.patch(`/topology/zones/${zoneIdFromNodeId(n.id)}`, {
             x: n.position.x,
             y: n.position.y,
             width: n.style?.width,
             height: n.style?.height,
           })
-        )
-      );
+        ),
+        ...shapeNodes.map((n) =>
+          client.patch(`/topology/shapes/${shapeIdFromNodeId(n.id)}`, {
+            x: n.position.x,
+            y: n.position.y,
+            width: n.style?.width,
+            height: n.style?.height,
+          })
+        ),
+      ]);
 
       setShowSavedToast(true);
       setTimeout(() => setShowSavedToast(false), 2000);
@@ -1060,6 +1174,10 @@ function TopologyCanvas() {
       <TopologyToolbar
         mode={mode}
         onModeChange={handleModeChange}
+        shapeType={shapeType}
+        onShapeTypeChange={setShapeType}
+        shapeMenuOpen={shapeMenuOpen}
+        onToggleShapeMenu={() => setShapeMenuOpen((o) => !o)}
         calcOpen={calcOpen}
         onToggleCalc={() => setCalcOpen((o) => !o)}
         background={background}
