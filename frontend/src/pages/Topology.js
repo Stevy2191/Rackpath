@@ -1090,6 +1090,7 @@ function TopologyCanvas() {
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
             nodesDraggable={mode === 'select'}
+            elevateNodesOnSelect={false}
             zoomOnDoubleClick={false}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
