@@ -14,11 +14,19 @@ const RACK_TYPES = [
   { value: 'blade-enclosure', label: 'Blade Enclosure' },
 ];
 
+// Resolve the canonical mounted face for a slot, handling legacy front_back/side columns.
+function resolveface(s) {
+  if (s.mounted_face) return s.mounted_face;
+  if (s.front_back === 'back' || s.side === 'back') return 'rear';
+  if (s.side === 'both') return 'both';
+  return 'front';
+}
+
 // Build a U-map from slots visible on a given face.
 // Returns { slotsByTop, covered, occupiedByU }
 function buildUMap(slots, face) {
   const visible = slots.filter((s) => {
-    const mf = s.mounted_face || s.front_back || 'front';
+    const mf = resolveface(s);
     if (face === 'front') return mf === 'front' || mf === 'both';
     return mf === 'rear' || mf === 'both';
   });
@@ -158,7 +166,7 @@ export default function RackEnclosure({
   // Half-depth front devices → show stripe in rear panel at same U rows
   const rearStripes = new Map();
   for (const s of slots) {
-    const mf = s.mounted_face || s.front_back || 'front';
+    const mf = resolveface(s);
     if ((mf === 'front' || mf === 'both') && s.half_depth) {
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {
@@ -170,7 +178,7 @@ export default function RackEnclosure({
   // Half-depth rear devices → show stripe in front panel at same U rows
   const frontStripes = new Map();
   for (const s of slots) {
-    const mf = s.mounted_face || s.front_back || 'front';
+    const mf = resolveface(s);
     if ((mf === 'rear' || mf === 'both') && s.half_depth) {
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {

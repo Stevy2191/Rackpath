@@ -88,8 +88,8 @@ export default function RacksPage() {
   const actions = {
     onSlotCreate: async (payload) => {
       try {
-        await client.post('/rack-slots', payload);
-        loadAllSlots();
+        const res = await client.post('/rack-slots', payload);
+        setAllSlots((cur) => [...cur, res.data]);
       } catch (err) {
         setError(err.response?.data?.error || err.message);
       }

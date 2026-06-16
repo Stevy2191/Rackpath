@@ -30,7 +30,9 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, ac
   };
 
   const toggleFrontBack = () => {
-    actions.onSlotUpdate(slot, { front_back: slot.front_back === 'back' ? 'front' : 'back' });
+    const curFace = slot.mounted_face || (slot.front_back === 'back' || slot.side === 'back' ? 'rear' : 'front');
+    const nextFace = curFace === 'rear' ? 'front' : 'rear';
+    actions.onSlotUpdate(slot, { mounted_face: nextFace });
     onClose();
   };
 
@@ -114,7 +116,7 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, ac
           </li>
           <li>
             <button type="button" onClick={toggleFrontBack}>
-              <ArrowLeftRight size={13} /> Move to {slot.front_back === 'back' ? 'Front' : 'Back'}
+              <ArrowLeftRight size={13} /> Move to {(slot.mounted_face === 'rear' || slot.front_back === 'back' || slot.side === 'back') ? 'Front' : 'Rear'}
             </button>
           </li>
           <li>
