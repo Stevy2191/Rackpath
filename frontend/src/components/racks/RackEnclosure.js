@@ -163,26 +163,30 @@ export default function RackEnclosure({
   const frontMap = buildUMap(slots, 'front');
   const rearMap  = buildUMap(slots, 'rear');
 
-  // Half-depth front devices → show stripe in rear panel at same U rows
+  // Half-depth front devices → show 1U stripe per occupied row in rear panel.
+  // Each entry must be 1U tall so that N occupied rows produce exactly N×uHeight
+  // of visual space — matching the device's own height in the front panel.
+  // (Storing the full slot object here caused each row to render at u_size×uHeight,
+  // creating N² total height instead of N, displacing every device below.)
   const rearStripes = new Map();
   for (const s of slots) {
     const mf = resolveface(s);
     if (mf === 'front' && s.half_depth) {
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {
-        if (!rearMap.covered.has(u)) rearStripes.set(u, s);
+        if (!rearMap.covered.has(u)) rearStripes.set(u, { ...s, u_size: 1 });
       }
     }
   }
 
-  // Half-depth rear devices → show stripe in front panel at same U rows
+  // Half-depth rear devices → show 1U stripe per occupied row in front panel.
   const frontStripes = new Map();
   for (const s of slots) {
     const mf = resolveface(s);
     if (mf === 'rear' && s.half_depth) {
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {
-        if (!frontMap.covered.has(u)) frontStripes.set(u, s);
+        if (!frontMap.covered.has(u)) frontStripes.set(u, { ...s, u_size: 1 });
       }
     }
   }
