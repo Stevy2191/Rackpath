@@ -1,0 +1,2 @@
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS options JSON NULL AFTER scan_profile;
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS snmp_community VARCHAR(100) NULL AFTER options;

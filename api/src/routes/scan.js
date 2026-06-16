@@ -130,8 +130,8 @@ function mapResultRow(row) {
 router.get('/', async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT j.id, j.name, j.target_subnet, j.target_type, j.scan_profile, j.status,
-              j.progress_current, j.progress_total,
+      `SELECT j.id, j.name, j.target_subnet, j.target_type, j.scan_profile, j.options, j.snmp_community,
+              j.status, j.progress_current, j.progress_total,
               j.started_at, j.completed_at, j.created_at, j.updated_at,
               COUNT(r.id) AS host_count
        FROM scan_jobs j
@@ -141,7 +141,7 @@ router.get('/', async (req, res, next) => {
        ORDER BY j.id DESC`,
       [req.projectId]
     );
-    res.json(rows);
+    res.json(rows.map((row) => ({ ...row, options: parseJsonField(row.options, null) })));
   } catch (err) {
     next(err);
   }
@@ -267,9 +267,9 @@ router.post('/', async (req, res, next) => {
       `${target_subnet} - ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`;
 
     const [result] = await pool.query(
-      `INSERT INTO scan_jobs (project_id, name, target_subnet, target_type, scan_profile, snmp_enrichment, status, started_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())`,
-      [req.projectId, scanName, target_subnet, targetType, scanProfile, snmpEnrichment ? 1 : 0]
+      `INSERT INTO scan_jobs (project_id, name, target_subnet, target_type, scan_profile, snmp_enrichment, options, snmp_community, status, started_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+      [req.projectId, scanName, target_subnet, targetType, scanProfile, snmpEnrichment ? 1 : 0, options ? JSON.stringify(options) : null, snmp_community || null]
     );
     const jobId = result.insertId;
 

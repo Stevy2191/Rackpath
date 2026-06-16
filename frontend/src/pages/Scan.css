@@ -24,8 +24,39 @@
   padding-right: 0.75rem;
 }
 
-.scan-history h3 {
-  margin-top: 0;
+.scan-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.scan-history-header h3 {
+  margin: 0;
+}
+
+.scan-rescan-all-btn {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-subtle);
+  color: var(--color-accent);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.scan-rescan-all-btn:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-accent);
+}
+
+.scan-rescan-all-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .scan-history-list {
@@ -66,24 +97,67 @@
   font-size: 0.85rem;
 }
 
-.scan-history button {
-  width: 100%;
+.scan-history-item {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.scan-history-item.rescanning {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+  animation: rescan-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes rescan-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--color-accent); }
+  50% { box-shadow: 0 0 0 2px var(--color-accent), 0 0 8px rgba(37, 99, 235, 0.3); }
+}
+
+.scan-history-select-btn {
+  flex: 1;
+  min-width: 0;
   text-align: left;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   padding: 0.5rem 0.6rem;
-  border: 1px solid var(--color-border);
+  border: none;
   background: var(--color-bg-subtle);
   color: var(--color-text);
-  border-radius: 6px;
   cursor: pointer;
 }
 
-.scan-history button.active {
+.scan-history-select-btn.active {
   background: var(--color-accent);
   color: var(--color-accent-text);
-  border-color: var(--color-accent);
+}
+
+.scan-rescan-btn {
+  flex-shrink: 0;
+  width: 30px;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.scan-rescan-btn:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  color: var(--color-accent);
+}
+
+.scan-rescan-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .scan-history-name {
@@ -473,4 +547,27 @@
 .scan-import-message {
   font-size: 0.8rem;
   color: var(--color-text-muted);
+}
+
+/* --- Toast notification ------------------------------------------------- */
+.scan-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.6rem 1.25rem;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+  z-index: 200;
+  animation: toast-in 0.2s ease;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }

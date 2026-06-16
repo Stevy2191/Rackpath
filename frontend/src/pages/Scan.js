@@ -216,6 +216,9 @@ export default function ScanPage() {
   const [profile, setProfile] = useState('standard');
   const [custom, setCustom] = useState(DEFAULT_CUSTOM);
   const [clearing, setClearing] = useState(false);
+  const [rescanningIds, setRescanningIds] = useState(new Set());
+  const [rescanAllRunning, setRescanAllRunning] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // SNMP enrichment: which credential macros are available for this project,
   // and whether to run enrichment during the scan (default on when macros exist).
@@ -224,6 +227,7 @@ export default function ScanPage() {
   const [snmpEnrichment, setSnmpEnrichment] = useState(true);
 
   const esRef = useRef(null);
+  const rescanStreamsRef = useRef(new Map());
 
   useEffect(() => {
     if (!currentProjectId) return undefined;
@@ -380,6 +384,15 @@ export default function ScanPage() {
 
   useEffect(() => closeStream, [closeStream]);
 
+  // Close any open rescan SSE streams on unmount.
+  useEffect(() => {
+    const streams = rescanStreamsRef.current;
+    return () => {
+      streams.forEach((es) => es.close());
+      streams.clear();
+    };
+  }, []);
+
   const handleSelectJob = (job) => {
     setActiveJob(job);
     setStatus(job.status);
@@ -421,6 +434,80 @@ export default function ScanPage() {
       setError(err.response?.data?.error || err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Immediately start a new scan for a history job using the same settings.
+  // Returns a Promise that resolves when the new scan completes so that
+  // handleRescanAll can await each one in sequence.
+  const handleRescan = async (job) => {
+    if (rescanningIds.has(job.id)) return;
+
+    const opts =
+      job.options != null
+        ? job.options
+        : {
+            profile: job.scan_profile || 'standard',
+            target_type: job.target_type || 'subnet',
+            ...(PROFILE_PRESETS[job.scan_profile] || PROFILE_PRESETS.standard),
+          };
+
+    setRescanningIds((prev) => new Set([...prev, job.id]));
+
+    try {
+      const res = await client.post('/scans', {
+        target_subnet: job.target_subnet,
+        name: job.name,
+        snmp_community: job.snmp_community || undefined,
+        options: opts,
+      });
+      const newJobId = res.data.id;
+      loadJobs();
+
+      await new Promise((resolve) => {
+        const url = `${API_BASE}/scans/${newJobId}/stream`;
+        const es = new EventSource(url, { withCredentials: true });
+        rescanStreamsRef.current.set(job.id, es);
+
+        const finish = () => {
+          es.close();
+          rescanStreamsRef.current.delete(job.id);
+          setRescanningIds((prev) => {
+            const next = new Set(prev);
+            next.delete(job.id);
+            return next;
+          });
+          loadJobs();
+          resolve();
+        };
+
+        es.addEventListener('scan_complete', finish);
+        es.onerror = () => {
+          if (es.readyState === EventSource.CLOSED) finish();
+        };
+      });
+    } catch (err) {
+      setRescanningIds((prev) => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleRescanAll = async () => {
+    if (rescanAllRunning || jobs.length === 0) return;
+    setRescanAllRunning(true);
+    try {
+      for (const job of jobs) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleRescan(job);
+      }
+    } finally {
+      setRescanAllRunning(false);
+      setToast('All subnets rescanned');
+      setTimeout(() => setToast(null), 4000);
     }
   };
 
@@ -601,20 +688,45 @@ export default function ScanPage() {
 
       <div className="scan-layout">
         <aside className="scan-history">
-          <h3>Scan History</h3>
+          <div className="scan-history-header">
+            <h3>Scan History</h3>
+            <button
+              type="button"
+              className="scan-rescan-all-btn"
+              onClick={handleRescanAll}
+              disabled={rescanAllRunning || jobs.length === 0}
+              title="Rescan all subnets sequentially"
+            >
+              {rescanAllRunning ? '↻ Running…' : '↻ Rescan All'}
+            </button>
+          </div>
           <ul className="scan-history-list">
             {jobs.map((job) => (
               <li key={job.id}>
-                <button
-                  className={activeJob?.id === job.id ? 'active' : ''}
-                  onClick={() => handleSelectJob(job)}
-                >
-                  <span className="scan-history-name">{job.name || job.target_subnet}</span>
-                  <span className="scan-history-meta">
-                    {job.target_subnet} · {job.status} · {job.host_count ?? 0} hosts
-                  </span>
-                  <span className="scan-history-date">{formatDate(job.created_at)}</span>
-                </button>
+                <div className={`scan-history-item${rescanningIds.has(job.id) ? ' rescanning' : ''}`}>
+                  <button
+                    className={`scan-history-select-btn${activeJob?.id === job.id ? ' active' : ''}`}
+                    onClick={() => handleSelectJob(job)}
+                  >
+                    <span className="scan-history-name">{job.name || job.target_subnet}</span>
+                    <span className="scan-history-meta">
+                      {job.target_subnet} · {job.status} · {job.host_count ?? 0} hosts
+                    </span>
+                    <span className="scan-history-date">{formatDate(job.created_at)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="scan-rescan-btn"
+                    title="Rescan this subnet"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRescan(job);
+                    }}
+                    disabled={rescanningIds.has(job.id) || rescanAllRunning}
+                  >
+                    ↻
+                  </button>
+                </div>
               </li>
             ))}
             {jobs.length === 0 && <li className="scan-history-empty">No scans yet.</li>}
@@ -967,6 +1079,7 @@ export default function ScanPage() {
           )}
         </section>
       </div>
+      {toast && <div className="scan-toast">{toast}</div>}
     </div>
   );
 }
