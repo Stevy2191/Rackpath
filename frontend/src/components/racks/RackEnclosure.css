@@ -1,8 +1,30 @@
+/* Grid layout: header (badge+form) and body (rack frame) share the left
+   column so they are exactly the same width. The right column holds the
+   device name labels. The "." empty cell in the header row keeps the header
+   row height aligned so labels start at the top of the body row. */
 .rack-enclosure {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   flex-shrink: 0;
   width: 600px;
+  grid-template-columns: 1fr 200px;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 0.5rem;
+  grid-template-areas:
+    'header .'
+    'body   labels';
+  align-items: start;
+}
+
+/* Sticky header wrapper — sticks to the top of .rack-canvas (overflow:auto)
+   while scrolling through a tall rack. Solid background prevents content
+   bleed-through. */
+.rack-header {
+  grid-area: header;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  cursor: pointer;
 }
 
 .rack-badge {
@@ -10,16 +32,11 @@
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 0.75rem;
-  margin-bottom: 0.5rem;
   background: linear-gradient(180deg, #2a2d35 0%, #1a1c22 100%);
   border: 1px solid #3a3f4a;
   border-radius: 6px;
-  cursor: pointer;
   color: #e8ebf0;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
-  position: sticky;
-  top: 0;
-  z-index: 2;
 }
 
 .rack-badge-name {
@@ -105,7 +122,7 @@
   flex-wrap: wrap;
   gap: 0.4rem;
   padding: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-top: 0.5rem;
   background: #1a1c22;
   border: 1px solid #3a3f4a;
   border-radius: 6px;
@@ -138,15 +155,8 @@
 }
 
 /* --- Frame / enclosure ----------------------------------------------------- */
-.rack-body-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
 .rack-frame {
-  flex: 1;
-  min-width: 0;
+  grid-area: body;
   position: relative;
   background: linear-gradient(135deg, #2c2f36 0%, #1a1c22 50%, #15161b 100%);
   border: 2px solid #060708;
@@ -155,17 +165,18 @@
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 30px rgba(74, 222, 222, 0.04);
   transition: box-shadow 0.2s ease;
+  cursor: pointer;
 }
 
 /* --- Device labels (outside the rack) --------------------------------------- */
 .rack-labels {
-  flex-shrink: 0;
+  grid-area: labels;
   width: 200px;
   display: flex;
   flex-direction: column;
   /* Aligns label rows with .rack-body rows: offsets the frame's
      border + padding + top/bottom blanking panel (2 + 6 + 14 + 4 = 26px). */
-  margin: 26px 0;
+  margin-top: 26px;
 }
 
 .rack-label {
