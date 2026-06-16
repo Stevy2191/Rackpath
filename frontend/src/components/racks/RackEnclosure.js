@@ -82,7 +82,7 @@ function RackPanel({
             if (slot) {
               return (
                 <DeviceBlock
-                  key={slot.id}
+                  key={`slot-${slot.id}`}
                   slot={slot}
                   side={face}
                   uHeight={uHeight}
@@ -116,7 +116,7 @@ function RackPanel({
             const band = Math.floor((u - 1) / 5) % 2;
             return (
               <RackUnitSlot
-                key={u}
+                key={`unit-${u}`}
                 u={u}
                 band={band}
                 draggingMeta={draggingMeta}

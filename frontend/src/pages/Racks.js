@@ -41,11 +41,7 @@ export default function RacksPage() {
   }, []);
 
   const loadAllSlots = useCallback(() => {
-    client.get('/rack-slots').then((res) => {
-      // DEBUG: remove after confirming duplicate-free
-      console.log('[slots] loadAllSlots replacing state, count:', res.data.length);
-      setAllSlots(res.data);
-    }).catch((err) => setError(err.message));
+    client.get('/rack-slots').then((res) => setAllSlots(res.data)).catch((err) => setError(err.message));
   }, []);
 
   const loadCustomDevices = useCallback(() => {
@@ -93,24 +89,14 @@ export default function RacksPage() {
     onSlotCreate: async (payload) => {
       try {
         const res = await client.post('/rack-slots', payload);
-        setAllSlots((cur) => {
-          // DEBUG: remove after confirming duplicate-free
-          console.log('[slots] onSlotCreate APPENDING id:', res.data.id, 'before count:', cur.length);
-          const next = [...cur, res.data];
-          console.log('[slots] onSlotCreate AFTER count:', next.length);
-          return next;
-        });
+        setAllSlots((cur) => [...cur, res.data]);
       } catch (err) {
         setError(err.response?.data?.error || err.message);
       }
     },
     onSlotUpdate: async (slot, changes) => {
       const previous = allSlots;
-      setAllSlots((cur) => {
-        // DEBUG: remove after confirming duplicate-free
-        console.log('[slots] onSlotUpdate REPLACING id:', slot.id, 'before count:', cur.length);
-        return cur.map((s) => (s.id === slot.id ? { ...s, ...changes } : s));
-      });
+      setAllSlots((cur) => cur.map((s) => (s.id === slot.id ? { ...s, ...changes } : s)));
       try {
         await client.put(`/rack-slots/${slot.id}`, {
           rack_id: slot.rack_id,
@@ -176,13 +162,7 @@ export default function RacksPage() {
   };
 
   const handleSlotUpdatedFromPanel = (updatedSlot) => {
-    setAllSlots((cur) => {
-      // DEBUG: remove after confirming duplicate-free
-      console.log('[slots] handleSlotUpdatedFromPanel REPLACING id:', updatedSlot.id, 'before count:', cur.length, 'ids:', cur.map((s) => s.id));
-      const next = cur.map((s) => (s.id === updatedSlot.id ? updatedSlot : s));
-      console.log('[slots] handleSlotUpdatedFromPanel AFTER count:', next.length);
-      return next;
-    });
+    setAllSlots((cur) => cur.map((s) => (s.id === updatedSlot.id ? updatedSlot : s)));
   };
 
   const handleSelectSlot = (slotId) => {
