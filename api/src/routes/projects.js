@@ -6,28 +6,42 @@ const router = express.Router();
 
 const DEFAULT_PROJECT_ID = 1;
 
-// Tables that hold project-scoped data, deleted (child-first) when a project
-// is removed. This works regardless of whether the project_id ON DELETE
-// CASCADE foreign keys are present in a given deployment.
+// Tables that hold project-scoped data, deleted child-first when a project
+// is removed. Order matters: each table must come before any table it FKs into.
+// This explicit sweep is a safety net for deployments where ON DELETE CASCADE
+// wasn't applied retroactively on older schema versions.
 const SCOPED_TABLES = [
+  // Children of topology_nodes / devices
+  'topology_connection_points',
+  'topology_node_interfaces',
   'topology_edges',
   'topology_nodes',
   'topology_zones',
   'topology_shapes',
+  'topology_labels',
   'topology_layout',
+  // Children of scan_jobs
+  'scan_results',
+  'scan_jobs',
+  // Children of project_integrations
+  'integration_sync_log',
+  'project_integrations',
+  // Children of project_cameras / device_tags
+  'camera_tag_assignments',
+  'project_cameras',
+  // Children of devices / device_tags
+  'device_tag_assignments',
+  'device_tags',
+  'project_access_devices',
+  // Children of racks
   'rack_slots',
   'rack_custom_devices',
-  'ports',
-  'scan_jobs',
   'racks',
-  'device_tags',
+  // Remaining project-scoped tables
   'project_credential_macros',
-  'project_cameras',
-  'project_access_devices',
-  'devices',
   'project_vlans',
-  'project_integrations',
   'project_activity_log',
+  'devices',
 ];
 
 // GET /api/projects - list all projects
@@ -307,9 +321,10 @@ router.get('/:id/activity', async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 25, 100);
     const [rows] = await pool.query(
-      `SELECT pal.id, pal.action, pal.details, pal.created_at, u.username
+      `SELECT pal.id, pal.action, pal.details, pal.created_at,
+              COALESCE(u.username, '[deleted]') AS username
        FROM project_activity_log pal
-       JOIN users u ON u.id = pal.user_id
+       LEFT JOIN users u ON u.id = pal.user_id
        WHERE pal.project_id = ?
        ORDER BY pal.created_at DESC
        LIMIT ?`,

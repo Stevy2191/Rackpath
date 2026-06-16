@@ -115,6 +115,21 @@ export function ProjectProvider({ children }) {
     [refreshProjects]
   );
 
+  // Remove a project from local state without an API call — used when a page
+  // detects that the project no longer exists in the DB (404).
+  const removeProject = useCallback((id) => {
+    setProjects((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      setCurrentProjectId((curr) => {
+        if (curr !== id) return curr;
+        const fallback = next[0]?.id ?? DEFAULT_PROJECT_ID;
+        persistId(fallback);
+        return fallback;
+      });
+      return next;
+    });
+  }, []);
+
   const currentProject =
     projects.find((p) => p.id === currentProjectId) || null;
 
@@ -129,6 +144,7 @@ export function ProjectProvider({ children }) {
         createProject,
         updateProject,
         deleteProject,
+        removeProject,
         refreshProjects,
       }}
     >

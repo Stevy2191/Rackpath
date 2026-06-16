@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Server,
   Link2,
@@ -297,7 +297,8 @@ function buildPdf(project, overview, activity) {
 
 export default function DashboardPage() {
   const { id } = useParams();
-  const { currentProjectId, currentProject, switchProject } = useProject();
+  const { currentProjectId, currentProject, switchProject, removeProject } = useProject();
+  const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [activity, setActivity] = useState([]);
   const [expanded, setExpanded] = useState({});
@@ -328,7 +329,15 @@ export default function DashboardPage() {
         setActivity(activityRes.data || []);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.response?.data?.error || err.message);
+        if (cancelled) return;
+        if (err.response?.status === 404) {
+          // Project doesn't exist in the DB — remove it from the switcher
+          // and send the user to the project selector.
+          removeProject(Number(projectId));
+          navigate('/projects', { replace: true });
+          return;
+        }
+        setError(err.response?.data?.error || err.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -336,7 +345,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, navigate, removeProject]);
 
   const toggleWarning = (key) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
