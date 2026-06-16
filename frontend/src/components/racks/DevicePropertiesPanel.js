@@ -15,7 +15,7 @@ const COLOR_SWATCHES = [
   null, // null = clear
 ];
 
-export default function DevicePropertiesPanel({ slot, rackHeight, onClose, onUpdated }) {
+export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onClose, onUpdated }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -65,10 +65,69 @@ export default function DevicePropertiesPanel({ slot, rackHeight, onClose, onUpd
   };
 
   const adjustUSize = (delta) => {
-    const next = Math.max(1, Math.min(fields.u_size + delta, rackHeight - slot.u_position + 1));
-    if (next === fields.u_size) return;
-    setFields((f) => ({ ...f, u_size: next }));
-    patch({ u_size: next });
+    const curSize = fields.u_size;
+    const newSize = curSize + delta;
+    if (newSize < 1) return;
+
+    const curBottom = fields.u_position;        // lowest U number occupied
+    const curTop    = curBottom + curSize - 1;  // highest U number occupied
+
+    if (delta < 0) {
+      // Shrink: keep the top (highest U) fixed, raise the bottom
+      const newBottom = curTop - newSize + 1;
+      if (newBottom < 1) return;
+      setFields((f) => ({ ...f, u_size: newSize, u_position: newBottom }));
+      patch({ u_size: newSize, u_position: newBottom });
+      return;
+    }
+
+    // Expanding: build the set of U positions occupied by other slots on the same face
+    const myFace = slot.mounted_face
+      || ((slot.front_back === 'back' || slot.side === 'back') ? 'rear' : slot.side === 'both' ? 'both' : 'front');
+
+    const occupied = new Set();
+    for (const s of (rackSlots || [])) {
+      if (s.id === slot.id) continue;
+      const sFace = s.mounted_face
+        || ((s.front_back === 'back' || s.side === 'back') ? 'rear' : s.side === 'both' ? 'both' : 'front');
+      // Skip slots on a non-overlapping face
+      if (myFace !== 'both' && sFace !== 'both' && myFace !== sFace) continue;
+      const sTop = s.u_position + s.u_size - 1;
+      for (let u = s.u_position; u <= sTop; u++) occupied.add(u);
+    }
+
+    // Count contiguous free space above (higher U numbers = visually higher in rack)
+    let spaceAbove = 0;
+    for (let u = curTop + 1; u <= rackHeight; u++) {
+      if (occupied.has(u)) break;
+      spaceAbove++;
+    }
+
+    // Count contiguous free space below (lower U numbers = visually lower in rack)
+    let spaceBelow = 0;
+    for (let u = curBottom - 1; u >= 1; u--) {
+      if (occupied.has(u)) break;
+      spaceBelow++;
+    }
+
+    if (spaceAbove >= delta) {
+      // Expand upward: bottom stays, top rises
+      setFields((f) => ({ ...f, u_size: newSize }));
+      patch({ u_size: newSize });
+    } else if (spaceBelow >= delta) {
+      // Expand downward: top stays, bottom drops
+      const newBottom = curBottom - delta;
+      setFields((f) => ({ ...f, u_size: newSize, u_position: newBottom }));
+      patch({ u_size: newSize, u_position: newBottom });
+    } else if (spaceAbove + spaceBelow >= delta) {
+      // Use all space above, take the remainder from below
+      const fromBelow = delta - spaceAbove;
+      const newBottom = curBottom - fromBelow;
+      setFields((f) => ({ ...f, u_size: newSize, u_position: newBottom }));
+      patch({ u_size: newSize, u_position: newBottom });
+    } else {
+      setError('Not enough adjacent space to resize — free up nearby slots first');
+    }
   };
 
   const adjustPosition = (delta) => {

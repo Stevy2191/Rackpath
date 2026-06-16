@@ -256,6 +256,37 @@ router.patch('/:id', async (req, res, next) => {
       updates.front_back = legacy.front_back;
     }
 
+    // Collision check when position or size changes
+    if ('u_position' in updates || 'u_size' in updates) {
+      const [[cur]] = await pool.query(
+        'SELECT rack_id, u_position, u_size, side FROM rack_slots WHERE id = ? AND project_id = ?',
+        [req.params.id, req.projectId]
+      );
+      if (!cur) return res.status(404).json({ error: 'Rack slot not found' });
+
+      const newPos  = 'u_position' in updates ? Number(updates.u_position) : cur.u_position;
+      const newSize = 'u_size'     in updates ? Number(updates.u_size)     : cur.u_size;
+      const checkSide = updates.side || cur.side;
+
+      if (newPos < 1 || newSize < 1) {
+        return res.status(400).json({ error: 'Position and size must be at least 1' });
+      }
+
+      const [[rack]] = await pool.query(
+        'SELECT u_height FROM racks WHERE id = ? AND project_id = ?',
+        [cur.rack_id, req.projectId]
+      );
+      if (!rack) return res.status(404).json({ error: 'Rack not found' });
+      if (newPos + newSize - 1 > rack.u_height) {
+        return res.status(400).json({ error: 'Slot extends beyond rack height' });
+      }
+
+      const collision = await findCollision(cur.rack_id, req.projectId, newPos, newSize, checkSide, req.params.id);
+      if (collision) {
+        return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
+      }
+    }
+
     const setClauses = Object.keys(updates).map((k) => `${k} = ?`).join(', ');
     const values = [...Object.values(updates), req.params.id, req.projectId];
     const [result] = await pool.query(

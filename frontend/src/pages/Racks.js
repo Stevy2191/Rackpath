@@ -230,6 +230,7 @@ export default function RacksPage() {
           <DevicePropertiesPanel
             slot={selectedSlot}
             rackHeight={selectedSlotRack?.u_height || 42}
+            rackSlots={allSlots.filter((s) => s.rack_id === selectedSlot.rack_id)}
             onClose={() => setSelectedSlotId(null)}
             onUpdated={handleSlotUpdatedFromPanel}
           />
