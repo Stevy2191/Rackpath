@@ -44,7 +44,7 @@ export default function DeviceFacePlate({ slot, side }) {
   return (
     <div className="rf-face rf-flat-face" style={{ background: bgColor }}>
       <div className="rf-flat-icon">
-        <Icon size={11} color="rgba(255,255,255,0.55)" />
+        <Icon size={11} color="rgba(255,255,255,0.75)" />
       </div>
       <span className="rf-flat-name">{name}</span>
     </div>

@@ -2,10 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Share2, MoreVertical } from 'lucide-react';
 import DeviceFacePlate from './DeviceFacePlate';
-import { VENDOR_COLORS } from './rackCatalog';
 import './DeviceBlock.css';
-
-const STATUS_LED_CLASS = { up: 'led-online', down: 'led-offline' };
 
 export function getDeviceLabel(slot) {
   const isDevice = slot.item_type === 'device';
@@ -28,11 +25,7 @@ export default function DeviceBlock({
   const tooltipTimer = useRef(null);
   const [tooltip, setTooltip] = useState(false);
 
-  const ledClass = STATUS_LED_CLASS[slot.device_status] || 'led-unknown';
-  const vendorColor = VENDOR_COLORS[slot.vendor] || '#555';
-  const badgeText = (slot.vendor || slot.device_type || slot.custom_type || '?').slice(0, 3).toUpperCase();
   const { name } = getDeviceLabel(slot);
-
   const isHalfDepthStripe = slot.halfDepthStripe;
 
   const handleMouseEnter = () => {
@@ -83,13 +76,7 @@ export default function DeviceBlock({
       data-slot-id={slot.id}
       data-device-id={slot.device_id || ''}
     >
-      <div className="device-block-vendor-badge" style={{ background: vendorColor }} title={slot.vendor || ''}>
-        {badgeText}
-      </div>
-
       <DeviceFacePlate slot={slot} side={side} />
-
-      <span className={`device-block-led ${ledClass}`} title={slot.device_status || 'unknown'} />
 
       <div className="device-block-actions">
         {slot.device_id && (

@@ -2,18 +2,18 @@
 // Rendering logic lives in DeviceFacePlate.js (flat block + icon + name).
 
 export const CATEGORY_CONFIG = {
-  switch:           '#1a5276',
-  firewall:         '#7b241c',
-  server:           '#1f4e79',
-  storage:          '#145a32',
-  ups:              '#6e4f02',
-  pdu:              '#2c3e50',
-  'patch-panel':    '#212121',
-  'cable-manager':  '#3b1f5a',
-  blank:            '#1c1c1c',
-  kvm:              '#4a235a',
-  ap:               '#0a3d2d',
-  other:            '#1e2a3a',
+  switch:           '#2563EB',
+  firewall:         '#E63946',
+  server:           '#0284C7',
+  storage:          '#16A34A',
+  ups:              '#EA580C',
+  pdu:              '#D97706',
+  'patch-panel':    '#7C3AED',
+  'cable-manager':  '#6D28D9',
+  blank:            '#374151',
+  kvm:              '#0891B2',
+  ap:               '#059669',
+  other:            '#0D9488',
 };
 
 const KEYWORD_RULES = [
