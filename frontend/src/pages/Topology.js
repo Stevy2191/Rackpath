@@ -582,6 +582,7 @@ function TopologyCanvas() {
         setError(err.message);
       } finally {
         setPendingConnection(null);
+        setMode('select');
       }
     },
     [pendingConnection, showEdgeLabels, edgeCallbacks]
@@ -751,6 +752,7 @@ function TopologyCanvas() {
           ...nds,
           buildTextNode(res.data, { onLabelChange: handleLabelChange, onLabelDelete: handleLabelDelete }),
         ]);
+        setMode('select');
       } catch (err) {
         setError(err.message);
       }
@@ -778,6 +780,7 @@ function TopologyCanvas() {
           ),
           ...nds,
         ]);
+        setMode('select');
       } catch (err) {
         setError(err.message);
       }
@@ -803,6 +806,7 @@ function TopologyCanvas() {
             onShapeUpdate: handleShapeUpdate,
           }),
         ]);
+        setMode('select');
       } catch (err) {
         setError(err.message);
       }
@@ -829,6 +833,7 @@ function TopologyCanvas() {
         addShapeAt(projectFromEvent(event), shapeType);
         return;
       }
+      if (mode === 'link') setMode('select');
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
     },
@@ -841,6 +846,14 @@ function TopologyCanvas() {
     setBackgroundMenuOpen(false);
     setShapeMenuOpen(false);
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' && mode !== 'select') handleModeChange('select');
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [mode, handleModeChange]);
 
   const handleConnectionPointsChange = useCallback((deviceId, points) => {
     setConnectionPointsByDevice((prev) => ({ ...prev, [deviceId]: points }));
@@ -1288,7 +1301,7 @@ function TopologyCanvas() {
           sourceDevice={pendingConnection.sourceDevice}
           targetDevice={pendingConnection.targetDevice}
           onSubmit={handleConnectionSubmit}
-          onCancel={() => setPendingConnection(null)}
+          onCancel={() => { setPendingConnection(null); setMode('select'); }}
         />
       )}
 
