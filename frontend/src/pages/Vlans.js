@@ -241,20 +241,15 @@ export default function VlansPage() {
                 <td>{vlan.description}</td>
                 <td>{vlan.subnet}</td>
                 <td>
-                  <div className="vlans-color-cell">
-                    <label className="vlans-color-swatch-label" title="Click to change color">
-                      <span className="vlans-color-swatch" style={{ background: vlan.color }} />
-                      <input
-                        type="color"
-                        className="vlans-color-hidden-input"
-                        value={vlan.color}
-                        onChange={(e) => handleColorChange(vlan.id, e.target.value)}
-                      />
-                    </label>
-                    <span className={`vlans-badge ${vlan.user_modified_color ? 'vlans-badge-custom' : 'vlans-badge-auto'}`}>
-                      {vlan.user_modified_color ? 'Custom' : 'Auto'}
-                    </span>
-                  </div>
+                  <label className="vlans-color-swatch-label" title="Click to change color">
+                    <span className="vlans-color-swatch" style={{ background: vlan.color }} />
+                    <input
+                      type="color"
+                      className="vlans-color-hidden-input"
+                      value={vlan.color}
+                      onChange={(e) => handleColorChange(vlan.id, e.target.value)}
+                    />
+                  </label>
                 </td>
                 <td className="vlans-actions">
                   <button
