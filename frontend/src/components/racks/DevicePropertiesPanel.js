@@ -41,9 +41,13 @@ export default function DevicePropertiesPanel({ slot, rackHeight, onClose, onUpd
   if (!slot || !fields) return null;
 
   const patch = async (changes) => {
+    // DEBUG: remove after confirming duplicate-free
+    console.log('[panel] patch firing for slot.id:', slot.id, 'changes:', changes);
     setSaving(true);
     try {
       const updated = await client.patch(`/rack-slots/${slot.id}`, changes);
+      // DEBUG: remove after confirming duplicate-free
+      console.log('[panel] patch response for slot.id:', slot.id, 'returned.id:', updated.data?.id);
       onUpdated(updated.data);
       setError(null);
     } catch (err) {
