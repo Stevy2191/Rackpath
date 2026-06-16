@@ -33,7 +33,6 @@ export default function DeviceBlock({
   const badgeText = (slot.vendor || slot.device_type || slot.custom_type || '?').slice(0, 3).toUpperCase();
   const { name } = getDeviceLabel(slot);
 
-  // Half-depth front device → show a diagonal stripe indicator in the rear panel
   const isHalfDepthStripe = slot.halfDepthStripe;
 
   const handleMouseEnter = () => {
@@ -54,21 +53,15 @@ export default function DeviceBlock({
 
   const blockHeight = `${slot.u_size * (uHeight || 40)}px`;
 
-  // Half-depth stripe (shown in the opposite panel to indicate occupied half-depth space)
   if (isHalfDepthStripe) {
     return (
       <div
         className="device-block device-block-halfdepth-stripe"
         style={{ height: blockHeight }}
         title="Half-depth device on opposite face"
-      >
-        <span className="device-block-stripe-label">½</span>
-      </div>
+      />
     );
   }
-
-  // Color overlay from slot.color
-  const colorStyle = slot.color ? { '--slot-color': slot.color } : {};
 
   return (
     <div
@@ -77,7 +70,7 @@ export default function DeviceBlock({
         highlighted ? 'device-block-highlighted' : '',
         isSelected ? 'device-block-selected' : '',
       ].filter(Boolean).join(' ')}
-      style={{ height: blockHeight, ...colorStyle }}
+      style={{ height: blockHeight }}
       draggable
       onDragStart={handleDragStart}
       onDragEnd={() => setDraggingMeta(null)}
@@ -90,18 +83,11 @@ export default function DeviceBlock({
       data-slot-id={slot.id}
       data-device-id={slot.device_id || ''}
     >
-      {/* Vendor color badge */}
       <div className="device-block-vendor-badge" style={{ background: vendorColor }} title={slot.vendor || ''}>
         {badgeText}
       </div>
 
-      {/* Color tint overlay */}
-      {slot.color && <div className="device-block-color-overlay" />}
-
       <DeviceFacePlate slot={slot} side={side} />
-
-      {/* Half-depth indicator on the faceplate itself */}
-      {slot.half_depth ? <span className="device-block-halfdepth-badge" title="Half-depth">½</span> : null}
 
       <span className={`device-block-led ${ledClass}`} title={slot.device_status || 'unknown'} />
 
@@ -132,7 +118,6 @@ export default function DeviceBlock({
         </button>
       </div>
 
-      {/* Hover tooltip */}
       {tooltip && (
         <div className="device-block-tooltip">
           <strong>{name}</strong>

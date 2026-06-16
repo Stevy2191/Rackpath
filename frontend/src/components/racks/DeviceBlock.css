@@ -48,52 +48,26 @@
   border-right: 1px solid rgba(0, 0, 0, 0.35);
 }
 
-/* Color tint overlay */
-.device-block-color-overlay {
-  position: absolute;
-  inset: 0;
-  background: var(--slot-color, transparent);
-  opacity: 0.18;
-  pointer-events: none;
-}
-
-/* Half-depth badge pill on faceplate */
-.device-block-halfdepth-badge {
-  position: absolute;
-  top: 3px;
-  left: 26px;
-  font-size: 8px;
-  font-weight: 700;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 3px;
-  padding: 0 3px;
-  line-height: 1.4;
-  pointer-events: none;
-}
-
-/* Half-depth stripe placeholder in opposite panel */
+/* Half-depth crosshatch — shown in opposite panel only, no text */
 .device-block-halfdepth-stripe {
-  background: repeating-linear-gradient(
-    -45deg,
-    rgba(239, 68, 68, 0.08) 0px,
-    rgba(239, 68, 68, 0.08) 4px,
-    transparent 4px,
-    transparent 10px
-  );
-  border: 1px dashed rgba(239, 68, 68, 0.3);
+  background-color: rgba(55, 6, 6, 0.95);
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(185, 28, 28, 0.65) 0px,
+      rgba(185, 28, 28, 0.65) 2px,
+      transparent 2px,
+      transparent 10px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(185, 28, 28, 0.65) 0px,
+      rgba(185, 28, 28, 0.65) 2px,
+      transparent 2px,
+      transparent 10px
+    );
+  border: 1px solid rgba(185, 28, 28, 0.45);
   cursor: default;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding-left: 6px;
-}
-
-.device-block-stripe-label {
-  font-size: 9px;
-  font-weight: 700;
-  color: rgba(239, 68, 68, 0.5);
 }
 
 /* Status LED */

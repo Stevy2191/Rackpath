@@ -167,7 +167,7 @@ export default function RackEnclosure({
   const rearStripes = new Map();
   for (const s of slots) {
     const mf = resolveface(s);
-    if ((mf === 'front' || mf === 'both') && s.half_depth) {
+    if (mf === 'front' && s.half_depth) {
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {
         if (!rearMap.covered.has(u)) rearStripes.set(u, s);
@@ -179,7 +179,7 @@ export default function RackEnclosure({
   const frontStripes = new Map();
   for (const s of slots) {
     const mf = resolveface(s);
-    if ((mf === 'rear' || mf === 'both') && s.half_depth) {
+    if (mf === 'rear' && s.half_depth) {
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {
         if (!frontMap.covered.has(u)) frontStripes.set(u, s);

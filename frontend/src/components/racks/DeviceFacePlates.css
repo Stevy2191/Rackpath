@@ -1,6 +1,4 @@
-/* Faceplate graphics for rack device blocks. Each device-type wrapper class
-   (.rf-switch, .rf-server, etc.) sets a background gradient; the inner
-   front()/back() markup renders ports, drive bays, LEDs, etc. on top. */
+/* Flat faceplate styles. Image-backed and flat colored block variants only. */
 
 .rf-face {
   flex: 1 1 auto;
@@ -8,18 +6,14 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   overflow: hidden;
   position: relative;
-  padding: 0 8px;
   box-sizing: border-box;
-  gap: 6px;
 }
 
-/* --- Image-backed custom devices ---------------------------------------- */
+/* Image-backed custom devices */
 .rf-image-face {
   padding: 0;
-  justify-content: stretch;
 }
 
 .rf-image-face img {
@@ -29,449 +23,32 @@
   display: block;
 }
 
-/* --- Shared primitives ---------------------------------------------------- */
-.rf-port-grid {
-  display: grid;
-  gap: 2px;
-  align-content: center;
-  max-width: 70%;
-}
-
-.rf-port {
-  width: 4px;
-  height: 4px;
-  background: #3a4250;
-  border-radius: 1px;
-}
-
-.rf-port-link {
-  background: #34d976;
-  box-shadow: 0 0 2px #34d976;
-}
-
-.rf-vents {
+/* Flat colored block */
+.rf-flat-face {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 36px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  width: 100%;
 }
 
-.rf-vent-line {
-  height: 2px;
-  border-radius: 1px;
-  background: rgba(0, 0, 0, 0.45);
-}
-
-.rf-power-input {
-  width: 12px;
-  height: 12px;
-  border: 1px solid #000;
-  border-radius: 2px;
-  background: #15171c;
+.rf-flat-icon {
   flex-shrink: 0;
-}
-
-.rf-status-leds {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-.rf-status-led {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #3a3a3a;
-}
-
-.rf-status-led-on {
-  background: #34d976;
-  box-shadow: 0 0 3px #34d976;
-}
-
-.rf-lcd {
-  width: 28px;
-  height: 14px;
-  border-radius: 2px;
-  background: #0c1a12;
-  border: 1px solid #1f2c22;
-  box-shadow: inset 0 0 4px rgba(52, 217, 118, 0.35);
-  flex-shrink: 0;
-}
-
-/* --- Switch ---------------------------------------------------------------- */
-.rf-switch {
-  background: linear-gradient(180deg, #2d3b4f 0%, #1a232f 100%);
-}
-
-.rf-switch-front,
-.rf-switch-back {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
-  height: 100%;
+  line-height: 0;
 }
 
-/* --- Firewall / Router ------------------------------------------------------ */
-.rf-firewall {
-  background: linear-gradient(180deg, #3f2a2a 0%, #241616 100%);
-}
-
-.rf-firewall-front,
-.rf-firewall-back {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
-  height: 100%;
-}
-
-.rf-firewall .rf-status-led-on {
-  background: #ff6b4a;
-  box-shadow: 0 0 3px #ff6b4a;
-}
-
-/* --- Server ------------------------------------------------------------------ */
-.rf-server {
-  background: linear-gradient(180deg, #46464d 0%, #26262b 100%);
-}
-
-.rf-server-front {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 100%;
-  gap: 8px;
-}
-
-.rf-drive-bays {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  gap: 1px;
-  height: 80%;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.rf-drive-bay {
-  width: 7px;
-  height: 100%;
-  background: linear-gradient(180deg, #5a5a62, #34343a);
-  border: 1px solid #1c1c20;
-  border-radius: 1px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.rf-drive-bays-dense .rf-drive-bay {
-  width: 5px;
-}
-
-.rf-drive-handle {
-  width: 60%;
-  height: 1px;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.rf-server-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.rf-power-button {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #34d976;
-  box-shadow: 0 0 3px #34d976;
-}
-
-.rf-server-back,
-.rf-storage-back {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  width: 100%;
-  height: 100%;
-}
-
-.rf-psu-row {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.rf-psu-module {
-  width: 16px;
-  height: 70%;
-  background: linear-gradient(180deg, #4a4a52, #2a2a30);
-  border: 1px solid #15151a;
-  border-radius: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.rf-psu-fan {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1px solid #1a1a1f;
-  background: radial-gradient(circle, #6a6a72 0%, #2a2a30 70%);
-}
-
-/* --- Storage ------------------------------------------------------------------ */
-.rf-storage {
-  background: linear-gradient(180deg, #33433a 0%, #1c2620 100%);
-}
-
-.rf-storage-front {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: 100%;
-  height: 100%;
-}
-
-.rf-storage .rf-drive-bay {
-  background: linear-gradient(180deg, #5fae84, #2c4438);
-}
-
-/* --- UPS ------------------------------------------------------------------------ */
-.rf-ups {
-  background: linear-gradient(180deg, #43391f 0%, #221d10 100%);
-}
-
-.rf-ups-front,
-.rf-ups-back {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  width: 100%;
-  height: 100%;
-}
-
-.rf-ups-lcd {
-  width: 34px;
-  height: 16px;
-  background: #1a160a;
-  box-shadow: inset 0 0 4px rgba(255, 191, 71, 0.4);
-  border-color: #2c2412;
-}
-
-.rf-battery-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 70%;
-}
-
-.rf-battery-bar {
-  width: 4px;
-  height: 40%;
-  background: #ffbf47;
-  border-radius: 1px;
-  box-shadow: 0 0 2px rgba(255, 191, 71, 0.5);
-}
-
-.rf-battery-bar:nth-child(2) { height: 55%; }
-.rf-battery-bar:nth-child(3) { height: 75%; }
-.rf-battery-bar:nth-child(4) { height: 90%; }
-.rf-battery-bar:nth-child(5) { height: 100%; }
-
-.rf-ups-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.rf-ups-button {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #5a4f2c;
-  border: 1px solid #2c2412;
-}
-
-.rf-battery-compartment {
-  width: 30%;
-  height: 70%;
-  border: 1px dashed #5a4f2c;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.25);
-  flex-shrink: 0;
-}
-
-/* --- PDU ------------------------------------------------------------------------ */
-.rf-pdu {
-  background: linear-gradient(180deg, #383b42 0%, #1f2126 100%);
-}
-
-.rf-pdu-front,
-.rf-pdu-back {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
-  height: 100%;
-}
-
-.rf-pdu-label {
-  font-family: var(--rack-font-mono, monospace);
-  font-size: 9px;
-  letter-spacing: 1px;
-  color: #8a93a3;
-}
-
-.rf-outlet-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  gap: 3px;
-  max-width: 80%;
-}
-
-.rf-outlet {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #15171c;
-  border: 1px solid #4a5260;
-  box-shadow: inset 0 0 0 1px #2a2f38, inset 2px 0 0 0 #4a5260;
-}
-
-/* --- Patch Panel ------------------------------------------------------------------ */
-.rf-patch-panel {
-  background: linear-gradient(180deg, #232323 0%, #101010 100%);
-}
-
-.rf-patch-panel .rf-port-grid {
-  max-width: 100%;
-  width: 100%;
-  justify-content: center;
-}
-
-.rf-patch-panel .rf-port {
-  width: 5px;
-  height: 5px;
-  background: #4a4a4a;
-  border: 1px solid #1a1a1a;
-}
-
-/* --- Cable Manager ----------------------------------------------------------------- */
-.rf-cable-manager {
-  background: linear-gradient(180deg, #2c2e32 0%, #16171a 100%);
-}
-
-.rf-cable-manager-face {
-  display: flex;
-  align-items: center;
-  justify-content: space-evenly;
-  width: 100%;
-  height: 100%;
-}
-
-.rf-d-ring {
-  width: 22px;
-  height: 60%;
-  border: 2px solid #4a5260;
-  border-top: none;
-  border-radius: 0 0 10px 10px;
-}
-
-/* --- Blank Panel ----------------------------------------------------------------------- */
-.rf-blank {
-  background: linear-gradient(180deg, #3c3c3c 0%, #232323 100%);
-}
-
-.rf-blank-face {
-  width: 100%;
-  height: 100%;
-  background: repeating-linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.02) 0px,
-    rgba(255, 255, 255, 0.02) 1px,
-    transparent 1px,
-    transparent 6px
-  );
-}
-
-/* --- KVM --------------------------------------------------------------------------------- */
-.rf-kvm {
-  background: linear-gradient(180deg, #2b3a52 0%, #161e2b 100%);
-}
-
-.rf-kvm-front,
-.rf-kvm-back {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
-  height: 100%;
-}
-
-.rf-kvm-screen {
-  width: 26px;
-  height: 16px;
-  border-radius: 2px;
-  background: #0c1622;
-  border: 1px solid #1f3147;
-  box-shadow: inset 0 0 4px rgba(86, 168, 255, 0.45);
-  flex-shrink: 0;
-}
-
-/* --- Access Point ---------------------------------------------------------------------------- */
-.rf-ap {
-  background: linear-gradient(180deg, #1f3a3a 0%, #102020 100%);
-}
-
-.rf-ap-front,
-.rf-ap-back {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
-  height: 100%;
-}
-
-.rf-ap-icon {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid #4adede;
-  box-shadow: 0 0 0 4px rgba(74, 222, 222, 0.12);
-  flex-shrink: 0;
-}
-
-/* --- Other / unrecognized ---------------------------------------------------------------------- */
-.rf-other {
-  background: linear-gradient(180deg, #3a3a3a 0%, #222222 100%);
-}
-
-.rf-other-face {
-  width: 100%;
-  height: 100%;
-  background: repeating-linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.015) 0px,
-    rgba(255, 255, 255, 0.015) 2px,
-    transparent 2px,
-    transparent 10px
-  );
+.rf-flat-name {
+  flex: 1;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
