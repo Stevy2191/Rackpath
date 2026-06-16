@@ -1,11 +1,80 @@
+/* ─── Viewport: clips the transform, fills remaining space ─── */
 .rack-canvas {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 40px;
-  padding: 24px;
-  overflow: auto;
   flex: 1;
   min-height: 0;
   position: relative;
+  overflow: hidden;
+  cursor: default;
+  background: #0a0a0f;
+}
+
+/* Grabbing cursor + no text-selection while panning */
+.rack-canvas.rack-canvas-panning {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* ─── Transformable content layer ───────────────────────────── */
+.rack-canvas-content {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 40px;
+  padding: 24px;
+  /* transform and opacity set by inline styles */
+}
+
+/* ─── Zoom controls (bottom-right overlay) ──────────────────── */
+.rack-zoom-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #1a1d24;
+  border: 1px solid #2a2e38;
+  border-radius: 6px;
+  padding: 3px;
+  z-index: 20;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+}
+
+.rack-zoom-btn {
+  border: none;
+  background: transparent;
+  color: #8b91a1;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.rack-zoom-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6e9f0;
+}
+
+.rack-zoom-pct {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: #6b7280;
+  min-width: 34px;
+  text-align: center;
+  padding: 0 2px;
+  user-select: none;
+}
+
+.rack-zoom-sep {
+  width: 1px;
+  height: 16px;
+  background: #2a2e38;
+  margin: 0 2px;
+  flex-shrink: 0;
 }
