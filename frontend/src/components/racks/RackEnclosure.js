@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { Pencil, Trash2, Download, FileDown } from 'lucide-react';
-import DeviceBlock, { getDeviceLabel } from './DeviceBlock';
+import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import './RackEnclosure.css';
 
@@ -14,60 +14,18 @@ const RACK_TYPES = [
   { value: 'blade-enclosure', label: 'Blade Enclosure' },
 ];
 
-// One rack's full visual: steel enclosure, U-numbered rails, front/back
-// toggle, device blocks/empty slots, rename/resize/delete, and PNG/PDF export.
-export default function RackEnclosure({
-  rack,
-  slots,
-  highlightedSlotId,
-  actions,
-  draggingMeta,
-  setDraggingMeta,
-  onDrop,
-  onFocus,
-  isFocused,
-  uHeight,
-}) {
-  // The view side ("which face of the rack am I looking at") is per-rack UI
-  // state, persisted to localStorage so it survives reloads but never hits
-  // the DB.
-  const [side, setSide] = useState(() => {
-    try {
-      return window.localStorage.getItem(`rack-view-side-${rack.id}`) === 'back' ? 'back' : 'front';
-    } catch {
-      return 'front';
-    }
+// Build a U-map from slots visible on a given face.
+// Returns { slotsByTop, covered, occupiedByU }
+function buildUMap(slots, face) {
+  const visible = slots.filter((s) => {
+    const mf = s.mounted_face || s.front_back || 'front';
+    if (face === 'front') return mf === 'front' || mf === 'both';
+    return mf === 'rear' || mf === 'both';
   });
-
-  const changeSide = (next) => {
-    setSide(next);
-    try {
-      window.localStorage.setItem(`rack-view-side-${rack.id}`, next);
-    } catch {
-      // ignore (e.g. localStorage disabled)
-    }
-  };
-
-  const [editing, setEditing] = useState(false);
-  const [edits, setEdits] = useState(null);
-  const [exporting, setExporting] = useState(false);
-  const frameRef = useRef(null);
-
-  useEffect(() => {
-    if (highlightedSlotId == null) return;
-    const slot = slots.find((s) => s.id === highlightedSlotId);
-    if (slot) changeSide(slot.front_back === 'back' ? 'back' : 'front');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightedSlotId, slots]);
-
-  // The Front/Back toggle shows only what is physically mounted on that
-  // side of the rack.
-  const visibleSlots = slots.filter((s) => (s.front_back || 'front') === side);
-
   const slotsByTop = {};
   const covered = new Set();
   const occupiedByU = new Map();
-  for (const s of visibleSlots) {
+  for (const s of visible) {
     const top = s.u_position + s.u_size - 1;
     slotsByTop[top] = s;
     for (let u = s.u_position; u <= top; u++) {
@@ -75,8 +33,151 @@ export default function RackEnclosure({
       occupiedByU.set(u, s.id);
     }
   }
+  return { slotsByTop, covered, occupiedByU };
+}
+
+// One face panel (front or rear)
+function RackPanel({
+  face,
+  showLeftRail,
+  showRightRail,
+  uRows,
+  uHeight,
+  rack,
+  slotsByTop,
+  covered,
+  occupiedByU,
+  halfDepthStripes,
+  highlightedSlotId,
+  selectedSlotId,
+  draggingMeta,
+  setDraggingMeta,
+  actions,
+  onDrop,
+  onSelectSlot,
+}) {
+  return (
+    <div className={`rack-panel-frame rack-panel-frame-${face}`}>
+      <div className="rack-panel-label">{face === 'front' ? 'FRONT' : 'REAR'}</div>
+      <div className="rack-top-blank" />
+      <div className="rack-body">
+        {showLeftRail && (
+          <div className="rack-rail rack-rail-left">
+            {uRows.map((u) => (
+              <div key={u} className="rack-rail-number">{u}</div>
+            ))}
+          </div>
+        )}
+        <div className="rack-units" key={face}>
+          {uRows.map((u) => {
+            const slot = slotsByTop[u];
+            if (slot) {
+              return (
+                <DeviceBlock
+                  key={slot.id}
+                  slot={slot}
+                  side={face}
+                  uHeight={uHeight}
+                  highlighted={slot.id === highlightedSlotId}
+                  isSelected={slot.id === selectedSlotId}
+                  setDraggingMeta={setDraggingMeta}
+                  actions={actions}
+                  onSelect={onSelectSlot}
+                />
+              );
+            }
+            if (covered.has(u)) return null;
+
+            // Half-depth stripe from opposite panel
+            if (halfDepthStripes.has(u)) {
+              const stripeSlot = halfDepthStripes.get(u);
+              return (
+                <DeviceBlock
+                  key={`stripe-${u}`}
+                  slot={{ ...stripeSlot, halfDepthStripe: true }}
+                  side={face}
+                  uHeight={uHeight}
+                  highlighted={false}
+                  isSelected={false}
+                  setDraggingMeta={setDraggingMeta}
+                  actions={actions}
+                />
+              );
+            }
+
+            const band = Math.floor((u - 1) / 5) % 2;
+            return (
+              <RackUnitSlot
+                key={u}
+                u={u}
+                band={band}
+                draggingMeta={draggingMeta}
+                occupiedByU={occupiedByU}
+                onDrop={(uPos, e) => onDrop(rack.id, uPos, face, e)}
+              />
+            );
+          })}
+        </div>
+        {showRightRail && (
+          <div className="rack-rail rack-rail-right">
+            {uRows.map((u) => (
+              <div key={u} className="rack-rail-number">{u}</div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="rack-bottom-blank" />
+    </div>
+  );
+}
+
+export default function RackEnclosure({
+  rack,
+  slots,
+  highlightedSlotId,
+  selectedSlotId,
+  actions,
+  draggingMeta,
+  setDraggingMeta,
+  onDrop,
+  onFocus,
+  isFocused,
+  uHeight,
+  onSelectSlot,
+}) {
+  const [editing, setEditing] = useState(false);
+  const [edits, setEdits] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const frameRef = useRef(null);
 
   const uRows = Array.from({ length: rack.u_height }, (_, i) => rack.u_height - i);
+
+  const frontMap = buildUMap(slots, 'front');
+  const rearMap  = buildUMap(slots, 'rear');
+
+  // Half-depth front devices → show stripe in rear panel at same U rows
+  const rearStripes = new Map();
+  for (const s of slots) {
+    const mf = s.mounted_face || s.front_back || 'front';
+    if ((mf === 'front' || mf === 'both') && s.half_depth) {
+      const top = s.u_position + s.u_size - 1;
+      for (let u = s.u_position; u <= top; u++) {
+        if (!rearMap.covered.has(u)) rearStripes.set(u, s);
+      }
+    }
+  }
+
+  // Half-depth rear devices → show stripe in front panel at same U rows
+  const frontStripes = new Map();
+  for (const s of slots) {
+    const mf = s.mounted_face || s.front_back || 'front';
+    if ((mf === 'rear' || mf === 'both') && s.half_depth) {
+      const top = s.u_position + s.u_size - 1;
+      for (let u = s.u_position; u <= top; u++) {
+        if (!frontMap.covered.has(u)) frontStripes.set(u, s);
+      }
+    }
+  }
 
   const startEdit = () => {
     setEdits({
@@ -106,21 +207,17 @@ export default function RackEnclosure({
     setExporting(true);
     try {
       const el = frameRef.current;
-      const width = el.offsetWidth;
-      const height = el.offsetHeight;
-      const dataUrl = await toPng(el, { backgroundColor: '#0a0a0f', width, height });
+      const dataUrl = await toPng(el, { backgroundColor: '#0a0a0f', width: el.offsetWidth, height: el.offsetHeight });
       const filename = rack.name.trim().replace(/\s+/g, '-').toLowerCase() || 'rack';
-
       if (format === 'pdf') {
-        const orientation = width >= height ? 'landscape' : 'portrait';
-        const pdf = new jsPDF({ orientation, unit: 'px', format: [width, height] });
-        pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
+        const pdf = new jsPDF({ orientation: el.offsetWidth >= el.offsetHeight ? 'landscape' : 'portrait', unit: 'px', format: [el.offsetWidth, el.offsetHeight] });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, el.offsetWidth, el.offsetHeight);
         pdf.save(`rack-${filename}.pdf`);
       } else {
-        const link = document.createElement('a');
-        link.download = `rack-${filename}.png`;
-        link.href = dataUrl;
-        link.click();
+        const a = document.createElement('a');
+        a.download = `rack-${filename}.png`;
+        a.href = dataUrl;
+        a.click();
       }
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -130,81 +227,42 @@ export default function RackEnclosure({
     }
   };
 
+  const panelProps = {
+    uRows,
+    uHeight,
+    rack,
+    highlightedSlotId,
+    selectedSlotId,
+    draggingMeta,
+    setDraggingMeta,
+    actions,
+    onDrop,
+    onSelectSlot,
+  };
+
   return (
     <div className={`rack-enclosure${isFocused ? ' rack-enclosure-focused' : ''}`} id={`rack-${rack.id}`}>
-      {/* Header: badge + optional edit form. Grid area "header" — same column
-          width as the rack frame. Sticky so it stays visible while scrolling. */}
+      {/* Header: rack name + actions. Sticky while scrolling. */}
       <div className="rack-header" onClick={onFocus}>
         <div className="rack-badge">
           <span className="rack-badge-name">{rack.name}</span>
+          {rack.location && <span className="rack-badge-loc">{rack.location}</span>}
           <span className="rack-badge-u">{rack.u_height}U</span>
           <div className="rack-badge-actions">
-            <div className="rack-side-toggle">
-              <button
-                type="button"
-                className={side === 'front' ? 'active' : ''}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  changeSide('front');
-                }}
-              >
-                Front
-              </button>
-              <button
-                type="button"
-                className={side === 'back' ? 'active' : ''}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  changeSide('back');
-                }}
-              >
-                Back
-              </button>
-            </div>
-            <button
-              type="button"
-              className="rack-badge-icon-btn"
-              title="Export PNG"
-              disabled={exporting}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleExport('png');
-              }}
-            >
+            <button type="button" className="rack-badge-icon-btn" title="Export PNG" disabled={exporting}
+              onClick={(e) => { e.stopPropagation(); handleExport('png'); }}>
               <Download size={13} />
             </button>
-            <button
-              type="button"
-              className="rack-badge-icon-btn"
-              title="Export PDF"
-              disabled={exporting}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleExport('pdf');
-              }}
-            >
+            <button type="button" className="rack-badge-icon-btn" title="Export PDF" disabled={exporting}
+              onClick={(e) => { e.stopPropagation(); handleExport('pdf'); }}>
               <FileDown size={13} />
             </button>
-            <button
-              type="button"
-              className="rack-badge-icon-btn"
-              title="Edit rack"
-              onClick={(e) => {
-                e.stopPropagation();
-                startEdit();
-              }}
-            >
+            <button type="button" className="rack-badge-icon-btn" title="Edit rack"
+              onClick={(e) => { e.stopPropagation(); startEdit(); }}>
               <Pencil size={13} />
             </button>
-            <button
-              type="button"
-              className="rack-badge-icon-btn rack-badge-danger"
-              title="Delete rack"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete();
-              }}
-            >
+            <button type="button" className="rack-badge-icon-btn rack-badge-danger" title="Delete rack"
+              onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
               <Trash2 size={13} />
             </button>
           </div>
@@ -212,123 +270,42 @@ export default function RackEnclosure({
 
         {editing && (
           <form className="rack-edit-form" onSubmit={submitEdit} onClick={(e) => e.stopPropagation()}>
-            <input
-              value={edits.name}
-              onChange={(e) => setEdits({ ...edits, name: e.target.value })}
-              placeholder="Name"
-              required
-            />
-            <input
-              value={edits.location}
-              onChange={(e) => setEdits({ ...edits, location: e.target.value })}
-              placeholder="Location"
-            />
-            <input
-              type="number"
-              min="4"
-              max="52"
-              value={edits.u_height}
-              onChange={(e) => setEdits({ ...edits, u_height: Number(e.target.value) })}
-              placeholder="U Height"
-            />
+            <input value={edits.name} onChange={(e) => setEdits({ ...edits, name: e.target.value })} placeholder="Name" required />
+            <input value={edits.location} onChange={(e) => setEdits({ ...edits, location: e.target.value })} placeholder="Location" />
+            <input type="number" min="1" max="100" value={edits.u_height}
+              onChange={(e) => setEdits({ ...edits, u_height: Number(e.target.value) })} placeholder="U Height" />
             <select value={edits.rack_type} onChange={(e) => setEdits({ ...edits, rack_type: e.target.value })}>
-              {RACK_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
+              {RACK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
             <button type="submit">Save</button>
-            <button type="button" onClick={() => setEditing(false)}>
-              Cancel
-            </button>
+            <button type="button" onClick={() => setEditing(false)}>Cancel</button>
           </form>
         )}
       </div>
 
-      {/* Steel rack frame — click anywhere (empty slot or device) to select */}
-      <div className="rack-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
-        <div className="rack-panel rack-panel-top" />
-        <div className="rack-body">
-          <div className="rack-rail rack-rail-left">
-            {uRows.map((u) => (
-              <div key={u} className="rack-rail-number">
-                {u}
-              </div>
-            ))}
-          </div>
-          <div className="rack-units" key={side}>
-            {uRows.map((u) => {
-              const slot = slotsByTop[u];
-              if (slot) {
-                return (
-                  <DeviceBlock
-                    key={slot.id}
-                    slot={slot}
-                    side={side}
-                    uHeight={uHeight}
-                    highlighted={slot.id === highlightedSlotId}
-                    setDraggingMeta={setDraggingMeta}
-                    actions={actions}
-                  />
-                );
-              }
-              if (covered.has(u)) return null;
-              const band = Math.floor((u - 1) / 5) % 2;
-              return (
-                <RackUnitSlot
-                  key={u}
-                  u={u}
-                  band={band}
-                  draggingMeta={draggingMeta}
-                  occupiedByU={occupiedByU}
-                  onDrop={(uPos, e) => onDrop(rack.id, uPos, side, e)}
-                />
-              );
-            })}
-          </div>
-          <div className="rack-rail rack-rail-right">
-            {uRows.map((u) => (
-              <div key={u} className="rack-rail-number">
-                {u}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="rack-panel rack-panel-bottom" />
-      </div>
-
-      {/* Device name labels — beside the frame, grid area "labels" */}
-      <div className="rack-labels" key={side}>
-        {uRows.map((u) => {
-          const slot = slotsByTop[u];
-          if (slot) {
-            const { name, subtitle } = getDeviceLabel(slot);
-            return (
-              <div key={slot.id} className="rack-label" style={{ minHeight: `${slot.u_size * uHeight}px` }}>
-                {slot.item_type === 'device' && slot.device_id ? (
-                  <button
-                    type="button"
-                    className="rack-label-name rack-label-link"
-                    title={name}
-                    onClick={() =>
-                      actions.onOpenPortEditor({ id: slot.device_id, hostname: slot.hostname, ip: slot.ip })
-                    }
-                  >
-                    {name}
-                  </button>
-                ) : (
-                  <span className="rack-label-name" title={name}>
-                    {name}
-                  </span>
-                )}
-                {subtitle && <span className="rack-label-model">{subtitle}</span>}
-              </div>
-            );
-          }
-          if (covered.has(u)) return null;
-          return <div key={`empty-${u}`} className="rack-label-empty" style={{ height: `${uHeight}px` }} />;
-        })}
+      {/* Dual-panel rack frame */}
+      <div className="rack-dual-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
+        <RackPanel
+          face="front"
+          showLeftRail
+          showRightRail={false}
+          slotsByTop={frontMap.slotsByTop}
+          covered={frontMap.covered}
+          occupiedByU={frontMap.occupiedByU}
+          halfDepthStripes={frontStripes}
+          {...panelProps}
+        />
+        <div className="rack-panel-divider" />
+        <RackPanel
+          face="rear"
+          showLeftRail={false}
+          showRightRail
+          slotsByTop={rearMap.slotsByTop}
+          covered={rearMap.covered}
+          occupiedByU={rearMap.occupiedByU}
+          halfDepthStripes={rearStripes}
+          {...panelProps}
+        />
       </div>
     </div>
   );

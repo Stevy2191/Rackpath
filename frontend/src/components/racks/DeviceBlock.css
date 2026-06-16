@@ -12,10 +12,17 @@
   color: #d7dbe2;
   width: 100%;
   box-sizing: border-box;
+  transition: outline 0.1s ease;
 }
 
 .device-block:active {
   cursor: grabbing;
+}
+
+.device-block-selected {
+  outline: 2px solid #4adede;
+  outline-offset: -1px;
+  z-index: 1;
 }
 
 .device-block-highlighted {
@@ -23,53 +30,88 @@
 }
 
 @keyframes device-block-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 2px #4adede, 0 0 6px rgba(74, 222, 222, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 2px #4adede, 0 0 18px rgba(74, 222, 222, 0.9);
-  }
+  0%, 100% { box-shadow: 0 0 0 2px #4adede, 0 0 6px rgba(74, 222, 222, 0.4); }
+  50%       { box-shadow: 0 0 0 2px #4adede, 0 0 18px rgba(74, 222, 222, 0.9); }
 }
 
+/* Vendor color badge — left strip */
 .device-block-vendor-badge {
   flex-shrink: 0;
-  width: 28px;
+  width: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  background: rgba(0, 0, 0, 0.25);
-  border-right: 1px solid rgba(0, 0, 0, 0.4);
-  color: #8a93a3;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: rgba(255, 255, 255, 0.9);
+  border-right: 1px solid rgba(0, 0, 0, 0.35);
 }
 
+/* Color tint overlay */
+.device-block-color-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--slot-color, transparent);
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+/* Half-depth badge pill on faceplate */
+.device-block-halfdepth-badge {
+  position: absolute;
+  top: 3px;
+  left: 26px;
+  font-size: 8px;
+  font-weight: 700;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* Half-depth stripe placeholder in opposite panel */
+.device-block-halfdepth-stripe {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.08) 0px,
+    rgba(239, 68, 68, 0.08) 4px,
+    transparent 4px,
+    transparent 10px
+  );
+  border: 1px dashed rgba(239, 68, 68, 0.3);
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 6px;
+}
+
+.device-block-stripe-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(239, 68, 68, 0.5);
+}
+
+/* Status LED */
 .device-block-led {
   flex-shrink: 0;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  margin: 0 10px;
+  margin: 0 8px;
   align-self: center;
   background: #4a4f5a;
 }
 
-.device-block-led.led-online {
-  background: #34d976;
-  box-shadow: 0 0 4px #34d976;
-}
+.device-block-led.led-online  { background: #34d976; box-shadow: 0 0 4px #34d976; }
+.device-block-led.led-offline { background: #ff5757; box-shadow: 0 0 4px #ff5757; }
+.device-block-led.led-unknown { background: #6b7280; }
 
-.device-block-led.led-offline {
-  background: #ff5757;
-  box-shadow: 0 0 4px #ff5757;
-}
-
-.device-block-led.led-unknown {
-  background: #6b7280;
-}
-
+/* Hover action buttons */
 .device-block-actions {
   position: absolute;
   top: 2px;
@@ -77,7 +119,7 @@
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s;
 }
 
 .device-block:hover .device-block-actions {
@@ -86,11 +128,11 @@
 
 .device-block-icon-btn {
   border: none;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
   color: #cbd5e1;
   border-radius: 2px;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -99,6 +141,44 @@
 }
 
 .device-block-icon-btn:hover {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.75);
   color: #fff;
+}
+
+/* Hover tooltip */
+.device-block-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 140px;
+  max-width: 240px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  background: #1e2230;
+  border: 1px solid #3a3f4a;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: none;
+  font-size: 0.72rem;
+  color: #e6e9f0;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.device-block-tooltip strong {
+  font-weight: 700;
+  color: #fff;
+}
+
+.device-block-tooltip span {
+  color: #9ca3af;
+}
+
+.device-block-tooltip-notes {
+  color: #6b7280 !important;
+  font-style: italic;
 }

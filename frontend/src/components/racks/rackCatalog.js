@@ -1,95 +1,347 @@
-// Static device catalog shown in the Device Catalog slide-out panel.
-// Each entry can be dragged onto a rack (text/catalog-item) to create a
-// rack_slots row with item_type/custom_type/catalog_id/vendor populated from
-// here. `renderType` keys into deviceRenderConfig.js for the faceplate.
-// `frontBack` is the default face the device is placed on (PDUs/cable
-// managers default to the rear). `type` is a human-readable category used
-// only by the catalog's Type filter (independent of `renderType`, since e.g.
-// routers and firewalls share a faceplate but are filtered separately).
+// Static device catalog for the Rack Builder.
+// Fields: id, name, vendor, category, uSize, renderType, mountedFace, halfDepth, halfWidth.
+// `mountedFace` matches the DB column: 'front' | 'rear' | 'both'.
+// `renderType` keys into deviceRenderConfig.js.
 
 export const CATALOG_CATEGORIES = [
-  { id: 'all', label: 'All' },
-  { id: 'networking', label: 'Networking' },
-  { id: 'servers', label: 'Servers' },
-  { id: 'storage', label: 'Storage' },
-  { id: 'power', label: 'Power' },
-  { id: 'patch-cable', label: 'Patch & Cable' },
-  { id: 'custom', label: 'Custom' },
+  { id: 'SERVERS',          label: 'Servers' },
+  { id: 'FIREWALLS',        label: 'Firewalls' },
+  { id: 'NETWORK',          label: 'Network' },
+  { id: 'STORAGE',          label: 'Storage' },
+  { id: 'POWER',            label: 'Power' },
+  { id: 'PATCH PANELS',     label: 'Patch Panels' },
+  { id: 'KVM',              label: 'KVM' },
+  { id: 'AV/MEDIA',         label: 'AV/Media' },
+  { id: 'COOLING',          label: 'Cooling' },
+  { id: 'SHELVES',          label: 'Shelves' },
+  { id: 'CHASSIS',          label: 'Chassis' },
+  { id: 'BLANKS',           label: 'Blanks' },
+  { id: 'CABLE MANAGEMENT', label: 'Cable Mgmt' },
 ];
 
-// Vendors with their own bucket in the catalog's Vendor filter. Anything not
-// in this list (Netgear, Tripp Lite, Eaton, Lenovo, NetApp, Generic, ...)
-// falls into "Other".
-export const CATALOG_VENDORS = [
-  'Ubiquiti', 'Cisco', 'Dell', 'HPE', 'APC', 'CyberPower', 'Fortinet',
-  'Palo Alto', 'Juniper', 'Supermicro', 'Synology', 'QNAP', 'Vertiv',
-];
+export const VENDOR_COLORS = {
+  Generic:        '#555',
+  Ubiquiti:       '#006FFF',
+  Cisco:          '#049fd9',
+  Dell:           '#007DB8',
+  HPE:            '#00B388',
+  Fortinet:       '#EE3124',
+  'Palo Alto':    '#FA582D',
+  APC:            '#005F9E',
+  CyberPower:     '#E31837',
+  Eaton:          '#FDB827',
+  MikroTik:       '#293896',
+  Netgear:        '#9B0000',
+  Juniper:        '#84B135',
+  Synology:       '#B5B5B6',
+  QNAP:           '#0EA0DA',
+  Supermicro:     '#D40000',
+  'TP-Link':      '#4CBFA4',
+  Lenovo:         '#E2231A',
+  'Raspberry Pi': '#C51A4A',
+};
 
-export const CATALOG_VENDOR_OPTIONS = ['All Vendors', ...CATALOG_VENDORS, 'Other'];
-
-export const CATALOG_TYPES = [
-  'Switch', 'Router', 'Firewall', 'Server', 'AP', 'UPS', 'PDU',
-  'Patch Panel', 'Cable Manager', 'Blank Panel', 'KVM', 'Storage', 'Other',
-];
-
-export const CATALOG_TYPE_OPTIONS = ['All Types', ...CATALOG_TYPES];
-
-// Buckets a catalog entry's free-form vendor string into one of
-// CATALOG_VENDOR_OPTIONS (defaulting to "Other").
-export function vendorBucket(vendor) {
-  if (!vendor) return 'Other';
-  const lower = vendor.toLowerCase();
-  const match = CATALOG_VENDORS.find((v) => lower.includes(v.toLowerCase()));
-  return match || 'Other';
+function e(id, name, vendor, category, uSize, renderType, opts = {}) {
+  return {
+    id, name, vendor, category, uSize, renderType,
+    halfDepth: opts.halfDepth || false,
+    halfWidth: opts.halfWidth || false,
+    mountedFace: opts.mountedFace || 'front',
+  };
 }
 
 export const RACK_CATALOG = [
-  // --- Networking (13) -----------------------------------------------------
-  { id: 'ubiquiti-usw-pro-48', name: 'UniFi Switch Pro 48', vendor: 'Ubiquiti', category: 'networking', type: 'Switch', renderType: 'switch', uSize: 1, frontBack: 'front' },
-  { id: 'ubiquiti-usw-pro-24', name: 'UniFi Switch Pro 24', vendor: 'Ubiquiti', category: 'networking', type: 'Switch', renderType: 'switch', uSize: 1, frontBack: 'front' },
-  { id: 'ubiquiti-usw-lite-16-poe', name: 'UniFi Switch Lite 16 PoE', vendor: 'Ubiquiti', category: 'networking', type: 'Switch', renderType: 'switch', uSize: 1, frontBack: 'front' },
-  { id: 'ubiquiti-usw-pro-aggregation', name: 'UniFi Switch Pro Aggregation', vendor: 'Ubiquiti', category: 'networking', type: 'Switch', renderType: 'switch', uSize: 1, frontBack: 'front' },
-  { id: 'ubiquiti-udm-pro', name: 'UniFi Dream Machine Pro', vendor: 'Ubiquiti', category: 'networking', type: 'Router', renderType: 'firewall', uSize: 1, frontBack: 'front' },
-  { id: 'ubiquiti-u6-shelf-ap', name: 'UniFi U6-Enterprise (Shelf Mount)', vendor: 'Ubiquiti', category: 'networking', type: 'AP', renderType: 'ap', uSize: 1, frontBack: 'front' },
-  { id: 'cisco-catalyst-9300-48p', name: 'Catalyst 9300-48P', vendor: 'Cisco', category: 'networking', type: 'Switch', renderType: 'switch', uSize: 1, frontBack: 'front' },
-  { id: 'cisco-catalyst-2960x', name: 'Catalyst 2960-X', vendor: 'Cisco', category: 'networking', type: 'Switch', renderType: 'switch', uSize: 1, frontBack: 'front' },
-  { id: 'cisco-isr-4451', name: 'ISR 4451 Router', vendor: 'Cisco', category: 'networking', type: 'Router', renderType: 'firewall', uSize: 1, frontBack: 'front' },
-  { id: 'fortinet-fortigate-100f', name: 'FortiGate 100F', vendor: 'Fortinet', category: 'networking', type: 'Firewall', renderType: 'firewall', uSize: 1, frontBack: 'front' },
-  { id: 'paloalto-pa-820', name: 'PA-820', vendor: 'Palo Alto Networks', category: 'networking', type: 'Firewall', renderType: 'firewall', uSize: 1, frontBack: 'front' },
-  { id: 'netgear-prosafe-48', name: 'ProSAFE 48-Port', vendor: 'Netgear', category: 'networking', type: 'Switch', renderType: 'switch', uSize: 1, frontBack: 'front' },
-  { id: 'juniper-ex4300-48t', name: 'EX4300-48T', vendor: 'Juniper', category: 'networking', type: 'Switch', renderType: 'switch', uSize: 1, frontBack: 'front' },
+  // ─── GENERIC / SERVERS ──────────────────────────────────────────────────────
+  e('gen-server-1u',        'Server 1U',                    'Generic', 'SERVERS', 1, 'server'),
+  e('gen-server-2u',        'Server 2U',                    'Generic', 'SERVERS', 2, 'server'),
+  e('gen-server-3u',        'Server 3U',                    'Generic', 'SERVERS', 3, 'server'),
+  e('gen-server-4u',        'Server 4U',                    'Generic', 'SERVERS', 4, 'server'),
+  e('gen-blade-half-2u',    'Blade Server (Half-Width) 2U', 'Generic', 'SERVERS', 2, 'server', { halfWidth: true, halfDepth: true }),
+  e('gen-blade-full-4u',    'Blade Server (Full) 4U',       'Generic', 'SERVERS', 4, 'server', { halfDepth: true }),
+  e('gen-minipc-1u',        'Mini PC 1U',                   'Generic', 'SERVERS', 1, 'server', { halfWidth: true, halfDepth: true }),
 
-  // --- Servers (7) -----------------------------------------------------------
-  { id: 'dell-poweredge-r740', name: 'PowerEdge R740', vendor: 'Dell', category: 'servers', type: 'Server', renderType: 'server', uSize: 2, frontBack: 'front' },
-  { id: 'dell-poweredge-r640', name: 'PowerEdge R640', vendor: 'Dell', category: 'servers', type: 'Server', renderType: 'server', uSize: 1, frontBack: 'front' },
-  { id: 'dell-poweredge-r750', name: 'PowerEdge R750', vendor: 'Dell', category: 'servers', type: 'Server', renderType: 'server', uSize: 2, frontBack: 'front' },
-  { id: 'hpe-proliant-dl380-g10', name: 'ProLiant DL380 Gen10', vendor: 'HPE', category: 'servers', type: 'Server', renderType: 'server', uSize: 2, frontBack: 'front' },
-  { id: 'hpe-proliant-dl360-g10', name: 'ProLiant DL360 Gen10', vendor: 'HPE', category: 'servers', type: 'Server', renderType: 'server', uSize: 1, frontBack: 'front' },
-  { id: 'supermicro-1029p', name: 'SuperServer 1029P', vendor: 'Supermicro', category: 'servers', type: 'Server', renderType: 'server', uSize: 1, frontBack: 'front' },
-  { id: 'lenovo-thinksystem-sr650', name: 'ThinkSystem SR650', vendor: 'Lenovo', category: 'servers', type: 'Server', renderType: 'server', uSize: 2, frontBack: 'front' },
+  // ─── GENERIC / CHASSIS ──────────────────────────────────────────────────────
+  e('gen-blade-chassis-4u', 'Blade Chassis (4-Bay) 4U',    'Generic', 'CHASSIS', 4, 'server'),
+  e('gen-blade-chassis-7u', 'Blade Chassis (8-Bay) 7U',    'Generic', 'CHASSIS', 7, 'server'),
 
-  // --- Storage (4) -------------------------------------------------------------
-  { id: 'synology-rs3621xs-plus', name: 'RackStation RS3621xs+', vendor: 'Synology', category: 'storage', type: 'Storage', renderType: 'storage', uSize: 2, frontBack: 'front' },
-  { id: 'qnap-ts-1283xu-rp', name: 'TS-1283XU-RP', vendor: 'QNAP', category: 'storage', type: 'Storage', renderType: 'storage', uSize: 2, frontBack: 'front' },
-  { id: 'dell-powervault-me4024', name: 'PowerVault ME4024', vendor: 'Dell', category: 'storage', type: 'Storage', renderType: 'storage', uSize: 2, frontBack: 'front' },
-  { id: 'netapp-fas2750', name: 'FAS2750', vendor: 'NetApp', category: 'storage', type: 'Storage', renderType: 'storage', uSize: 3, frontBack: 'front' },
+  // ─── GENERIC / FIREWALLS ────────────────────────────────────────────────────
+  e('gen-fw-1u', 'Router/Firewall 1U', 'Generic', 'FIREWALLS', 1, 'firewall'),
+  e('gen-fw-2u', 'Router/Firewall 2U', 'Generic', 'FIREWALLS', 2, 'firewall'),
 
-  // --- Power (9) -----------------------------------------------------------
-  { id: 'apc-smart-ups-1500-rm', name: 'Smart-UPS 1500VA RM', vendor: 'APC', category: 'power', type: 'UPS', renderType: 'ups', uSize: 2, frontBack: 'front' },
-  { id: 'apc-smart-ups-3000-rm', name: 'Smart-UPS 3000VA RM', vendor: 'APC', category: 'power', type: 'UPS', renderType: 'ups', uSize: 3, frontBack: 'front' },
-  { id: 'apc-switched-pdu-ap7920', name: 'Switched Rack PDU AP7920', vendor: 'APC', category: 'power', type: 'PDU', renderType: 'pdu', uSize: 1, frontBack: 'back' },
-  { id: 'apc-metered-pdu-ap7821', name: 'Metered Rack PDU AP7821', vendor: 'APC', category: 'power', type: 'PDU', renderType: 'pdu', uSize: 1, frontBack: 'back' },
-  { id: 'apc-basic-pdu-ap9567', name: 'Basic Rack PDU AP9567', vendor: 'APC', category: 'power', type: 'PDU', renderType: 'pdu', uSize: 1, frontBack: 'back' },
-  { id: 'tripplite-smartpro-1500', name: 'SmartPro 1500VA', vendor: 'Tripp Lite', category: 'power', type: 'UPS', renderType: 'ups', uSize: 2, frontBack: 'front' },
-  { id: 'cyberpower-pdu15swhviec', name: 'PDU15SWHVIEC', vendor: 'CyberPower', category: 'power', type: 'PDU', renderType: 'pdu', uSize: 1, frontBack: 'back' },
-  { id: 'eaton-9px-3000-rack', name: '9PX 3000 Rack UPS', vendor: 'Eaton', category: 'power', type: 'UPS', renderType: 'ups', uSize: 3, frontBack: 'front' },
-  { id: 'vertiv-mph2-pdu', name: 'Vertiv MPH2 PDU', vendor: 'Vertiv', category: 'power', type: 'PDU', renderType: 'pdu', uSize: 1, frontBack: 'back' },
+  // ─── GENERIC / NETWORK ──────────────────────────────────────────────────────
+  e('gen-sw-24-1u',   'Switch (24-Port) 1U',    'Generic', 'NETWORK', 1, 'switch'),
+  e('gen-sw-48-1u',   'Switch (48-Port) 1U',    'Generic', 'NETWORK', 1, 'switch'),
+  e('gen-sw-half-1u', 'Switch (Half-Width) 1U', 'Generic', 'NETWORK', 1, 'switch', { halfWidth: true, halfDepth: true }),
 
-  // --- Patch & Cable (6) ------------------------------------------------------
-  { id: 'patch-cat6-24port', name: 'CAT6 24-Port Patch Panel', vendor: 'Generic', category: 'patch-cable', type: 'Patch Panel', renderType: 'patch-panel', uSize: 1, frontBack: 'front' },
-  { id: 'patch-cat6-48port', name: 'CAT6 48-Port Patch Panel', vendor: 'Generic', category: 'patch-cable', type: 'Patch Panel', renderType: 'patch-panel', uSize: 2, frontBack: 'front' },
-  { id: 'patch-fiber-lc-24port', name: 'Fiber LC Patch Panel 24-Port', vendor: 'Generic', category: 'patch-cable', type: 'Patch Panel', renderType: 'patch-panel', uSize: 1, frontBack: 'front' },
-  { id: 'cable-manager-1u-bar', name: '1U Cable Management Bar', vendor: 'Generic', category: 'patch-cable', type: 'Cable Manager', renderType: 'cable-manager', uSize: 1, frontBack: 'back' },
-  { id: 'cable-manager-2u-panel', name: '2U Cable Management Panel', vendor: 'Generic', category: 'patch-cable', type: 'Cable Manager', renderType: 'cable-manager', uSize: 2, frontBack: 'back' },
-  { id: 'cable-organizer-tray', name: 'Velcro Cable Organizer Tray', vendor: 'Generic', category: 'patch-cable', type: 'Cable Manager', renderType: 'cable-manager', uSize: 1, frontBack: 'back' },
+  // ─── GENERIC / STORAGE ──────────────────────────────────────────────────────
+  e('gen-stor-1u', 'Storage 1U', 'Generic', 'STORAGE', 1, 'storage'),
+  e('gen-stor-2u', 'Storage 2U', 'Generic', 'STORAGE', 2, 'storage'),
+  e('gen-stor-3u', 'Storage 3U', 'Generic', 'STORAGE', 3, 'storage'),
+  e('gen-stor-4u', 'Storage 4U', 'Generic', 'STORAGE', 4, 'storage'),
+
+  // ─── GENERIC / POWER ────────────────────────────────────────────────────────
+  e('gen-pdu-1u',      'PDU 1U',      'Generic', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+  e('gen-pdu-2u',      'PDU 2U',      'Generic', 'POWER', 2, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+  e('gen-ups-2u',      'UPS 2U',      'Generic', 'POWER', 2, 'ups'),
+  e('gen-ups-4u',      'UPS 4U',      'Generic', 'POWER', 4, 'ups'),
+  e('gen-mini-ups-1u', 'Mini UPS 1U', 'Generic', 'POWER', 1, 'ups', { halfWidth: true, halfDepth: true }),
+
+  // ─── GENERIC / PATCH PANELS ─────────────────────────────────────────────────
+  e('gen-fiber-pp-1u', 'Fiber Patch Panel 1U',     'Generic', 'PATCH PANELS', 1, 'patch-panel', { halfDepth: true }),
+  e('gen-pp-24-1u',    'Patch Panel (24-Port) 1U', 'Generic', 'PATCH PANELS', 1, 'patch-panel'),
+  e('gen-pp-48-2u',    'Patch Panel (48-Port) 2U', 'Generic', 'PATCH PANELS', 2, 'patch-panel'),
+  e('gen-half-pp-1u',  'Half Patch Panel 1U',      'Generic', 'PATCH PANELS', 1, 'patch-panel', { halfWidth: true, halfDepth: true }),
+
+  // ─── GENERIC / KVM ──────────────────────────────────────────────────────────
+  e('gen-kvm-drawer-1u', 'Console Drawer 1U', 'Generic', 'KVM', 1, 'kvm'),
+  e('gen-kvm-switch-1u', 'KVM Switch 1U',     'Generic', 'KVM', 1, 'kvm'),
+
+  // ─── GENERIC / AV/MEDIA ─────────────────────────────────────────────────────
+  e('gen-amp-1u',       'Amplifier 1U',        'Generic', 'AV/MEDIA', 1, 'other'),
+  e('gen-amp-2u',       'Amplifier 2U',        'Generic', 'AV/MEDIA', 2, 'other'),
+  e('gen-audio-1u',     'Audio Processor 1U',  'Generic', 'AV/MEDIA', 1, 'other'),
+  e('gen-avr-1u',       'AV Receiver 1U',      'Generic', 'AV/MEDIA', 1, 'other'),
+  e('gen-avr-2u',       'AV Receiver 2U',      'Generic', 'AV/MEDIA', 2, 'other'),
+  e('gen-pwramp-3u',    'Power Amplifier 3U',  'Generic', 'AV/MEDIA', 3, 'other'),
+  e('gen-stream-1u',    'Streaming Encoder 1U','Generic', 'AV/MEDIA', 1, 'other'),
+  e('gen-vidswitch-1u', 'Video Switcher 1U',   'Generic', 'AV/MEDIA', 1, 'other'),
+
+  // ─── GENERIC / COOLING ──────────────────────────────────────────────────────
+  e('gen-fan-1u',      'Fan Panel 1U',      'Generic', 'COOLING', 1, 'other', { halfDepth: true }),
+  e('gen-fan-2u',      'Fan Panel 2U',      'Generic', 'COOLING', 2, 'other', { halfDepth: true }),
+  e('gen-half-fan-1u', 'Half Fan Panel 1U', 'Generic', 'COOLING', 1, 'other', { halfWidth: true, halfDepth: true }),
+
+  // ─── GENERIC / SHELVES ──────────────────────────────────────────────────────
+  e('gen-shelf-cant-1u', 'Cantilever Shelf 1U', 'Generic', 'SHELVES', 1, 'blank', { halfDepth: true }),
+  e('gen-shelf-1u',      'Shelf 1U',            'Generic', 'SHELVES', 1, 'blank'),
+  e('gen-shelf-2u',      'Shelf 2U',            'Generic', 'SHELVES', 2, 'blank'),
+  e('gen-shelf-vent-1u', 'Vented Shelf 1U',     'Generic', 'SHELVES', 1, 'blank'),
+  e('gen-shelf-2s-1u',   'Shelf (2-Slot) 1U',   'Generic', 'SHELVES', 1, 'blank'),
+  e('gen-shelf-3s-1u',   'Shelf (3-Slot) 1U',   'Generic', 'SHELVES', 1, 'blank'),
+  e('gen-shelf-2s-2u',   'Shelf (2-Slot) 2U',   'Generic', 'SHELVES', 2, 'blank'),
+  e('gen-shelf-3s-2u',   'Shelf (3-Slot) 2U',   'Generic', 'SHELVES', 2, 'blank'),
+  e('gen-half-shelf-1u', 'Half Shelf 1U',        'Generic', 'SHELVES', 1, 'blank', { halfWidth: true, halfDepth: true }),
+
+  // ─── GENERIC / BLANKS ───────────────────────────────────────────────────────
+  e('gen-blank-1u',      'Blank Panel 1U',      'Generic', 'BLANKS', 1, 'blank'),
+  e('gen-blank-2u',      'Blank Panel 2U',      'Generic', 'BLANKS', 2, 'blank'),
+  e('gen-blank-3u',      'Blank Panel 3U',      'Generic', 'BLANKS', 3, 'blank'),
+  e('gen-blank-4u',      'Blank Panel 4U',      'Generic', 'BLANKS', 4, 'blank'),
+  e('gen-half-blank-1u', 'Half Blank 1U',       'Generic', 'BLANKS', 1, 'blank', { halfWidth: true, halfDepth: true }),
+  e('gen-half-blank-2u', 'Half Blank 2U',       'Generic', 'BLANKS', 2, 'blank', { halfWidth: true, halfDepth: true }),
+
+  // ─── GENERIC / CABLE MANAGEMENT ─────────────────────────────────────────────
+  e('gen-brush-1u',      'Brush Panel 1U',      'Generic', 'CABLE MANAGEMENT', 1, 'cable-manager', { halfDepth: true }),
+  e('gen-cable-1u',      'Cable Manager 1U',    'Generic', 'CABLE MANAGEMENT', 1, 'cable-manager'),
+  e('gen-cable-2u',      'Cable Manager 2U',    'Generic', 'CABLE MANAGEMENT', 2, 'cable-manager'),
+  e('gen-half-brush-1u', 'Half Brush Panel 1U', 'Generic', 'CABLE MANAGEMENT', 1, 'cable-manager', { halfWidth: true, halfDepth: true }),
+
+  // ─── UBIQUITI ────────────────────────────────────────────────────────────────
+  e('ub-usw-pro-48',     'UniFi Switch Pro 48',            'Ubiquiti', 'NETWORK',      1, 'switch'),
+  e('ub-usw-pro-24',     'UniFi Switch Pro 24',            'Ubiquiti', 'NETWORK',      1, 'switch'),
+  e('ub-usw-ent-48-poe', 'UniFi Switch Enterprise 48 PoE', 'Ubiquiti', 'NETWORK',      1, 'switch'),
+  e('ub-usw-pro-max-48', 'UniFi Switch Pro Max 48 PoE',    'Ubiquiti', 'NETWORK',      1, 'switch'),
+  e('ub-usw-agg',        'UniFi Switch Aggregation',       'Ubiquiti', 'NETWORK',      1, 'switch'),
+  e('ub-usw-lite-16',    'UniFi Switch Lite 16',           'Ubiquiti', 'NETWORK',      1, 'switch'),
+  e('ub-udm-pro',        'UniFi Dream Machine Pro',        'Ubiquiti', 'FIREWALLS',    1, 'firewall'),
+  e('ub-udm-se',         'UniFi Dream Machine SE',         'Ubiquiti', 'FIREWALLS',    1, 'firewall'),
+  e('ub-udm-pro-max',    'UniFi Dream Machine Pro Max',    'Ubiquiti', 'FIREWALLS',    1, 'firewall'),
+  e('ub-unvr',           'UniFi NVR',                      'Ubiquiti', 'STORAGE',      2, 'storage'),
+  e('ub-unvr-pro',       'UniFi NVR Pro',                  'Ubiquiti', 'STORAGE',      2, 'storage'),
+  e('ub-uck-g2-plus',    'UniFi CloudKey Gen2 Plus',       'Ubiquiti', 'SERVERS',      1, 'server'),
+  e('ub-upp-48',         'UniFi 48-Port PoE Patch Panel',  'Ubiquiti', 'PATCH PANELS', 1, 'patch-panel'),
+
+  // ─── CISCO ───────────────────────────────────────────────────────────────────
+  e('ci-cat-9300-48p',  'Catalyst 9300-48P',   'Cisco', 'NETWORK',   1, 'switch'),
+  e('ci-cat-9300-24p',  'Catalyst 9300-24P',   'Cisco', 'NETWORK',   1, 'switch'),
+  e('ci-cat-9200-48p',  'Catalyst 9200-48P',   'Cisco', 'NETWORK',   1, 'switch'),
+  e('ci-cat-9200-24p',  'Catalyst 9200-24P',   'Cisco', 'NETWORK',   1, 'switch'),
+  e('ci-cat-9500-48',   'Catalyst 9500-48Y4C', 'Cisco', 'NETWORK',   1, 'switch'),
+  e('ci-mr-355',        'Meraki MS355-48X2',   'Cisco', 'NETWORK',   1, 'switch'),
+  e('ci-asa-5506',      'ASA 5506-X',          'Cisco', 'FIREWALLS', 1, 'firewall'),
+  e('ci-asa-5516',      'ASA 5516-X',          'Cisco', 'FIREWALLS', 1, 'firewall'),
+  e('ci-isr-4331',      'ISR 4331',            'Cisco', 'FIREWALLS', 1, 'firewall'),
+  e('ci-isr-4351',      'ISR 4351',            'Cisco', 'FIREWALLS', 2, 'firewall'),
+  e('ci-mx-250',        'Meraki MX250',        'Cisco', 'FIREWALLS', 1, 'firewall'),
+  e('ci-mx-450',        'Meraki MX450',        'Cisco', 'FIREWALLS', 1, 'firewall'),
+
+  // ─── DELL ────────────────────────────────────────────────────────────────────
+  e('dl-r250',   'PowerEdge R250',    'Dell', 'SERVERS', 1, 'server'),
+  e('dl-r350',   'PowerEdge R350',    'Dell', 'SERVERS', 1, 'server'),
+  e('dl-r450',   'PowerEdge R450',    'Dell', 'SERVERS', 1, 'server'),
+  e('dl-r550',   'PowerEdge R550',    'Dell', 'SERVERS', 2, 'server'),
+  e('dl-r650',   'PowerEdge R650',    'Dell', 'SERVERS', 1, 'server'),
+  e('dl-r650xs', 'PowerEdge R650xs',  'Dell', 'SERVERS', 1, 'server'),
+  e('dl-r750',   'PowerEdge R750',    'Dell', 'SERVERS', 2, 'server'),
+  e('dl-r750xs', 'PowerEdge R750xs',  'Dell', 'SERVERS', 2, 'server'),
+  e('dl-r760',   'PowerEdge R760',    'Dell', 'SERVERS', 2, 'server'),
+  e('dl-r960',   'PowerEdge R960',    'Dell', 'SERVERS', 4, 'server'),
+  e('dl-me5024', 'PowerVault ME5024', 'Dell', 'STORAGE', 2, 'storage'),
+  e('dl-me5084', 'PowerVault ME5084', 'Dell', 'STORAGE', 5, 'storage'),
+  e('dl-unity',  'EMC Unity XT 380',  'Dell', 'STORAGE', 2, 'storage'),
+
+  // ─── HPE ─────────────────────────────────────────────────────────────────────
+  e('hp-dl20-g10p',      'ProLiant DL20 Gen10 Plus',  'HPE', 'SERVERS', 1, 'server'),
+  e('hp-dl360-g10',      'ProLiant DL360 Gen10',      'HPE', 'SERVERS', 1, 'server'),
+  e('hp-dl360-g10p',     'ProLiant DL360 Gen10 Plus', 'HPE', 'SERVERS', 1, 'server'),
+  e('hp-dl380-g10',      'ProLiant DL380 Gen10',      'HPE', 'SERVERS', 2, 'server'),
+  e('hp-dl380-g10p',     'ProLiant DL380 Gen10 Plus', 'HPE', 'SERVERS', 2, 'server'),
+  e('hp-dl560-g10',      'ProLiant DL560 Gen10',      'HPE', 'SERVERS', 2, 'server'),
+  e('hp-dl580-g10',      'ProLiant DL580 Gen10',      'HPE', 'SERVERS', 4, 'server'),
+  e('hp-aruba-2930f-48', 'Aruba 2930F-48G',           'HPE', 'NETWORK', 1, 'switch'),
+  e('hp-aruba-2930f-24', 'Aruba 2930F-24G',           'HPE', 'NETWORK', 1, 'switch'),
+  e('hp-aruba-6300m',    'Aruba 6300M 48-Port',       'HPE', 'NETWORK', 1, 'switch'),
+  e('hp-aruba-6405',     'Aruba 6405 Switch',         'HPE', 'NETWORK', 7, 'switch'),
+  e('hp-msa-2060',       'MSA 2060 SAS',              'HPE', 'STORAGE', 2, 'storage'),
+
+  // ─── FORTINET ────────────────────────────────────────────────────────────────
+  e('ft-fg-40f',   'FortiGate 40F',        'Fortinet', 'FIREWALLS', 1, 'firewall'),
+  e('ft-fg-60f',   'FortiGate 60F',        'Fortinet', 'FIREWALLS', 1, 'firewall'),
+  e('ft-fg-80f',   'FortiGate 80F',        'Fortinet', 'FIREWALLS', 1, 'firewall'),
+  e('ft-fg-100f',  'FortiGate 100F',       'Fortinet', 'FIREWALLS', 1, 'firewall'),
+  e('ft-fg-200f',  'FortiGate 200F',       'Fortinet', 'FIREWALLS', 1, 'firewall'),
+  e('ft-fg-400e',  'FortiGate 400E',       'Fortinet', 'FIREWALLS', 2, 'firewall'),
+  e('ft-fg-600e',  'FortiGate 600E',       'Fortinet', 'FIREWALLS', 2, 'firewall'),
+  e('ft-fg-900d',  'FortiGate 900D',       'Fortinet', 'FIREWALLS', 2, 'firewall'),
+  e('ft-fsw-148f', 'FortiSwitch 148F-POE', 'Fortinet', 'NETWORK',   1, 'switch'),
+  e('ft-fsw-248e', 'FortiSwitch 248E-POE', 'Fortinet', 'NETWORK',   1, 'switch'),
+  e('ft-fsw-448e', 'FortiSwitch 448E',     'Fortinet', 'NETWORK',   1, 'switch'),
+
+  // ─── PALO ALTO ───────────────────────────────────────────────────────────────
+  e('pa-220',  'PA-220',  'Palo Alto', 'FIREWALLS', 1, 'firewall'),
+  e('pa-440',  'PA-440',  'Palo Alto', 'FIREWALLS', 1, 'firewall'),
+  e('pa-450',  'PA-450',  'Palo Alto', 'FIREWALLS', 1, 'firewall'),
+  e('pa-460',  'PA-460',  'Palo Alto', 'FIREWALLS', 1, 'firewall'),
+  e('pa-850',  'PA-850',  'Palo Alto', 'FIREWALLS', 2, 'firewall'),
+  e('pa-3220', 'PA-3220', 'Palo Alto', 'FIREWALLS', 2, 'firewall'),
+  e('pa-3250', 'PA-3250', 'Palo Alto', 'FIREWALLS', 2, 'firewall'),
+  e('pa-3260', 'PA-3260', 'Palo Alto', 'FIREWALLS', 2, 'firewall'),
+  e('pa-5220', 'PA-5220', 'Palo Alto', 'FIREWALLS', 2, 'firewall'),
+  e('pa-5250', 'PA-5250', 'Palo Alto', 'FIREWALLS', 2, 'firewall'),
+
+  // ─── APC ─────────────────────────────────────────────────────────────────────
+  e('apc-su1000-2u',   'Smart-UPS 1000VA',      'APC', 'POWER', 2, 'ups'),
+  e('apc-su1500-2u',   'Smart-UPS 1500VA',      'APC', 'POWER', 2, 'ups'),
+  e('apc-su2200-2u',   'Smart-UPS 2200VA',      'APC', 'POWER', 2, 'ups'),
+  e('apc-su3000-2u',   'Smart-UPS 3000VA',      'APC', 'POWER', 2, 'ups'),
+  e('apc-srt5000-3u',  'Smart-UPS SRT 5000VA',  'APC', 'POWER', 3, 'ups'),
+  e('apc-srt8000-4u',  'Smart-UPS SRT 8000VA',  'APC', 'POWER', 4, 'ups'),
+  e('apc-srt10000-6u', 'Smart-UPS SRT 10000VA', 'APC', 'POWER', 6, 'ups'),
+  e('apc-pdu-7920',    'Rack PDU AP7920B',       'APC', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+  e('apc-pdu-7921',    'Rack PDU AP7921B',       'APC', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+  e('apc-pdu-7922',    'Rack PDU AP7922B',       'APC', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+  e('apc-pdu-7853',    'Metered PDU AP7853',     'APC', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+
+  // ─── CYBERPOWER ──────────────────────────────────────────────────────────────
+  e('cp-or1000-1u', 'OR1000LCDRT1U',  'CyberPower', 'POWER', 1, 'ups'),
+  e('cp-or1500-2u', 'OR1500LCDRT2U',  'CyberPower', 'POWER', 2, 'ups'),
+  e('cp-or2200-2u', 'OR2200LCDRT2U',  'CyberPower', 'POWER', 2, 'ups'),
+  e('cp-or3000-2u', 'OR3000LCDRT2U',  'CyberPower', 'POWER', 2, 'ups'),
+  e('cp-pdu-15b',   'PDU15B2F12R',    'CyberPower', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+  e('cp-pdu-20b',   'PDU20B2F20R',    'CyberPower', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+
+  // ─── EATON ───────────────────────────────────────────────────────────────────
+  e('ea-5px-1000-1u', '5PX 1000VA',         'Eaton', 'POWER', 1, 'ups'),
+  e('ea-5px-1500-2u', '5PX 1500VA',         'Eaton', 'POWER', 2, 'ups'),
+  e('ea-5px-2200-2u', '5PX 2200VA',         'Eaton', 'POWER', 2, 'ups'),
+  e('ea-5px-3000-2u', '5PX 3000VA',         'Eaton', 'POWER', 2, 'ups'),
+  e('ea-9px-5000-3u', '9PX 5000VA',         'Eaton', 'POWER', 3, 'ups'),
+  e('ea-9px-8000-4u', '9PX 8000VA',         'Eaton', 'POWER', 4, 'ups'),
+  e('ea-epdu-1u',     'ePDU G3 Metered 1U', 'Eaton', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+
+  // ─── MIKROTIK ────────────────────────────────────────────────────────────────
+  e('mt-crs328',  'CRS328-24P-4S+RM',    'MikroTik', 'NETWORK',   1, 'switch'),
+  e('mt-crs354',  'CRS354-48G-4S+2Q+RM', 'MikroTik', 'NETWORK',   1, 'switch'),
+  e('mt-crs326',  'CRS326-24G-2S+RM',    'MikroTik', 'NETWORK',   1, 'switch'),
+  e('mt-ccr2004', 'CCR2004-1G-12S+2XS',  'MikroTik', 'FIREWALLS', 1, 'firewall'),
+  e('mt-ccr2116', 'CCR2116-12G-4S+',     'MikroTik', 'FIREWALLS', 1, 'firewall'),
+  e('mt-rb4011',  'RB4011iGS+RM',        'MikroTik', 'FIREWALLS', 1, 'firewall'),
+  e('mt-ccr1036', 'CCR1036-12G-4S',      'MikroTik', 'FIREWALLS', 1, 'firewall'),
+
+  // ─── NETGEAR ─────────────────────────────────────────────────────────────────
+  e('ng-m4350',    'M4350-24X4V',          'Netgear', 'NETWORK',  1, 'switch'),
+  e('ng-m4300-28', 'M4300-28G',            'Netgear', 'NETWORK',  1, 'switch'),
+  e('ng-m4300-52', 'M4300-52G',            'Netgear', 'NETWORK',  1, 'switch'),
+  e('ng-m4250',    'AV Line M4250-40G8XF', 'Netgear', 'NETWORK',  1, 'switch'),
+  e('ng-rn3312',   'ReadyNAS 3312',         'Netgear', 'STORAGE',  2, 'storage'),
+  e('ng-rn4312x',  'ReadyNAS 4312X',        'Netgear', 'STORAGE',  2, 'storage'),
+
+  // ─── JUNIPER ─────────────────────────────────────────────────────────────────
+  e('ju-ex2300-48', 'EX2300-48P',  'Juniper', 'NETWORK',   1, 'switch'),
+  e('ju-ex2300-24', 'EX2300-24P',  'Juniper', 'NETWORK',   1, 'switch'),
+  e('ju-ex3400-48', 'EX3400-48P',  'Juniper', 'NETWORK',   1, 'switch'),
+  e('ju-ex4300-48', 'EX4300-48MP', 'Juniper', 'NETWORK',   1, 'switch'),
+  e('ju-srx300',    'SRX300',      'Juniper', 'FIREWALLS', 1, 'firewall'),
+  e('ju-srx320',    'SRX320',      'Juniper', 'FIREWALLS', 1, 'firewall'),
+  e('ju-srx380',    'SRX380',      'Juniper', 'FIREWALLS', 1, 'firewall'),
+
+  // ─── SYNOLOGY ────────────────────────────────────────────────────────────────
+  e('sy-rs422',    'RS422+',      'Synology', 'STORAGE', 1, 'storage'),
+  e('sy-rs822',    'RS822+',      'Synology', 'STORAGE', 1, 'storage'),
+  e('sy-rs822rp',  'RS822RP+',    'Synology', 'STORAGE', 1, 'storage'),
+  e('sy-rs1221',   'RS1221+',     'Synology', 'STORAGE', 2, 'storage'),
+  e('sy-rs1221rp', 'RS1221RP+',   'Synology', 'STORAGE', 2, 'storage'),
+  e('sy-rs3621xs', 'RS3621xs+',   'Synology', 'STORAGE', 2, 'storage'),
+  e('sy-rs3621rp', 'RS3621RPxs',  'Synology', 'STORAGE', 2, 'storage'),
+  e('sy-rs4021xs', 'RS4021xs+',   'Synology', 'STORAGE', 2, 'storage'),
+  e('sy-rx1223rp', 'RX1223RP',    'Synology', 'STORAGE', 2, 'storage'),
+
+  // ─── QNAP ────────────────────────────────────────────────────────────────────
+  e('qn-ts-h1277', 'TS-h1277XU-RP', 'QNAP', 'STORAGE', 2, 'storage'),
+  e('qn-ts-h1677', 'TS-h1677XU-RP', 'QNAP', 'STORAGE', 2, 'storage'),
+  e('qn-ts-h2477', 'TS-h2477XU-RP', 'QNAP', 'STORAGE', 2, 'storage'),
+  e('qn-ts-h3087', 'TS-h3087XU-RP', 'QNAP', 'STORAGE', 3, 'storage'),
+  e('qn-tl-r1200', 'TL-R1200S-RP',  'QNAP', 'STORAGE', 2, 'storage'),
+  e('qn-tl-d400',  'TL-D400S',      'QNAP', 'STORAGE', 2, 'storage'),
+
+  // ─── SUPERMICRO ──────────────────────────────────────────────────────────────
+  e('sm-1019p',     'SuperServer 1019P-WTR',       'Supermicro', 'SERVERS', 1, 'server'),
+  e('sm-2029p',     'SuperServer 2029P-C1RT',      'Supermicro', 'SERVERS', 2, 'server'),
+  e('sm-6029p',     'SuperServer 6029P-WTR',       'Supermicro', 'SERVERS', 2, 'server'),
+  e('sm-7049p',     'SuperServer 7049P-TR',        'Supermicro', 'SERVERS', 4, 'server'),
+  e('sm-stor-2029', 'SuperStorage 2029P-DN2R48L',  'Supermicro', 'STORAGE', 2, 'storage'),
+  e('sm-mc',        'MicroCloud SYS-5039MC-H8TRF', 'Supermicro', 'CHASSIS', 3, 'server'),
+
+  // ─── TP-LINK ─────────────────────────────────────────────────────────────────
+  e('tl-sg3428x',  'TL-SG3428X',  'TP-Link', 'NETWORK',   1, 'switch'),
+  e('tl-sg3452p',  'TL-SG3452P',  'TP-Link', 'NETWORK',   1, 'switch'),
+  e('tl-sg3452xp', 'TL-SG3452XP', 'TP-Link', 'NETWORK',   1, 'switch'),
+  e('tl-er8411',   'TL-ER8411',   'TP-Link', 'FIREWALLS', 1, 'firewall'),
+  e('tl-er7212pc', 'TL-ER7212PC', 'TP-Link', 'FIREWALLS', 1, 'firewall'),
+
+  // ─── LENOVO ──────────────────────────────────────────────────────────────────
+  e('lv-sr250v2', 'ThinkSystem SR250 V2', 'Lenovo', 'SERVERS', 1, 'server'),
+  e('lv-sr630v3', 'ThinkSystem SR630 V3', 'Lenovo', 'SERVERS', 1, 'server'),
+  e('lv-sr650v3', 'ThinkSystem SR650 V3', 'Lenovo', 'SERVERS', 2, 'server'),
+  e('lv-sr850v2', 'ThinkSystem SR850 V2', 'Lenovo', 'SERVERS', 2, 'server'),
+  e('lv-sr950v3', 'ThinkSystem SR950 V3', 'Lenovo', 'SERVERS', 4, 'server'),
+  e('lv-de4000h', 'ThinkSystem DE4000H',  'Lenovo', 'STORAGE', 2, 'storage'),
+
+  // ─── RASPBERRY PI ────────────────────────────────────────────────────────────
+  e('rpi-1u-4x', 'Rack Mount 1U (4x Pi)', 'Raspberry Pi', 'SERVERS', 1, 'server'),
+  e('rpi-2u-8x', 'Rack Mount 2U (8x Pi)', 'Raspberry Pi', 'SERVERS', 2, 'server'),
 ];
+
+// Sorted vendor list: Generic first, rest alphabetical
+export const CATALOG_VENDORS = [
+  'Generic',
+  ...new Set(RACK_CATALOG.filter((x) => x.vendor !== 'Generic').map((x) => x.vendor).sort()),
+];
+
+export function groupByVendor(entries) {
+  const map = new Map();
+  for (const entry of entries) {
+    if (!map.has(entry.vendor)) map.set(entry.vendor, []);
+    map.get(entry.vendor).push(entry);
+  }
+  return map;
+}
+
+export function groupByCategory(entries) {
+  const map = new Map();
+  for (const entry of entries) {
+    if (!map.has(entry.category)) map.set(entry.category, []);
+    map.get(entry.category).push(entry);
+  }
+  return map;
+}

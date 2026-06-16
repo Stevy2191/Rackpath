@@ -1,37 +1,25 @@
-/* Grid layout: header (badge+form) and body (rack frame) share the left
-   column so they are exactly the same width. The right column holds the
-   device name labels. The "." empty cell in the header row keeps the header
-   row height aligned so labels start at the top of the body row. */
+/* ─── Enclosure container ────────────────────────────────── */
 .rack-enclosure {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
-  width: 600px;
-  grid-template-columns: 1fr 200px;
-  grid-template-rows: auto auto;
-  column-gap: 10px;
-  row-gap: 0.5rem;
-  grid-template-areas:
-    'header .'
-    'body   labels';
-  align-items: start;
+  width: auto;
 }
 
-/* Sticky header wrapper — sticks to the top of .rack-canvas (overflow:auto)
-   while scrolling through a tall rack. Solid background prevents content
-   bleed-through. */
+/* ─── Header: rack name badge (sticky) ───────────────────── */
 .rack-header {
-  grid-area: header;
   position: sticky;
   top: 0;
   z-index: 10;
   cursor: pointer;
+  margin-bottom: 0.5rem;
 }
 
 .rack-badge {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   background: linear-gradient(180deg, #2a2d35 0%, #1a1c22 100%);
   border: 1px solid #3a3f4a;
   border-radius: 6px;
@@ -41,17 +29,26 @@
 
 .rack-badge-name {
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rack-badge-u {
-  font-size: 0.7rem;
+.rack-badge-loc {
+  font-size: 0.68rem;
   color: #8a93a3;
-  background: rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100px;
+}
+
+.rack-badge-u {
+  font-size: 0.68rem;
+  color: #8a93a3;
+  background: rgba(0,0,0,0.3);
   padding: 2px 6px;
   border-radius: 4px;
   flex-shrink: 0;
@@ -64,34 +61,9 @@
   flex-shrink: 0;
 }
 
-.rack-side-toggle {
-  display: flex;
-  border: 1px solid #3a3f4a;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-right: 4px;
-}
-
-.rack-side-toggle button {
-  border: none;
-  background: transparent;
-  color: #8a93a3;
-  padding: 4px 10px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.rack-side-toggle button.active {
-  background: #4adede;
-  color: #0a0a0f;
-}
-
 .rack-badge-icon-btn {
   border: none;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255,255,255,0.06);
   color: #cbd5e1;
   width: 24px;
   height: 24px;
@@ -103,19 +75,9 @@
   flex-shrink: 0;
 }
 
-.rack-badge-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.rack-badge-icon-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.rack-badge-danger:hover {
-  background: rgba(255, 87, 87, 0.25);
-  color: #ff5757;
-}
+.rack-badge-icon-btn:hover  { background: rgba(255,255,255,0.15); }
+.rack-badge-icon-btn:disabled { opacity: 0.5; cursor: default; }
+.rack-badge-danger:hover    { background: rgba(255,87,87,0.25); color: #ff5757; }
 
 .rack-edit-form {
   display: flex;
@@ -154,185 +116,136 @@
   color: #cbd5e1;
 }
 
-/* --- Frame / enclosure ----------------------------------------------------- */
-.rack-frame {
-  grid-area: body;
-  position: relative;
+/* ─── Dual-panel frame ───────────────────────────────────── */
+.rack-dual-frame {
+  display: flex;
+  align-items: stretch;
+  cursor: pointer;
   background: linear-gradient(135deg, #2c2f36 0%, #1a1c22 50%, #15161b 100%);
   border: 2px solid #060708;
   border-radius: 8px;
   padding: 6px;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 30px rgba(74, 222, 222, 0.04);
+  box-shadow:
+    inset 0 2px 6px rgba(0,0,0,0.6),
+    inset 0 -2px 6px rgba(0,0,0,0.6),
+    0 0 0 1px rgba(255,255,255,0.03),
+    0 8px 24px rgba(0,0,0,0.5),
+    0 0 30px rgba(74,222,222,0.04);
   transition: box-shadow 0.2s ease;
-  cursor: pointer;
 }
 
-/* --- Device labels (outside the rack) --------------------------------------- */
-.rack-labels {
-  grid-area: labels;
-  width: 200px;
-  display: flex;
-  flex-direction: column;
-  /* Aligns label rows with .rack-body rows: offsets the frame's
-     border + padding + top/bottom blanking panel (2 + 6 + 14 + 4 = 26px). */
-  margin-top: 26px;
+.rack-enclosure-focused .rack-dual-frame {
+  box-shadow:
+    inset 0 2px 6px rgba(0,0,0,0.6),
+    inset 0 -2px 6px rgba(0,0,0,0.6),
+    0 0 0 2px #4adede,
+    0 0 30px rgba(74,222,222,0.35);
 }
 
-.rack-label {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  padding: 0 4px;
-}
-
-.rack-label-name {
-  display: block;
-  border: none;
-  background: none;
-  padding: 0;
-  margin: 0;
-  text-align: left;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #e6e9f0;
-  white-space: normal;
-  overflow-wrap: break-word;
-  cursor: default;
-}
-
-.rack-label-link {
-  cursor: pointer;
-  color: #7dd3fc;
-}
-
-.rack-label-link:hover {
-  text-decoration: underline;
-}
-
-.rack-label-model {
-  font-size: 0.68rem;
-  color: #6b7280;
-  white-space: normal;
-  overflow-wrap: break-word;
-}
-
-.rack-label-empty {
+.rack-panel-divider {
+  width: 1px;
+  background: #060708;
+  box-shadow: 1px 0 0 rgba(255,255,255,0.03);
   flex-shrink: 0;
+  margin: 0 2px;
 }
 
-.rack-enclosure-focused .rack-frame {
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.6), 0 0 0 2px #4adede,
-    0 0 30px rgba(74, 222, 222, 0.35);
+/* ─── Individual panel (front / rear) ────────────────────── */
+.rack-panel-frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.rack-panel {
-  height: 14px;
-  margin: 0 0 4px;
-  border-radius: 3px;
+.rack-panel-label {
+  text-align: center;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #3a414f;
+  padding: 2px 0;
+}
+
+.rack-top-blank,
+.rack-bottom-blank {
+  height: 12px;
+  border-radius: 2px;
   background: linear-gradient(180deg, #3a3f48 0%, #20232a 100%);
   border: 1px solid #060708;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
-.rack-panel-bottom {
-  margin: 4px 0 0;
+.rack-bottom-blank {
+  background: linear-gradient(180deg, #20232a 0%, #3a3f48 100%);
+  margin-top: 4px;
 }
+
+.rack-top-blank { margin-bottom: 4px; }
 
 .rack-body {
   display: flex;
+  flex: 1;
 }
 
 .rack-rail {
   display: flex;
   flex-direction: column;
-  width: 26px;
+  width: 24px;
   flex-shrink: 0;
   background: linear-gradient(180deg, #24262c 0%, #1a1c21 100%);
   border: 1px solid #060708;
 }
 
-.rack-rail-left {
-  border-radius: 3px 0 0 3px;
-  border-right: none;
-}
-
-.rack-rail-right {
-  border-radius: 0 3px 3px 0;
-  border-left: none;
-}
+.rack-rail-left  { border-radius: 3px 0 0 3px; border-right: none; }
+.rack-rail-right { border-radius: 0 3px 3px 0; border-left: none; }
 
 .rack-rail-number {
-  height: var(--u-height, 44px);
+  height: var(--u-height, 40px);
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: 8px;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   color: #5a6170;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(0,0,0,0.3);
 }
 
 .rack-units {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-width: 320px;
+  min-width: 180px;
   border-top: 1px solid #060708;
   border-bottom: 1px solid #060708;
-  animation: rack-units-flip 0.25s ease;
 }
 
-@keyframes rack-units-flip {
-  from {
-    opacity: 0;
-    transform: scaleY(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: scaleY(1);
-  }
-}
-
-/* --- Empty U slot ------------------------------------------------------------ */
+/* ─── Empty U slot ───────────────────────────────────────── */
 .rack-unit-slot {
-  height: var(--u-height, 44px);
+  height: var(--u-height, 40px);
   box-sizing: border-box;
-  border-bottom: 1px dotted rgba(255, 255, 255, 0.06);
+  border-bottom: 1px dotted rgba(255,255,255,0.06);
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding-right: 6px;
+  padding-right: 4px;
   position: relative;
-  transition: background 0.1s ease;
+  transition: background 0.1s;
 }
 
-.rack-unit-band-0 {
-  background: rgba(255, 255, 255, 0.012);
-}
-
-.rack-unit-band-1 {
-  background: rgba(0, 0, 0, 0.1);
-}
+.rack-unit-band-0 { background: rgba(255,255,255,0.012); }
+.rack-unit-band-1 { background: rgba(0,0,0,0.1); }
 
 .rack-unit-slot-number {
-  font-size: 9px;
+  font-size: 8px;
   color: #3a414f;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
 }
 
-.rack-unit-slot.drop-ok {
-  background: rgba(74, 158, 255, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(74, 158, 255, 0.7);
-}
-
-.rack-unit-slot.drop-collision {
-  background: rgba(255, 87, 87, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(255, 87, 87, 0.7);
-}
+.rack-unit-slot.drop-ok        { background: rgba(74,158,255,0.2);  box-shadow: inset 0 0 0 1px rgba(74,158,255,0.7); }
+.rack-unit-slot.drop-collision { background: rgba(255,87,87,0.2);   box-shadow: inset 0 0 0 1px rgba(255,87,87,0.7); }
 
 .rack-units .device-block {
   box-sizing: border-box;

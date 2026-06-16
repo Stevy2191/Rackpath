@@ -47,30 +47,15 @@
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.racks-toolbar-actions button:hover {
-  border-color: #3a3f4a;
-  color: #d4d8e0;
-}
+.racks-toolbar-actions button:hover      { border-color: #3a3f4a; color: #d4d8e0; }
+.racks-toolbar-actions button.active     { background: rgba(74,222,222,0.12); border-color: var(--rack-accent); color: var(--rack-accent); }
+.racks-toolbar-actions button.primary    { background: rgba(74,222,222,0.12); border-color: var(--rack-accent); color: var(--rack-accent); }
+.racks-toolbar-actions button.primary:hover { background: rgba(74,222,222,0.2); }
 
-.racks-toolbar-actions button.active {
-  background: rgba(74, 222, 222, 0.12);
-  border-color: var(--rack-accent);
-  color: var(--rack-accent);
-}
-
-.racks-toolbar-actions button.primary {
-  background: rgba(74, 222, 222, 0.12);
-  border-color: var(--rack-accent);
-  color: var(--rack-accent);
-}
-
-.racks-toolbar-actions button.primary:hover {
-  background: rgba(74, 222, 222, 0.2);
-}
-
+/* ─── Three-column canvas area ───────────────────────────── */
 .racks-main {
   flex: 1;
   display: flex;
@@ -78,11 +63,11 @@
   overflow: hidden;
 }
 
-/* Shared modal shell, used by AddRackModal and CustomDeviceModal. */
+/* ─── Shared modal shell ─────────────────────────────────── */
 .rack-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0,0,0,0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -100,7 +85,7 @@
   padding: 20px;
   font-family: var(--rack-font-mono);
   color: #d4d8e0;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
 }
 
 .rack-modal h3 {
@@ -142,16 +127,13 @@
 
 .rack-modal input:focus,
 .rack-modal select:focus,
-.rack-modal textarea:focus {
-  outline: none;
-  border-color: var(--rack-accent);
-}
+.rack-modal textarea:focus { outline: none; border-color: var(--rack-accent); }
 
 .rack-modal-error {
   padding: 8px 10px;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  border: 1px solid rgba(239,68,68,0.4);
   border-radius: 4px;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239,68,68,0.1);
   color: #ef4444;
   font-size: 0.78rem;
 }
@@ -173,24 +155,151 @@
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.rack-modal-actions button:hover {
-  border-color: #3a3f4a;
+.rack-modal-actions button:hover      { border-color: #3a3f4a; color: #d4d8e0; }
+.rack-modal-actions button:disabled   { opacity: 0.5; cursor: not-allowed; }
+.rack-modal-actions button.rack-modal-save { border-color: var(--rack-accent); color: var(--rack-accent); }
+.rack-modal-actions button.rack-modal-save:hover { background: rgba(74,222,222,0.1); }
+
+/* ─── Add Rack 2-step wizard extras ─────────────────────── */
+.add-rack-modal {
+  width: 420px;
+}
+
+.add-rack-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.add-rack-modal-header h3 { margin: 0; }
+
+.add-rack-steps {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.add-rack-steps .active { color: var(--rack-accent); }
+.add-rack-step-sep { color: #3a3f4a; }
+
+.add-rack-step {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.add-rack-field-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: -8px;
+}
+
+/* Layout cards */
+.add-rack-layout-cards {
+  display: flex;
+  gap: 8px;
+}
+
+.add-rack-layout-card {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--rack-border);
+  border-radius: 6px;
+  background: #0e1015;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.add-rack-layout-card strong { color: #d4d8e0; font-size: 0.85rem; }
+.add-rack-layout-card span   { font-size: 0.68rem; color: #6b7280; }
+.add-rack-layout-card.selected { border-color: var(--rack-accent); background: rgba(74,222,222,0.08); }
+.add-rack-layout-card.selected strong { color: var(--rack-accent); }
+
+/* Width cards */
+.add-rack-width-cards {
+  display: flex;
+  gap: 6px;
+}
+
+.add-rack-width-card {
+  flex: 1;
+  padding: 8px 6px;
+  border: 1px solid var(--rack-border);
+  border-radius: 6px;
+  background: #0e1015;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.add-rack-width-label { font-size: 0.95rem; font-weight: 700; color: #d4d8e0; }
+.add-rack-width-sub   { font-size: 0.62rem; color: #6b7280; }
+.add-rack-width-card.selected { border-color: var(--rack-accent); background: rgba(74,222,222,0.08); }
+.add-rack-width-card.selected .add-rack-width-label { color: var(--rack-accent); }
+
+/* Height presets */
+.add-rack-height-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.add-rack-preset-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--rack-border);
+  border-radius: 4px;
+  background: #0e1015;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.add-rack-preset-btn.selected { border-color: var(--rack-accent); color: var(--rack-accent); background: rgba(74,222,222,0.08); }
+.add-rack-preset-btn:hover    { border-color: #3a3f4a; color: #d4d8e0; }
+
+/* Slider */
+.add-rack-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.add-rack-slider-row input[type='range'] {
+  flex: 1;
+  accent-color: var(--rack-accent);
+  cursor: pointer;
+}
+
+.add-rack-slider-val {
+  min-width: 36px;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: #d4d8e0;
-}
-
-.rack-modal-actions button.rack-modal-save {
-  border-color: var(--rack-accent);
-  color: var(--rack-accent);
-}
-
-.rack-modal-actions button.rack-modal-save:hover {
-  background: rgba(74, 222, 222, 0.1);
-}
-
-.rack-modal-actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }

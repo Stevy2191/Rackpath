@@ -1,31 +1,94 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
-import { RACK_CATALOG, CATALOG_CATEGORIES, CATALOG_VENDOR_OPTIONS, CATALOG_TYPE_OPTIONS, vendorBucket } from './rackCatalog';
+import { X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  RACK_CATALOG, CATALOG_CATEGORIES, CATALOG_VENDORS,
+  VENDOR_COLORS, groupByVendor, groupByCategory,
+} from './rackCatalog';
 import DeviceFacePlate from './DeviceFacePlate';
 import CustomDeviceModal from './CustomDeviceModal';
 import './DeviceCatalog.css';
 
-// Find the lowest U position in `rack` (on the given face) where a block of
-// `uSize` consecutive units is free.
-function findNextFreeU(rack, allSlots, uSize, frontBack) {
+function findNextFreeU(rack, allSlots, uSize, mountedFace) {
   const occupied = new Set();
   for (const s of allSlots) {
     if (s.rack_id !== rack.id) continue;
-    if ((s.front_back || 'front') !== frontBack) continue;
+    const face = s.mounted_face || s.front_back || 'front';
+    const targetFace = mountedFace === 'rear' ? 'rear' : 'front';
+    // slots with face 'both' block all faces
+    if (face !== 'both' && face !== targetFace) continue;
     for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) occupied.add(u);
   }
   for (let start = 1; start + uSize - 1 <= rack.u_height; start++) {
     let free = true;
     for (let u = start; u <= start + uSize - 1; u++) {
-      if (occupied.has(u)) {
-        free = false;
-        break;
-      }
+      if (occupied.has(u)) { free = false; break; }
     }
     if (free) return start;
   }
   return null;
 }
+
+function VendorBadge({ vendor }) {
+  const color = VENDOR_COLORS[vendor] || '#555';
+  const initials = vendor.replace(/[^A-Z0-9]/gi, '').slice(0, 3).toUpperCase();
+  return (
+    <span className="dc-vendor-badge" style={{ background: color }} title={vendor}>
+      {initials}
+    </span>
+  );
+}
+
+function CatalogCard({ entry, onClick }) {
+  const previewSlot = {
+    item_type: entry.renderType,
+    custom_type: entry.renderType,
+    u_size: entry.uSize,
+    vendor: entry.vendor,
+  };
+
+  return (
+    <div
+      className="dc-card"
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData('text/catalog-item', JSON.stringify(entry))}
+      onClick={onClick}
+      title={`${entry.name} · ${entry.uSize}U${entry.mountedFace === 'rear' ? ' · Rear' : ''}`}
+    >
+      <div className="dc-card-preview">
+        <DeviceFacePlate slot={previewSlot} side="front" />
+      </div>
+      <div className="dc-card-info">
+        <span className="dc-card-name">{entry.name}</span>
+        <div className="dc-card-meta">
+          <VendorBadge vendor={entry.vendor} />
+          <span className="dc-card-usize">{entry.uSize}U</span>
+          {entry.mountedFace === 'rear' && <span className="dc-card-rear">Rear</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CollapsibleGroup({ title, count, defaultOpen, children }) {
+  const [open, setOpen] = useState(defaultOpen !== false);
+  return (
+    <div className="dc-group">
+      <button type="button" className="dc-group-header" onClick={() => setOpen((v) => !v)}>
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        <span>{title}</span>
+        <span className="dc-group-count">{count}</span>
+      </button>
+      {open && <div className="dc-group-body">{children}</div>}
+    </div>
+  );
+}
+
+const TAB_DEFS = [
+  { id: 'brand',     label: 'Brand' },
+  { id: 'category',  label: 'Category' },
+  { id: 'az',        label: 'A–Z' },
+  { id: 'custom',    label: 'Custom' },
+];
 
 export default function DeviceCatalog({
   open,
@@ -39,46 +102,29 @@ export default function DeviceCatalog({
   onCustomDeviceCreated,
   onCustomDeviceDeleted,
 }) {
-  const [category, setCategory] = useState('all');
-  const [customDeviceModalOpen, setCustomDeviceModalOpen] = useState(false);
-  const [vendorFilter, setVendorFilter] = useState('All Vendors');
-  const [typeFilter, setTypeFilter] = useState('All Types');
+  const [tab, setTab] = useState('brand');
   const [search, setSearch] = useState('');
+  const [customDeviceModalOpen, setCustomDeviceModalOpen] = useState(false);
   const [unrackedOpen, setUnrackedOpen] = useState(false);
 
   if (!open) return null;
 
   const focusedRack = racks.find((r) => r.id === focusedRackId) || null;
-
   const rackedDeviceIds = new Set(allSlots.map((s) => s.device_id).filter(Boolean));
   const unrackedDevices = devices.filter((d) => !rackedDeviceIds.has(d.id));
 
-  const categoryEntries = category === 'all' ? RACK_CATALOG : RACK_CATALOG.filter((e) => e.category === category);
-
   const searchTerm = search.trim().toLowerCase();
-  const entries = categoryEntries.filter((e) => {
-    if (vendorFilter !== 'All Vendors' && vendorBucket(e.vendor) !== vendorFilter) return false;
-    if (typeFilter !== 'All Types' && (e.type || 'Other') !== typeFilter) return false;
-    if (searchTerm && !e.name.toLowerCase().includes(searchTerm)) return false;
-    return true;
-  });
-
-  const previewSlot = (entry) => ({
-    item_type: entry.renderType,
-    custom_type: entry.renderType,
-    u_size: entry.uSize,
-    vendor: entry.vendor,
-  });
+  const filteredCatalog = searchTerm
+    ? RACK_CATALOG.filter((e) => e.name.toLowerCase().includes(searchTerm) || e.vendor.toLowerCase().includes(searchTerm))
+    : RACK_CATALOG;
 
   const addCatalogEntry = (entry) => {
     if (!focusedRack) return;
-    const frontBack = entry.frontBack || 'front';
-    const u_position = findNextFreeU(focusedRack, allSlots, entry.uSize, frontBack);
+    const u_position = findNextFreeU(focusedRack, allSlots, entry.uSize, entry.mountedFace || 'front');
     if (u_position == null) return;
     const itemType = ['patch-panel', 'blank', 'cable-manager'].includes(entry.renderType) ? entry.renderType : 'custom-device';
     actions.onSlotCreate({
       rack_id: focusedRack.id,
-      device_id: null,
       item_type: itemType,
       item_label: entry.name,
       vendor: entry.vendor,
@@ -86,8 +132,9 @@ export default function DeviceCatalog({
       custom_type: entry.renderType,
       u_position,
       u_size: entry.uSize,
-      side: 'both',
-      front_back: frontBack,
+      mounted_face: entry.mountedFace || 'front',
+      half_depth: entry.halfDepth ? 1 : 0,
+      half_width: entry.halfWidth ? 1 : 0,
     });
   };
 
@@ -97,7 +144,6 @@ export default function DeviceCatalog({
     if (u_position == null) return;
     actions.onSlotCreate({
       rack_id: focusedRack.id,
-      device_id: null,
       item_type: 'custom-device',
       item_label: custom.name,
       vendor: custom.vendor,
@@ -105,8 +151,7 @@ export default function DeviceCatalog({
       custom_image_url: custom.image_url,
       u_position,
       u_size: custom.u_size,
-      side: 'both',
-      front_back: 'front',
+      mounted_face: 'front',
     });
   };
 
@@ -120,180 +165,177 @@ export default function DeviceCatalog({
       item_type: 'device',
       u_position,
       u_size: 1,
-      side: 'both',
-      front_back: 'front',
+      mounted_face: 'front',
     });
   };
 
+  const renderBrandTab = () => {
+    const byVendor = groupByVendor(filteredCatalog);
+    return CATALOG_VENDORS.filter((v) => byVendor.has(v)).map((vendor) => {
+      const entries = byVendor.get(vendor);
+      const color = VENDOR_COLORS[vendor] || '#555';
+      return (
+        <CollapsibleGroup
+          key={vendor}
+          title={vendor}
+          count={entries.length}
+          defaultOpen={vendor === 'Generic'}
+        >
+          <div className="dc-group-brand-header" style={{ borderLeftColor: color }}>
+            <span className="dc-group-brand-dot" style={{ background: color }} />
+            <span className="dc-group-brand-name">{vendor}</span>
+          </div>
+          {entries.map((entry) => (
+            <CatalogCard key={entry.id} entry={entry} onClick={() => addCatalogEntry(entry)} />
+          ))}
+        </CollapsibleGroup>
+      );
+    });
+  };
+
+  const renderCategoryTab = () => {
+    const byCategory = groupByCategory(filteredCatalog);
+    return CATALOG_CATEGORIES.filter((c) => byCategory.has(c.id)).map((cat) => {
+      const entries = byCategory.get(cat.id);
+      return (
+        <CollapsibleGroup key={cat.id} title={cat.label} count={entries.length}>
+          {entries.map((entry) => (
+            <CatalogCard key={entry.id} entry={entry} onClick={() => addCatalogEntry(entry)} />
+          ))}
+        </CollapsibleGroup>
+      );
+    });
+  };
+
+  const renderAZTab = () => {
+    const sorted = [...filteredCatalog].sort((a, b) => a.name.localeCompare(b.name));
+    return sorted.map((entry) => (
+      <CatalogCard key={entry.id} entry={entry} onClick={() => addCatalogEntry(entry)} />
+    ));
+  };
+
+  const renderCustomTab = () => (
+    <div className="dc-custom-section">
+      {rackCustomDevices.map((custom) => (
+        <div
+          key={custom.id}
+          className="dc-card"
+          draggable
+          onDragStart={(e) => e.dataTransfer.setData('text/custom-device-id', String(custom.id))}
+          onClick={() => addCustomDevice(custom)}
+        >
+          <div className="dc-card-preview">
+            {custom.image_url ? (
+              <img src={custom.image_url} alt={custom.name} />
+            ) : (
+              <DeviceFacePlate
+                slot={{ item_type: custom.type, custom_type: custom.type, u_size: custom.u_size }}
+                side="front"
+              />
+            )}
+          </div>
+          <div className="dc-card-info">
+            <span className="dc-card-name">{custom.name}</span>
+            <div className="dc-card-meta">
+              {custom.vendor && <VendorBadge vendor={custom.vendor} />}
+              <span className="dc-card-usize">{custom.u_size}U</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="dc-card-delete"
+            title="Delete"
+            onClick={(e) => { e.stopPropagation(); onCustomDeviceDeleted(custom.id); }}
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ))}
+      {rackCustomDevices.length === 0 && <p className="dc-empty">No custom devices yet.</p>}
+      <button type="button" className="dc-add-custom-btn" onClick={() => setCustomDeviceModalOpen(true)}>
+        <Plus size={13} /> Add Custom Device
+      </button>
+    </div>
+  );
+
   return (
     <div className="device-catalog">
-      <div className="device-catalog-header">
-        <h3>Device Catalog</h3>
-        <button type="button" className="device-catalog-close" onClick={onClose}>
-          <X size={16} />
+      <div className="dc-header">
+        <span className="dc-title">Device Catalog</span>
+        <button type="button" className="dc-close" onClick={onClose}>
+          <X size={15} />
         </button>
       </div>
 
-      <p className="device-catalog-hint">
+      <p className="dc-hint">
         {focusedRack
-          ? `Click a card to add it to "${focusedRack.name}", or drag it onto any rack.`
-          : 'Select a rack (click its badge) to enable click-to-add, or drag cards onto any rack.'}
+          ? `Click to add to "${focusedRack.name}", or drag to any rack.`
+          : 'Click a rack to enable click-to-add, or drag cards onto any rack.'}
       </p>
 
-      <div className="device-catalog-tabs">
-        {CATALOG_CATEGORIES.map((c) => (
+      <div className="dc-tabs">
+        {TAB_DEFS.map((t) => (
           <button
-            key={c.id}
+            key={t.id}
             type="button"
-            className={category === c.id ? 'active' : ''}
-            onClick={() => setCategory(c.id)}
+            className={tab === t.id ? 'active' : ''}
+            onClick={() => setTab(t.id)}
           >
-            {c.label}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {category !== 'custom' && (
-        <div className="device-catalog-filters">
+      {tab !== 'custom' && (
+        <div className="dc-search-row">
           <input
             type="text"
-            className="device-catalog-search"
-            placeholder="Search devices..."
+            className="dc-search"
+            placeholder="Search..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <div className="device-catalog-filter-selects">
-            <select
-              className={vendorFilter !== 'All Vendors' ? 'active' : ''}
-              value={vendorFilter}
-              onChange={(e) => setVendorFilter(e.target.value)}
-            >
-              {CATALOG_VENDOR_OPTIONS.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-            <select
-              className={typeFilter !== 'All Types' ? 'active' : ''}
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-            >
-              {CATALOG_TYPE_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       )}
 
-      <div className="device-catalog-list">
-        {category === 'all' && (
-          <div className="device-catalog-section">
-            <button
-              type="button"
-              className="device-catalog-section-toggle"
-              onClick={() => setUnrackedOpen((v) => !v)}
-            >
-              {unrackedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      <div className="dc-list">
+        {/* Unracked devices section (shown on brand/category/az tabs) */}
+        {tab !== 'custom' && (
+          <div className="dc-group dc-group-unracked">
+            <button type="button" className="dc-group-header" onClick={() => setUnrackedOpen((v) => !v)}>
+              {unrackedOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
               <span>Unracked Devices</span>
-              <span className="device-catalog-count-badge">{unrackedDevices.length}</span>
+              <span className="dc-group-count">{unrackedDevices.length}</span>
             </button>
-            {unrackedOpen &&
-              (unrackedDevices.length === 0 ? (
-                <p className="device-catalog-empty">No unracked devices.</p>
+            {unrackedOpen && (
+              unrackedDevices.length === 0 ? (
+                <p className="dc-empty">No unracked devices.</p>
               ) : (
-                unrackedDevices.map((device) => (
-                  <div
-                    key={device.id}
-                    className="device-catalog-card device-catalog-card-simple"
-                    draggable
-                    onDragStart={(e) => e.dataTransfer.setData('text/device-id', String(device.id))}
-                    onClick={() => addUnrackedDevice(device)}
-                  >
-                    <div className="device-catalog-card-info">
-                      <span className="device-catalog-card-name">
-                        {device.hostname || device.ip || `Device ${device.id}`}
-                      </span>
-                      <span className="device-catalog-card-meta">{device.type || 'Device'} · 1U</span>
+                <div className="dc-group-body">
+                  {unrackedDevices.map((device) => (
+                    <div
+                      key={device.id}
+                      className="dc-card dc-card-device"
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData('text/device-id', String(device.id))}
+                      onClick={() => addUnrackedDevice(device)}
+                    >
+                      <div className="dc-card-info">
+                        <span className="dc-card-name">{device.hostname || device.ip || `Device ${device.id}`}</span>
+                        <span className="dc-card-meta-text">{device.type || 'Device'} · 1U</span>
+                      </div>
                     </div>
-                  </div>
-                ))
-              ))}
+                  ))}
+                </div>
+              )
+            )}
           </div>
         )}
 
-        {category === 'custom' ? (
-          <div className="device-catalog-section">
-            <h4>Custom Devices</h4>
-            {rackCustomDevices.map((custom) => (
-              <div
-                key={custom.id}
-                className="device-catalog-card"
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData('text/custom-device-id', String(custom.id))}
-                onClick={() => addCustomDevice(custom)}
-              >
-                <div className="device-catalog-card-preview">
-                  {custom.image_url ? (
-                    <img src={custom.image_url} alt={custom.name} />
-                  ) : (
-                    <DeviceFacePlate
-                      slot={{ item_type: custom.type, custom_type: custom.type, u_size: custom.u_size }}
-                      side="front"
-                    />
-                  )}
-                </div>
-                <div className="device-catalog-card-info">
-                  <span className="device-catalog-card-name">{custom.name}</span>
-                  <span className="device-catalog-card-meta">
-                    {custom.vendor || 'Custom'} · {custom.u_size}U
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="device-catalog-card-delete"
-                  title="Delete custom device"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCustomDeviceDeleted(custom.id);
-                  }}
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-            {rackCustomDevices.length === 0 && <p className="device-catalog-empty">No custom devices yet.</p>}
-            <button type="button" className="device-catalog-add-custom" onClick={() => setCustomDeviceModalOpen(true)}>
-              <Plus size={14} /> Add Custom Device
-            </button>
-          </div>
-        ) : (
-          <div className="device-catalog-section">
-            {entries.map((entry) => (
-              <div
-                key={entry.id}
-                className="device-catalog-card"
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData('text/catalog-item', JSON.stringify(entry))}
-                onClick={() => addCatalogEntry(entry)}
-              >
-                <div className="device-catalog-card-preview">
-                  <DeviceFacePlate slot={previewSlot(entry)} side={entry.frontBack} />
-                </div>
-                <div className="device-catalog-card-info">
-                  <span className="device-catalog-card-name">{entry.name}</span>
-                  <span className="device-catalog-card-meta">
-                    {entry.vendor} · {entry.uSize}U{entry.frontBack === 'back' ? ' · Rear' : ''}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {entries.length === 0 && <p className="device-catalog-empty">No devices match these filters.</p>}
-          </div>
-        )}
+        {tab === 'brand'    && renderBrandTab()}
+        {tab === 'category' && renderCategoryTab()}
+        {tab === 'az'       && <div className="dc-az-list">{renderAZTab()}</div>}
+        {tab === 'custom'   && renderCustomTab()}
       </div>
 
       {customDeviceModalOpen && (

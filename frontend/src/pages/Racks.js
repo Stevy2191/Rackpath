@@ -5,6 +5,7 @@ import client from '../api/client';
 import PortEditorModal from '../components/PortEditorModal';
 import RackCanvas from '../components/racks/RackCanvas';
 import DeviceCatalog from '../components/racks/DeviceCatalog';
+import DevicePropertiesPanel from '../components/racks/DevicePropertiesPanel';
 import AddRackModal from '../components/racks/AddRackModal';
 import RackDeviceContextMenu from '../components/racks/RackDeviceContextMenu';
 import './Racks.css';
@@ -25,6 +26,7 @@ export default function RacksPage() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [focusedRackId, setFocusedRackId] = useState(null);
   const [highlightedSlotId, setHighlightedSlotId] = useState(null);
+  const [selectedSlotId, setSelectedSlotId] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [portEditorDevice, setPortEditorDevice] = useState(null);
   const [addRackOpen, setAddRackOpen] = useState(false);
@@ -43,10 +45,7 @@ export default function RacksPage() {
   }, []);
 
   const loadCustomDevices = useCallback(() => {
-    client
-      .get('/rack-custom-devices')
-      .then((res) => setRackCustomDevices(res.data))
-      .catch((err) => setError(err.message));
+    client.get('/rack-custom-devices').then((res) => setRackCustomDevices(res.data)).catch((err) => setError(err.message));
   }, []);
 
   useEffect(() => {
@@ -56,9 +55,7 @@ export default function RacksPage() {
     loadCustomDevices();
   }, [loadRacks, loadDevices, loadAllSlots, loadCustomDevices]);
 
-  // Cross-link from a Topology node's "Rack Location" button:
-  // ?highlightDevice=<id> finds the slot for that device, focuses/highlights
-  // it, scrolls its rack into view, and clears the param.
+  // Cross-link from Topology: ?highlightDevice=<id>
   useEffect(() => {
     const highlightDeviceId = searchParams.get('highlightDevice');
     if (!highlightDeviceId) return;
@@ -73,14 +70,20 @@ export default function RacksPage() {
     }
 
     setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('highlightDevice');
-        return next;
-      },
+      (prev) => { const n = new URLSearchParams(prev); n.delete('highlightDevice'); return n; },
       { replace: true }
     );
   }, [allSlots, searchParams, setSearchParams]);
+
+  // Close properties panel with Escape
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') setSelectedSlotId(null); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  const selectedSlot = selectedSlotId ? allSlots.find((s) => s.id === selectedSlotId) || null : null;
+  const selectedSlotRack = selectedSlot ? racks.find((r) => r.id === selectedSlot.rack_id) || null : null;
 
   const actions = {
     onSlotCreate: async (payload) => {
@@ -104,11 +107,12 @@ export default function RacksPage() {
           color: slot.color,
           u_position: slot.u_position,
           u_size: slot.u_size,
-          side: slot.side,
-          front_back: slot.front_back,
+          mounted_face: slot.mounted_face || slot.front_back || 'front',
           catalog_id: slot.catalog_id,
           custom_image_url: slot.custom_image_url,
           vendor: slot.vendor,
+          ip_address: slot.ip_address,
+          slot_notes: slot.slot_notes,
           ...changes,
         });
       } catch (err) {
@@ -117,6 +121,7 @@ export default function RacksPage() {
       }
     },
     onSlotDelete: async (slotId) => {
+      if (selectedSlotId === slotId) setSelectedSlotId(null);
       const previous = allSlots;
       setAllSlots((cur) => cur.filter((s) => s.id !== slotId));
       try {
@@ -138,6 +143,7 @@ export default function RacksPage() {
       try {
         await client.delete(`/racks/${rackId}`);
         setFocusedRackId((cur) => (cur === rackId ? null : cur));
+        setSelectedSlotId(null);
         loadRacks();
         loadAllSlots();
       } catch (err) {
@@ -155,35 +161,24 @@ export default function RacksPage() {
     scrollRackIntoView(res.data.id);
   };
 
-  const handleCustomDeviceCreated = (custom) => {
-    setRackCustomDevices((prev) => [...prev, custom]);
+  const handleSlotUpdatedFromPanel = (updatedSlot) => {
+    setAllSlots((cur) => cur.map((s) => (s.id === updatedSlot.id ? updatedSlot : s)));
   };
 
-  const handleCustomDeviceDeleted = async (id) => {
-    try {
-      await client.delete(`/rack-custom-devices/${id}`);
-      setRackCustomDevices((prev) => prev.filter((c) => c.id !== id));
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    }
+  const handleSelectSlot = (slotId) => {
+    setSelectedSlotId((cur) => (cur === slotId ? null : slotId));
   };
 
   return (
     <div className="racks-page">
       {error && (
-        <div className="page-error" onClick={() => setError(null)}>
-          {error}
-        </div>
+        <div className="page-error" onClick={() => setError(null)}>{error}</div>
       )}
 
       <div className="racks-toolbar">
         <h2>Rack Builder</h2>
         <div className="racks-toolbar-actions">
-          <button
-            type="button"
-            className={cableViewEnabled ? 'active' : ''}
-            onClick={() => setCableViewEnabled((v) => !v)}
-          >
+          <button type="button" className={cableViewEnabled ? 'active' : ''} onClick={() => setCableViewEnabled((v) => !v)}>
             <Cable size={14} /> Show Cables
           </button>
           <button type="button" className={catalogOpen ? 'active' : ''} onClick={() => setCatalogOpen((v) => !v)}>
@@ -196,16 +191,6 @@ export default function RacksPage() {
       </div>
 
       <div className="racks-main">
-        <RackCanvas
-          racks={racks}
-          allSlots={allSlots}
-          rackCustomDevices={rackCustomDevices}
-          highlightedSlotId={highlightedSlotId}
-          actions={actions}
-          cableViewEnabled={cableViewEnabled}
-          focusedRackId={focusedRackId}
-          onFocusRack={(id) => setFocusedRackId((cur) => (cur === id ? null : id))}
-        />
         {catalogOpen && (
           <DeviceCatalog
             open={catalogOpen}
@@ -216,8 +201,37 @@ export default function RacksPage() {
             rackCustomDevices={rackCustomDevices}
             focusedRackId={focusedRackId}
             actions={actions}
-            onCustomDeviceCreated={handleCustomDeviceCreated}
-            onCustomDeviceDeleted={handleCustomDeviceDeleted}
+            onCustomDeviceCreated={(custom) => setRackCustomDevices((prev) => [...prev, custom])}
+            onCustomDeviceDeleted={async (id) => {
+              try {
+                await client.delete(`/rack-custom-devices/${id}`);
+                setRackCustomDevices((prev) => prev.filter((c) => c.id !== id));
+              } catch (err) {
+                setError(err.response?.data?.error || err.message);
+              }
+            }}
+          />
+        )}
+
+        <RackCanvas
+          racks={racks}
+          allSlots={allSlots}
+          rackCustomDevices={rackCustomDevices}
+          highlightedSlotId={highlightedSlotId}
+          selectedSlotId={selectedSlotId}
+          actions={actions}
+          cableViewEnabled={cableViewEnabled}
+          focusedRackId={focusedRackId}
+          onFocusRack={(id) => setFocusedRackId((cur) => (cur === id ? null : id))}
+          onSelectSlot={handleSelectSlot}
+        />
+
+        {selectedSlot && (
+          <DevicePropertiesPanel
+            slot={selectedSlot}
+            rackHeight={selectedSlotRack?.u_height || 42}
+            onClose={() => setSelectedSlotId(null)}
+            onUpdated={handleSlotUpdatedFromPanel}
           />
         )}
       </div>
