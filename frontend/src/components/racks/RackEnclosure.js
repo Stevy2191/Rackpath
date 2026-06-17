@@ -320,9 +320,13 @@ export default function RackEnclosure({
   const frontMap = buildUMap(slots, 'front');
   const rearMap  = buildUMap(slots, 'rear');
 
-  // Compute half-depth stripes: slots on one face with half_depth project a
-  // visual "no-go" marker onto the other face. ½W half-depth devices project
-  // only onto the same half of the opposite face.
+  // Compute no-go stripes projected onto the opposite face:
+  //   • Half-depth devices: occupy only the near half of the rack depth, so
+  //     the opposite face still has room but gets a warning stripe.
+  //   • Full-depth single-face devices: fill the entire rack depth, so the
+  //     opposite face is completely blocked (stripe prevents drops there too).
+  //   • 'both'-face devices: already render on both panels — no stripe needed.
+  // ½W half-depth devices project onto the same half of the opposite face.
   function computeStripes(sourceFace, targetMap) {
     const fullRows    = new Set();
     const hwLeftRows  = new Set();
@@ -333,7 +337,9 @@ export default function RackEnclosure({
       const onSourceFace = sourceFace === 'front'
         ? (mf === 'front' || mf === 'both')
         : (mf === 'rear' || mf === 'both');
-      if (!onSourceFace || !s.half_depth) continue;
+      if (!onSourceFace) continue;
+      // 'both'-face devices render on both panels — no stripe needed.
+      if (mf === 'both') continue;
 
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {

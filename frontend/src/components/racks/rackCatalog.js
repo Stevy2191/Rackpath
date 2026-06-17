@@ -245,7 +245,7 @@ export const RACK_CATALOG = [
   e('ea-5px-1500-2u',  '5PX 1500VA',         'Eaton', 'POWER', 2, 'ups'),
   e('ea-5px-2200-2u',  '5PX 2200VA',         'Eaton', 'POWER', 2, 'ups'),
   e('ea-5px-3000-2u',  '5PX 3000VA',         'Eaton', 'POWER', 2, 'ups'),
-  e('ea-9px-2000rt-2u', '9PX2000RT',          'Eaton', 'POWER', 2, 'ups', { mountedFace: 'rear' }),
+  e('ea-9px-2000rt-2u', '9PX2000RT',          'Eaton', 'POWER', 2, 'ups'),
   e('ea-9px-5ktf5g2-6u',    '9PX5KTF5G2',        'Eaton', 'POWER', 6, 'ups'),
   e('ea-9pxebm180rtg2-3u', '9PXEBM180RTG2',     'Eaton', 'POWER', 3, 'ups'),
   e('ea-9pxebm72rt-2u',    '9PXEBM72RT',        'Eaton', 'POWER', 2, 'ups'),
