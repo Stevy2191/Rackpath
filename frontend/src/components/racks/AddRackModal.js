@@ -17,18 +17,12 @@ const WIDTH_OPTIONS = [
 
 const HEIGHT_PRESETS = [8, 12, 16, 24, 32, 42, 47];
 
-const LAYOUT_OPTIONS = [
-  { value: 'column', label: 'Column', sub: 'Racks displayed in a single scrolling row' },
-  { value: 'bayed', label: 'Bayed', sub: 'Racks grouped into side-by-side bays' },
-];
-
 const EMPTY = {
   name: '',
   location: '',
   u_height: 42,
   rack_type: '4-post',
   rack_width: '19"',
-  layout_type: 'column',
   notes: '',
 };
 
@@ -94,21 +88,6 @@ export default function AddRackModal({ onClose, onCreate }) {
                 ))}
               </select>
             </label>
-
-            <div className="add-rack-field-label">Layout</div>
-            <div className="add-rack-layout-cards">
-              {LAYOUT_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  className={`add-rack-layout-card${rack.layout_type === opt.value ? ' selected' : ''}`}
-                  onClick={() => set('layout_type', opt.value)}
-                >
-                  <strong>{opt.label}</strong>
-                  <span>{opt.sub}</span>
-                </button>
-              ))}
-            </div>
 
             {error && <div className="rack-modal-error">{error}</div>}
 

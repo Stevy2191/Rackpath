@@ -214,6 +214,8 @@ export default function RackEnclosure({
     onSelectSlot,
   };
 
+  const showRear = rack.show_rear !== undefined ? Boolean(rack.show_rear) : true;
+
   return (
     <div className={`rack-enclosure${isFocused ? ' rack-enclosure-focused' : ''}`} id={`rack-${rack.id}`}>
       <div className="rack-name-label">{rack.name}</div>
@@ -221,24 +223,28 @@ export default function RackEnclosure({
         <RackPanel
           face="front"
           showLeftRail
-          showRightRail={false}
+          showRightRail={!showRear}
           slotsByTop={frontMap.slotsByTop}
           covered={frontMap.covered}
           occupiedByU={frontMap.occupiedByU}
           halfDepthStripes={frontStripes}
           {...panelProps}
         />
-        <div className="rack-panel-divider" />
-        <RackPanel
-          face="rear"
-          showLeftRail={false}
-          showRightRail
-          slotsByTop={rearMap.slotsByTop}
-          covered={rearMap.covered}
-          occupiedByU={rearMap.occupiedByU}
-          halfDepthStripes={rearStripes}
-          {...panelProps}
-        />
+        {showRear && (
+          <>
+            <div className="rack-panel-divider" />
+            <RackPanel
+              face="rear"
+              showLeftRail={false}
+              showRightRail
+              slotsByTop={rearMap.slotsByTop}
+              covered={rearMap.covered}
+              occupiedByU={rearMap.occupiedByU}
+              halfDepthStripes={rearStripes}
+              {...panelProps}
+            />
+          </>
+        )}
       </div>
     </div>
   );

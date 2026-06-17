@@ -346,6 +346,7 @@ export default function RacksPage() {
   ) : (focusedRack && rackEditOpen) ? (
     <RackEditPanel
       rack={focusedRack}
+      rackSlots={allSlots.filter((s) => s.rack_id === focusedRackId)}
       onClose={() => setRackEditOpen(false)}
       onSave={(edits) => actions.onRackSave(focusedRackId, edits)}
       onDuplicate={() => actions.onRackDuplicate(focusedRackId)}

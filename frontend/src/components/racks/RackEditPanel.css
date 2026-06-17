@@ -191,3 +191,31 @@
   background: rgba(239, 68, 68, 0.08);
   color: #ef4444;
 }
+
+/* ─── Rear view toggle ───────────────────────────────────── */
+.rep-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  color: #d4d8e0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rep-toggle input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: #4adede;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rep-toggle.rep-toggle-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rep-toggle.rep-toggle-disabled input {
+  cursor: not-allowed;
+}
