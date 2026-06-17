@@ -7,10 +7,12 @@ const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
-const ITEM_TYPES = ['device', 'patch-panel', 'blank', 'cable-manager', 'custom-device'];
+const ITEM_TYPES = ['device', 'patch-panel', 'blank', 'cable-manager', 'custom-device', 'vertical-pdu'];
 const SIDES = ['front', 'back', 'both'];
 const FRONT_BACK = ['front', 'back'];
 const MOUNTED_FACES = ['front', 'rear', 'both'];
+const MOUNT_SIDES = ['left', 'right'];
+const CAPACITY_UNITS = ['W', 'VA'];
 
 // Image upload for slot front/rear faceplate images
 const SLOT_IMAGE_DIR = path.join('/uploads', 'rack-slots');
@@ -68,6 +70,44 @@ async function findCollision(rackId, projectId, uPosition, uSize, side, excludeI
   return null;
 }
 
+// Finds a different slot already plugged into the same outlet, if any.
+async function findOutletConflict(rackId, projectId, sourceSlotId, outlet, excludeId) {
+  if (!sourceSlotId || outlet == null) return null;
+  let query = `
+    SELECT id, item_label FROM rack_slots
+    WHERE rack_id = ? AND project_id = ? AND power_source_slot_id = ? AND power_source_outlet = ?`;
+  const params = [rackId, projectId, sourceSlotId, outlet];
+  if (excludeId) {
+    query += ' AND id != ?';
+    params.push(excludeId);
+  }
+  const [rows] = await pool.query(query, params);
+  return rows[0] || null;
+}
+
+// Validates a power_source_slot_id/power_source_outlet pair: source must
+// exist in the same rack, outlet must be within its outlet_count, and a
+// slot can't be wired to itself. Returns an error string, or null if valid
+// (including the "no source set" / Wall-Direct case).
+async function validatePowerSource(rackId, projectId, slotId, sourceSlotId, outlet) {
+  if (!sourceSlotId) return null;
+  if (outlet === undefined || outlet === null) {
+    return 'power_source_outlet is required when power_source_slot_id is set';
+  }
+  if (slotId && String(sourceSlotId) === String(slotId)) {
+    return 'A device cannot be its own power source';
+  }
+  const [[source]] = await pool.query(
+    'SELECT id, outlet_count FROM rack_slots WHERE id = ? AND rack_id = ? AND project_id = ?',
+    [sourceSlotId, rackId, projectId]
+  );
+  if (!source) return 'Power source not found in this rack';
+  if (!source.outlet_count || outlet < 1 || outlet > source.outlet_count) {
+    return `Outlet must be between 1 and ${source.outlet_count || 0}`;
+  }
+  return null;
+}
+
 // GET /api/rack-slots
 router.get('/', async (req, res, next) => {
   try {
@@ -105,6 +145,8 @@ router.post('/', async (req, res, next) => {
       rack_id, device_id, u_position, item_type, item_label, side,
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
+      power_draw_w, outlet_count, outlet_type, power_capacity, power_capacity_unit, input_voltage,
+      power_source_slot_id, power_source_outlet, mount_side,
     } = req.body;
     const u_size = req.body.u_size || 1;
 
@@ -116,6 +158,12 @@ router.post('/', async (req, res, next) => {
     }
     if (mounted_face !== undefined && mounted_face !== null && !MOUNTED_FACES.includes(mounted_face)) {
       return res.status(400).json({ error: 'Invalid mounted_face' });
+    }
+    if (mount_side !== undefined && mount_side !== null && !MOUNT_SIDES.includes(mount_side)) {
+      return res.status(400).json({ error: 'Invalid mount_side' });
+    }
+    if (power_capacity_unit !== undefined && power_capacity_unit !== null && !CAPACITY_UNITS.includes(power_capacity_unit)) {
+      return res.status(400).json({ error: 'Invalid power_capacity_unit' });
     }
     if (u_size < 1) return res.status(400).json({ error: 'u_size must be at least 1' });
 
@@ -131,17 +179,32 @@ router.post('/', async (req, res, next) => {
     const resolvedFrontBack = (front_back && FRONT_BACK.includes(front_back)) ? front_back : legacy.front_back;
     const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
-    const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, null, half_width, resolvedHalfPos);
-    if (collision) {
-      return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
+    // Vertical PDUs are floating elements alongside the rack frame, not
+    // occupying U columns — they never collide with U-slot devices.
+    if (item_type !== 'vertical-pdu') {
+      const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, null, half_width, resolvedHalfPos);
+      if (collision) {
+        return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
+      }
+    }
+
+    const sourceError = await validatePowerSource(rack_id, req.projectId, null, power_source_slot_id, power_source_outlet);
+    if (sourceError) return res.status(400).json({ error: sourceError });
+    if (power_source_slot_id) {
+      const conflict = await findOutletConflict(rack_id, req.projectId, power_source_slot_id, power_source_outlet, null);
+      if (conflict) {
+        return res.status(409).json({ error: `Outlet ${power_source_outlet} is already in use by ${conflict.item_label || 'another device'}` });
+      }
     }
 
     const [result] = await pool.query(
       `INSERT INTO rack_slots
          (project_id, rack_id, device_id, item_type, item_label, custom_type, color,
           u_position, position_offset, u_size, side, front_back, mounted_face,
-          half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes,
+          power_draw_w, outlet_count, outlet_type, power_capacity, power_capacity_unit, input_voltage,
+          power_source_slot_id, power_source_outlet, mount_side)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
@@ -150,6 +213,9 @@ router.post('/', async (req, res, next) => {
         half_depth ? 1 : 0, half_width ? 1 : 0, resolvedHalfPos,
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
+        power_draw_w || null, outlet_count || null, outlet_type || null,
+        power_capacity || null, power_capacity_unit || 'W', input_voltage || null,
+        power_source_slot_id || null, power_source_outlet || null, mount_side || null,
       ]
     );
 
@@ -178,6 +244,8 @@ router.put('/:id', async (req, res, next) => {
       rack_id, device_id, item_type, item_label, side,
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
+      power_draw_w, outlet_count, outlet_type, power_capacity, power_capacity_unit, input_voltage,
+      power_source_slot_id, power_source_outlet, mount_side,
     } = req.body;
     let u_position = req.body.u_position;
     const u_size = req.body.u_size || 1;
@@ -187,6 +255,12 @@ router.put('/:id', async (req, res, next) => {
     }
     if (mounted_face !== undefined && mounted_face !== null && !MOUNTED_FACES.includes(mounted_face)) {
       return res.status(400).json({ error: 'Invalid mounted_face' });
+    }
+    if (mount_side !== undefined && mount_side !== null && !MOUNT_SIDES.includes(mount_side)) {
+      return res.status(400).json({ error: 'Invalid mount_side' });
+    }
+    if (power_capacity_unit !== undefined && power_capacity_unit !== null && !CAPACITY_UNITS.includes(power_capacity_unit)) {
+      return res.status(400).json({ error: 'Invalid power_capacity_unit' });
     }
     if (u_size < 1) return res.status(400).json({ error: 'u_size must be at least 1' });
 
@@ -205,9 +279,20 @@ router.put('/:id', async (req, res, next) => {
     const resolvedFrontBack = (front_back && FRONT_BACK.includes(front_back)) ? front_back : legacy.front_back;
     const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
-    const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id, half_width, resolvedHalfPos);
-    if (collision) {
-      return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
+    if (item_type !== 'vertical-pdu') {
+      const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id, half_width, resolvedHalfPos);
+      if (collision) {
+        return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
+      }
+    }
+
+    const sourceError = await validatePowerSource(rack_id, req.projectId, req.params.id, power_source_slot_id, power_source_outlet);
+    if (sourceError) return res.status(400).json({ error: sourceError });
+    if (power_source_slot_id) {
+      const conflict = await findOutletConflict(rack_id, req.projectId, power_source_slot_id, power_source_outlet, req.params.id);
+      if (conflict) {
+        return res.status(409).json({ error: `Outlet ${power_source_outlet} is already in use by ${conflict.item_label || 'another device'}` });
+      }
     }
 
     const [result] = await pool.query(
@@ -215,7 +300,9 @@ router.put('/:id', async (req, res, next) => {
        SET rack_id=?, device_id=?, item_type=?, item_label=?, custom_type=?, color=?,
            u_position=?, position_offset=?, u_size=?, side=?, front_back=?, mounted_face=?,
            half_depth=?, half_width=?, half_position=?, catalog_id=?, custom_image_url=?, vendor=?,
-           ip_address=?, slot_notes=?
+           ip_address=?, slot_notes=?,
+           power_draw_w=?, outlet_count=?, outlet_type=?, power_capacity=?, power_capacity_unit=?, input_voltage=?,
+           power_source_slot_id=?, power_source_outlet=?, mount_side=?
        WHERE id=? AND project_id=?`,
       [
         rack_id, device_id || null,
@@ -225,6 +312,9 @@ router.put('/:id', async (req, res, next) => {
         half_depth ? 1 : 0, half_width ? 1 : 0, resolvedHalfPos,
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
+        power_draw_w || null, outlet_count || null, outlet_type || null,
+        power_capacity || null, power_capacity_unit || 'W', input_voltage || null,
+        power_source_slot_id || null, power_source_outlet || null, mount_side || null,
         req.params.id, req.projectId,
       ]
     );
@@ -249,6 +339,8 @@ router.patch('/:id', async (req, res, next) => {
       'u_size', 'u_position', 'position_offset', 'ip_address', 'slot_notes',
       'asset_tag', 'serial_number',
       'front_image_url', 'rear_image_url',
+      'power_draw_w', 'outlet_count', 'outlet_type', 'power_capacity', 'power_capacity_unit', 'input_voltage',
+      'power_source_slot_id', 'power_source_outlet', 'mount_side',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -256,6 +348,13 @@ router.patch('/:id', async (req, res, next) => {
     }
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    if ('mount_side' in updates && updates.mount_side !== null && !MOUNT_SIDES.includes(updates.mount_side)) {
+      return res.status(400).json({ error: 'Invalid mount_side' });
+    }
+    if ('power_capacity_unit' in updates && updates.power_capacity_unit !== null && !CAPACITY_UNITS.includes(updates.power_capacity_unit)) {
+      return res.status(400).json({ error: 'Invalid power_capacity_unit' });
     }
 
     // Sync legacy columns when mounted_face changes
@@ -268,7 +367,7 @@ router.patch('/:id', async (req, res, next) => {
     // Collision check when position or size changes
     if ('u_position' in updates || 'u_size' in updates) {
       const [[cur]] = await pool.query(
-        'SELECT rack_id, u_position, u_size, side FROM rack_slots WHERE id = ? AND project_id = ?',
+        'SELECT rack_id, item_type, u_position, u_size, side FROM rack_slots WHERE id = ? AND project_id = ?',
         [req.params.id, req.projectId]
       );
       if (!cur) return res.status(404).json({ error: 'Rack slot not found' });
@@ -290,9 +389,32 @@ router.patch('/:id', async (req, res, next) => {
         return res.status(400).json({ error: 'Slot extends beyond rack height' });
       }
 
-      const collision = await findCollision(cur.rack_id, req.projectId, newPos, newSize, checkSide, req.params.id);
-      if (collision) {
-        return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
+      if (cur.item_type !== 'vertical-pdu') {
+        const collision = await findCollision(cur.rack_id, req.projectId, newPos, newSize, checkSide, req.params.id);
+        if (collision) {
+          return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
+        }
+      }
+    }
+
+    // Outlet assignment check when the power source changes
+    if ('power_source_slot_id' in updates || 'power_source_outlet' in updates) {
+      const [[cur]] = await pool.query(
+        'SELECT rack_id, power_source_slot_id, power_source_outlet FROM rack_slots WHERE id = ? AND project_id = ?',
+        [req.params.id, req.projectId]
+      );
+      if (!cur) return res.status(404).json({ error: 'Rack slot not found' });
+
+      const newSourceId = 'power_source_slot_id' in updates ? updates.power_source_slot_id : cur.power_source_slot_id;
+      const newOutlet    = 'power_source_outlet'  in updates ? updates.power_source_outlet  : cur.power_source_outlet;
+
+      const sourceError = await validatePowerSource(cur.rack_id, req.projectId, req.params.id, newSourceId, newOutlet);
+      if (sourceError) return res.status(400).json({ error: sourceError });
+      if (newSourceId) {
+        const conflict = await findOutletConflict(cur.rack_id, req.projectId, newSourceId, newOutlet, req.params.id);
+        if (conflict) {
+          return res.status(409).json({ error: `Outlet ${newOutlet} is already in use by ${conflict.item_label || 'another device'}` });
+        }
       }
     }
 

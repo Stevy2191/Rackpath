@@ -50,15 +50,24 @@ router.post('/', (req, res, next) => {
   });
 }, async (req, res, next) => {
   try {
-    const { name, vendor, type, u_size } = req.body;
+    const {
+      name, vendor, type, u_size,
+      power_draw_w, outlet_count, outlet_type, power_capacity, power_capacity_unit, input_voltage,
+    } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const imageUrl = req.file ? `/api/rack-custom-devices/images/file/${req.file.filename}` : null;
 
     const [result] = await pool.query(
-      `INSERT INTO rack_custom_devices (project_id, name, vendor, type, u_size, image_url)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [req.projectId, name, vendor || null, type || 'other', u_size || 1, imageUrl]
+      `INSERT INTO rack_custom_devices
+         (project_id, name, vendor, type, u_size, image_url,
+          power_draw_w, outlet_count, outlet_type, power_capacity, power_capacity_unit, input_voltage)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.projectId, name, vendor || null, type || 'other', u_size || 1, imageUrl,
+        power_draw_w || null, outlet_count || null, outlet_type || null,
+        power_capacity || null, power_capacity_unit || 'W', input_voltage || null,
+      ]
     );
     const [rows] = await pool.query('SELECT * FROM rack_custom_devices WHERE id = ?', [result.insertId]);
     res.status(201).json(rows[0]);

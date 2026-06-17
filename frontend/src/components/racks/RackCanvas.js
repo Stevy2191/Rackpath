@@ -234,6 +234,7 @@ export default function RackCanvas({
         mounted_face,
         half_depth: catalogMeta?.halfDepth ? 1 : 0,
         half_width: catalogMeta?.halfWidth ? 1 : 0,
+        power_draw_w: catalogMeta?.powerDrawW,
       });
       return;
     }
@@ -255,6 +256,12 @@ export default function RackCanvas({
         mounted_face: entry.mountedFace || face,
         half_depth: entry.halfDepth ? 1 : 0,
         half_width: entry.halfWidth ? 1 : 0,
+        power_draw_w: entry.powerDrawW,
+        outlet_count: entry.outletCount,
+        outlet_type: entry.outletType,
+        power_capacity: entry.capacity,
+        power_capacity_unit: entry.capacityUnit,
+        input_voltage: entry.inputVoltage,
       });
       return;
     }
@@ -274,6 +281,12 @@ export default function RackCanvas({
         u_position,
         u_size: custom.u_size,
         mounted_face: face,
+        power_draw_w: custom.power_draw_w,
+        outlet_count: custom.outlet_count,
+        outlet_type: custom.outlet_type,
+        power_capacity: custom.power_capacity,
+        power_capacity_unit: custom.power_capacity_unit,
+        input_voltage: custom.input_voltage,
       });
     }
   };

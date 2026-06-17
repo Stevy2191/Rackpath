@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronUp, ChevronDown, Upload } from 'lucide-react';
 import client from '../../api/client';
+import { isPassiveItem, isPowerDevice, getOutletCount, getPowerLabel, buildOutletOptions, computeLoad } from '../../utils/power';
 import './DevicePropertiesPanel.css';
 
 const FACE_OPTIONS = [
@@ -9,19 +10,36 @@ const FACE_OPTIONS = [
   { value: 'both',  label: 'Both' },
 ];
 
+const MOUNT_SIDE_OPTIONS = [
+  { value: 'left',  label: 'Left' },
+  { value: 'right', label: 'Right' },
+];
+
+const VOLTAGE_OPTIONS = ['120V', '208V', '240V'];
+
 const COLOR_SWATCHES = [
   '#4adede', '#34d976', '#f59e0b', '#ef4444',
   '#a78bfa', '#fb923c', '#38bdf8', '#f472b6',
   null, // null = clear
 ];
 
-export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onClose, onUpdated }) {
+const WALL_DIRECT = '';
+
+function outletValue(sourceSlotId, outlet) {
+  return sourceSlotId ? `${sourceSlotId}:${outlet}` : WALL_DIRECT;
+}
+
+export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onClose, onUpdated, onSelectSlot }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const frontFileRef = useRef(null);
   const rearFileRef = useRef(null);
   const saveTimer = useRef(null);
+
+  const isVerticalPdu = slot?.item_type === 'vertical-pdu';
+  const passive = slot ? isPassiveItem(slot) : false;
+  const isPower = slot ? isPowerDevice(slot) : false;
 
   // Reset form when slot changes
   useEffect(() => {
@@ -32,11 +50,20 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
       u_position:    slot.u_position    || 1,
       color:         slot.color         || null,
       mounted_face:  slot.mounted_face  || 'front',
+      mount_side:    slot.mount_side    || 'left',
       // Pre-fill from linked inventory device when the slot doesn't have its own value
       ip_address:    slot.ip_address    || slot.ip                     || '',
       serial_number: slot.serial_number || slot.device_serial_number   || '',
       slot_notes:    slot.slot_notes    || '',
       asset_tag:     slot.asset_tag     || '',
+      power_draw_w:        slot.power_draw_w        ?? '',
+      outlet_count:        slot.outlet_count         ?? '',
+      outlet_type:         slot.outlet_type          || '',
+      power_capacity:       slot.power_capacity       ?? '',
+      power_capacity_unit:  slot.power_capacity_unit  || 'W',
+      input_voltage:        slot.input_voltage        || '',
+      power_source_slot_id: slot.power_source_slot_id || null,
+      power_source_outlet:  slot.power_source_outlet  || null,
     });
     setError(null);
   }, [slot]);
@@ -74,6 +101,15 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
 
     const curBottom = fields.u_position;        // lowest U number occupied
     const curTop    = curBottom + curSize - 1;  // highest U number occupied
+
+    // Vertical PDUs are floating elements alongside the frame — they never
+    // collide with U-slot devices, so just clamp to the rack height.
+    if (isVerticalPdu) {
+      if (curBottom + newSize - 1 > rackHeight) return;
+      setFields((f) => ({ ...f, u_size: newSize }));
+      patch({ u_size: newSize });
+      return;
+    }
 
     if (delta < 0) {
       // Shrink: keep the top (highest U) fixed, raise the bottom
@@ -239,18 +275,19 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
           </div>
         </div>
 
-        {/* Mounted face */}
+        {/* Mounted face (U-slot devices) / Mount side (vertical PDU) */}
         <div className="props-field">
-          <label className="props-field-label">Mounted Face</label>
+          <label className="props-field-label">{isVerticalPdu ? 'Mount Side' : 'Mounted Face'}</label>
           <div className="props-face-btns">
-            {FACE_OPTIONS.map((f) => (
+            {(isVerticalPdu ? MOUNT_SIDE_OPTIONS : FACE_OPTIONS).map((f) => (
               <button
                 key={f.value}
                 type="button"
-                className={`props-face-btn${fields.mounted_face === f.value ? ' active' : ''}`}
+                className={`props-face-btn${(isVerticalPdu ? fields.mount_side : fields.mounted_face) === f.value ? ' active' : ''}`}
                 onClick={() => {
-                  setFields((prev) => ({ ...prev, mounted_face: f.value }));
-                  patch({ mounted_face: f.value });
+                  const key = isVerticalPdu ? 'mount_side' : 'mounted_face';
+                  setFields((prev) => ({ ...prev, [key]: f.value }));
+                  patch({ [key]: f.value });
                 }}
               >
                 {f.label}
@@ -259,53 +296,57 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
           </div>
         </div>
 
-        {/* Front image */}
-        <div className="props-field">
-          <label className="props-field-label">Front Image</label>
-          <div className="props-image-row">
-            {slot.front_image_url && (
-              <img src={slot.front_image_url} alt="Front" className="props-image-thumb" />
-            )}
-            <button
-              type="button"
-              className="props-upload-btn"
-              onClick={() => frontFileRef.current?.click()}
-            >
-              <Upload size={12} /> {slot.front_image_url ? 'Replace' : 'Upload'}
-            </button>
-            <input
-              ref={frontFileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
-              style={{ display: 'none' }}
-              onChange={(e) => { if (e.target.files[0]) uploadImage('front', e.target.files[0]); }}
-            />
-          </div>
-        </div>
+        {!isVerticalPdu && (
+          <>
+            {/* Front image */}
+            <div className="props-field">
+              <label className="props-field-label">Front Image</label>
+              <div className="props-image-row">
+                {slot.front_image_url && (
+                  <img src={slot.front_image_url} alt="Front" className="props-image-thumb" />
+                )}
+                <button
+                  type="button"
+                  className="props-upload-btn"
+                  onClick={() => frontFileRef.current?.click()}
+                >
+                  <Upload size={12} /> {slot.front_image_url ? 'Replace' : 'Upload'}
+                </button>
+                <input
+                  ref={frontFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  style={{ display: 'none' }}
+                  onChange={(e) => { if (e.target.files[0]) uploadImage('front', e.target.files[0]); }}
+                />
+              </div>
+            </div>
 
-        {/* Rear image */}
-        <div className="props-field">
-          <label className="props-field-label">Rear Image</label>
-          <div className="props-image-row">
-            {slot.rear_image_url && (
-              <img src={slot.rear_image_url} alt="Rear" className="props-image-thumb" />
-            )}
-            <button
-              type="button"
-              className="props-upload-btn"
-              onClick={() => rearFileRef.current?.click()}
-            >
-              <Upload size={12} /> {slot.rear_image_url ? 'Replace' : 'Upload'}
-            </button>
-            <input
-              ref={rearFileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
-              style={{ display: 'none' }}
-              onChange={(e) => { if (e.target.files[0]) uploadImage('rear', e.target.files[0]); }}
-            />
-          </div>
-        </div>
+            {/* Rear image */}
+            <div className="props-field">
+              <label className="props-field-label">Rear Image</label>
+              <div className="props-image-row">
+                {slot.rear_image_url && (
+                  <img src={slot.rear_image_url} alt="Rear" className="props-image-thumb" />
+                )}
+                <button
+                  type="button"
+                  className="props-upload-btn"
+                  onClick={() => rearFileRef.current?.click()}
+                >
+                  <Upload size={12} /> {slot.rear_image_url ? 'Replace' : 'Upload'}
+                </button>
+                <input
+                  ref={rearFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  style={{ display: 'none' }}
+                  onChange={(e) => { if (e.target.files[0]) uploadImage('rear', e.target.files[0]); }}
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         {/* IP Address */}
         <div className="props-field">
@@ -359,7 +400,185 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
             placeholder="Notes about this device..."
           />
         </div>
+
+        {!passive && (
+          <>
+            <div className="props-section-divider">Power</div>
+
+            {/* Power Draw */}
+            <div className="props-field">
+              <label className="props-field-label">Power Draw (Watts)</label>
+              <input
+                className="props-input"
+                type="number"
+                min="0"
+                value={fields.power_draw_w}
+                onChange={(e) => setField('power_draw_w', e.target.value === '' ? null : Number(e.target.value))}
+                placeholder="Unknown"
+              />
+            </div>
+
+            {isPower && (
+              <>
+                {/* Outlet spec overrides */}
+                <div className="props-field">
+                  <label className="props-field-label">Outlet Count</label>
+                  <input
+                    className="props-input"
+                    type="number"
+                    min="0"
+                    value={fields.outlet_count}
+                    onChange={(e) => setField('outlet_count', e.target.value === '' ? null : Number(e.target.value))}
+                    placeholder="e.g. 8"
+                  />
+                </div>
+                <div className="props-field">
+                  <label className="props-field-label">Outlet Type</label>
+                  <input
+                    className="props-input"
+                    value={fields.outlet_type}
+                    onChange={(e) => setField('outlet_type', e.target.value)}
+                    placeholder="e.g. NEMA 5-15R, C13, C19"
+                  />
+                </div>
+                <div className="props-field">
+                  <label className="props-field-label">Capacity</label>
+                  <div className="props-capacity-row">
+                    <input
+                      className="props-input"
+                      type="number"
+                      min="0"
+                      value={fields.power_capacity}
+                      onChange={(e) => setField('power_capacity', e.target.value === '' ? null : Number(e.target.value))}
+                      placeholder="e.g. 1500"
+                    />
+                    <select
+                      className="props-input props-capacity-unit"
+                      value={fields.power_capacity_unit}
+                      onChange={(e) => setField('power_capacity_unit', e.target.value)}
+                    >
+                      <option value="W">W</option>
+                      <option value="VA">VA</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="props-field">
+                  <label className="props-field-label">Input Voltage</label>
+                  <select
+                    className="props-input"
+                    value={fields.input_voltage}
+                    onChange={(e) => setField('input_voltage', e.target.value)}
+                  >
+                    <option value="">Unset</option>
+                    {VOLTAGE_OPTIONS.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* Power Source / Upstream Power Source */}
+            <div className="props-field">
+              <label className="props-field-label">{isPower ? 'Upstream Power Source' : 'Power Source'}</label>
+              <select
+                className="props-input"
+                value={outletValue(fields.power_source_slot_id, fields.power_source_outlet)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === WALL_DIRECT) {
+                    setFields((f) => ({ ...f, power_source_slot_id: null, power_source_outlet: null }));
+                    patch({ power_source_slot_id: null, power_source_outlet: null });
+                    return;
+                  }
+                  const [sourceId, outlet] = val.split(':').map(Number);
+                  setFields((f) => ({ ...f, power_source_slot_id: sourceId, power_source_outlet: outlet }));
+                  patch({ power_source_slot_id: sourceId, power_source_outlet: outlet });
+                }}
+              >
+                <option value={WALL_DIRECT}>Wall (Direct)</option>
+                {buildOutletOptions(rackSlots || [], slot.id, slot.id).map((opt) => (
+                  <option
+                    key={`${opt.sourceSlotId}:${opt.outlet}`}
+                    value={outletValue(opt.sourceSlotId, opt.outlet)}
+                    disabled={opt.disabled}
+                  >
+                    {opt.label}{opt.disabled ? ' (occupied)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
+
+        {isPower && (
+          <>
+            <div className="props-section-divider">Outlets ({getOutletCount(slot)})</div>
+            {getOutletCount(slot) === 0 ? (
+              <p className="props-empty-note">No outlets defined for this device.</p>
+            ) : (
+              <PowerOutletList slot={slot} rackSlots={rackSlots || []} onSelectSlot={onSelectSlot} />
+            )}
+            <PowerLoadBar slot={slot} fields={fields} rackSlots={rackSlots || []} />
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PowerOutletList({ slot, rackSlots, onSelectSlot }) {
+  const outlets = Array.from({ length: getOutletCount(slot) }, (_, i) => {
+    const n = i + 1;
+    const occupant = rackSlots.find((s) => s.power_source_slot_id === slot.id && s.power_source_outlet === n);
+    return { n, occupant };
+  });
+
+  return (
+    <div className="props-outlet-list">
+      {outlets.map(({ n, occupant }) => {
+        const isSubSource = occupant && isPowerDevice(occupant) && getOutletCount(occupant) > 0;
+        const subLoad = isSubSource ? computeLoad(occupant, rackSlots) : null;
+        const unknownDraw = occupant && !isSubSource && (occupant.power_draw_w === null || occupant.power_draw_w === undefined);
+        return (
+          <div
+            key={n}
+            className={`props-outlet-row${occupant ? ' has-occupant' : ''}`}
+            onClick={() => occupant && onSelectSlot && onSelectSlot(occupant.id)}
+            title={occupant ? `Jump to ${getPowerLabel(occupant)}` : undefined}
+          >
+            <span className="props-outlet-num">{n}</span>
+            <span className="props-outlet-name">{occupant ? getPowerLabel(occupant) : 'Empty'}</span>
+            {occupant && (
+              <span className="props-outlet-draw">
+                {isSubSource ? `${subLoad.total}W` : unknownDraw ? 'unknown' : `${occupant.power_draw_w}W`}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PowerLoadBar({ slot, fields, rackSlots }) {
+  const { total, hasUnknown } = computeLoad(slot, rackSlots);
+  const capacity = fields.power_capacity || null;
+  const unit = fields.power_capacity_unit || 'W';
+  const pct = capacity ? Math.min(100, (total / capacity) * 100) : 0;
+  const overCapacity = capacity && total > capacity;
+
+  return (
+    <div className="props-field">
+      <label className="props-field-label">Load</label>
+      <div className={`props-load-bar-track${overCapacity ? ' over-capacity' : ''}`}>
+        <div className="props-load-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="props-load-bar-label">
+        Load: {total} W {capacity ? `/ ${capacity} ${unit} capacity` : '(capacity not set)'}
+      </div>
+      {overCapacity && <div className="props-load-warning">Exceeds capacity!</div>}
+      {hasUnknown && <div className="props-load-note">Some connected devices have unknown power draw — total may be incomplete.</div>}
     </div>
   );
 }

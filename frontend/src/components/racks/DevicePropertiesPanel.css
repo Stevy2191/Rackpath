@@ -260,3 +260,120 @@
   border-color: #4adede;
   color: #4adede;
 }
+
+/* ─── Power section ──────────────────────────────────────── */
+.props-section-divider {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #4adede;
+  padding-top: 6px;
+  border-top: 1px solid #2a2e38;
+}
+
+.props-empty-note {
+  font-size: 0.72rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.props-capacity-row {
+  display: flex;
+  gap: 6px;
+}
+
+.props-capacity-unit {
+  flex: 0 0 60px;
+}
+
+/* ─── Outlet list ─────────────────────────────────────────── */
+.props-outlet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.props-outlet-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 0.74rem;
+  background: #0e0f13;
+  border-bottom: 1px solid #1e2128;
+}
+
+.props-outlet-row:last-child {
+  border-bottom: none;
+}
+
+.props-outlet-row.has-occupant {
+  cursor: pointer;
+}
+
+.props-outlet-row.has-occupant:hover {
+  background: rgba(74, 222, 222, 0.06);
+}
+
+.props-outlet-num {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  color: #6b7280;
+  font-weight: 700;
+}
+
+.props-outlet-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #d4d8e0;
+}
+
+.props-outlet-draw {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  color: #8b91a1;
+}
+
+/* ─── Load bar ────────────────────────────────────────────── */
+.props-load-bar-track {
+  height: 10px;
+  border-radius: 5px;
+  background: #1e2128;
+  overflow: hidden;
+}
+
+.props-load-bar-fill {
+  height: 100%;
+  background: #4adede;
+  transition: width 0.2s ease;
+}
+
+.props-load-bar-track.over-capacity .props-load-bar-fill {
+  background: #ef4444;
+}
+
+.props-load-bar-label {
+  font-size: 0.7rem;
+  color: #8b91a1;
+  margin-top: 4px;
+}
+
+.props-load-warning {
+  font-size: 0.7rem;
+  color: #ef4444;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.props-load-note {
+  font-size: 0.66rem;
+  color: #f59e0b;
+  margin-top: 2px;
+}

@@ -1,6 +1,7 @@
 import React from 'react';
 import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
+import VerticalPdu from './VerticalPdu';
 import './RackEnclosure.css';
 
 const ANNOTATION_LABELS = {
@@ -317,8 +318,13 @@ export default function RackEnclosure({
 }) {
   const uRows = Array.from({ length: rack.u_height }, (_, i) => rack.u_height - i);
 
-  const frontMap = buildUMap(slots, 'front');
-  const rearMap  = buildUMap(slots, 'rear');
+  // Vertical PDUs are floating elements alongside the frame, not part of the
+  // front/rear U grid — keep them out of the U-occupancy maps entirely.
+  const verticalPdus = slots.filter((s) => s.item_type === 'vertical-pdu');
+  const uSlots = slots.filter((s) => s.item_type !== 'vertical-pdu');
+
+  const frontMap = buildUMap(uSlots, 'front');
+  const rearMap  = buildUMap(uSlots, 'rear');
 
   // Compute no-go stripes projected onto the opposite face:
   //   • Half-depth devices: occupy only the near half of the rack depth, so
@@ -332,7 +338,7 @@ export default function RackEnclosure({
     const hwLeftRows  = new Set();
     const hwRightRows = new Set();
 
-    for (const s of slots) {
+    for (const s of uSlots) {
       const mf = resolveface(s);
       const onSourceFace = sourceFace === 'front'
         ? (mf === 'front' || mf === 'both')
@@ -473,6 +479,19 @@ export default function RackEnclosure({
             <div className="rack-annotation-bottom-pad" />
           </div>
         )}
+
+        {verticalPdus.map((pdu) => (
+          <VerticalPdu
+            key={pdu.id}
+            slot={pdu}
+            rack={rack}
+            uHeight={uHeight}
+            isSelected={pdu.id === selectedSlotId}
+            highlighted={pdu.id === highlightedSlotId}
+            onSelect={onSelectSlot}
+            actions={actions}
+          />
+        ))}
       </div>
     </div>
   );

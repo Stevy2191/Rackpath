@@ -120,6 +120,12 @@ export default function DeviceCatalog({
       mounted_face: entry.mountedFace || 'front',
       half_depth: entry.halfDepth ? 1 : 0,
       half_width: entry.halfWidth ? 1 : 0,
+      power_draw_w: entry.powerDrawW,
+      outlet_count: entry.outletCount,
+      outlet_type: entry.outletType,
+      power_capacity: entry.capacity,
+      power_capacity_unit: entry.capacityUnit,
+      input_voltage: entry.inputVoltage,
     });
   };
 
@@ -137,6 +143,12 @@ export default function DeviceCatalog({
       u_position,
       u_size: custom.u_size,
       mounted_face: 'front',
+      power_draw_w: custom.power_draw_w,
+      outlet_count: custom.outlet_count,
+      outlet_type: custom.outlet_type,
+      power_capacity: custom.power_capacity,
+      power_capacity_unit: custom.power_capacity_unit,
+      input_voltage: custom.input_voltage,
     });
   };
 
@@ -156,6 +168,7 @@ export default function DeviceCatalog({
       mounted_face: mountedFace,
       half_depth: catalogMatch?.halfDepth ? 1 : 0,
       half_width: catalogMatch?.halfWidth ? 1 : 0,
+      power_draw_w: catalogMatch?.powerDrawW,
     });
   };
 
@@ -332,6 +345,7 @@ export default function DeviceCatalog({
                               mountedFace: catalogMatch.mountedFace,
                               halfDepth: catalogMatch.halfDepth,
                               halfWidth: catalogMatch.halfWidth,
+                              powerDrawW: catalogMatch.powerDrawW,
                             }));
                           }
                         }}
