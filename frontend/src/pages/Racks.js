@@ -243,21 +243,41 @@ export default function RacksPage() {
     setSelectedSlotId((cur) => (cur === slotId ? null : slotId));
   };
 
+  // Minimum 3× so exports are crisp even on 1× screens.
+  // devicePixelRatio is 1 on standard monitors (truthy), so || 2 returned 1 — wrong.
+  const EXPORT_SCALE = Math.max(window.devicePixelRatio || 1, 3);
+  // PDF pages sized so the embedded PNG renders at this DPI (pt = px * 72 / DPI).
+  const PDF_DPI = 150;
+
+  const makePdf = (dataUrl, physicalW, physicalH, filename) => {
+    const pdfW = (physicalW / PDF_DPI) * 72; // pt
+    const pdfH = (physicalH / PDF_DPI) * 72;
+    const pdf = new jsPDF({
+      orientation: pdfW >= pdfH ? 'landscape' : 'portrait',
+      unit: 'pt',
+      format: [pdfW, pdfH],
+    });
+    pdf.addImage(dataUrl, 'PNG', 0, 0, pdfW, pdfH);
+    pdf.save(filename);
+  };
+
   const exportSingleRack = async (rackId, format) => {
     const rack = racks.find((r) => r.id === rackId);
     if (!rack) return;
     // .rack-dual-frame is a direct child of #rack-<id> (.rack-enclosure)
     const frame = document.getElementById(`rack-${rackId}`)?.querySelector('.rack-dual-frame');
     if (!frame) return;
-    const pixelRatio = window.devicePixelRatio || 2;
     setExportingRack(true);
     try {
-      const dataUrl = await toPng(frame, { backgroundColor: '#0a0a0f', pixelRatio, width: frame.offsetWidth, height: frame.offsetHeight });
+      const dataUrl = await toPng(frame, {
+        backgroundColor: '#0a0a0f',
+        pixelRatio: EXPORT_SCALE,
+        width: frame.offsetWidth,
+        height: frame.offsetHeight,
+      });
       const filename = rack.name.trim().replace(/\s+/g, '-').toLowerCase() || 'rack';
       if (format === 'pdf') {
-        const pdf = new jsPDF({ orientation: frame.offsetWidth >= frame.offsetHeight ? 'landscape' : 'portrait', unit: 'px', format: [frame.offsetWidth, frame.offsetHeight] });
-        pdf.addImage(dataUrl, 'PNG', 0, 0, frame.offsetWidth, frame.offsetHeight);
-        pdf.save(`rack-${filename}.pdf`);
+        makePdf(dataUrl, frame.offsetWidth * EXPORT_SCALE, frame.offsetHeight * EXPORT_SCALE, `rack-${filename}.pdf`);
       } else {
         const a = document.createElement('a');
         a.download = `rack-${filename}.png`;
@@ -274,17 +294,21 @@ export default function RacksPage() {
 
   const exportAllRacks = async (format) => {
     const sortedRacks = [...racks].sort((a, b) => a.id - b.id);
-    const pixelRatio = window.devicePixelRatio || 2;
     setExportingRack(true);
     try {
       // id IS the .rack-enclosure element — use getElementById directly
       const capturePromises = sortedRacks.map((rack) => {
         const el = document.getElementById(`rack-${rack.id}`);
         if (!el) return Promise.resolve(null);
-        return toPng(el, { backgroundColor: '#0a0a0f', pixelRatio, width: el.offsetWidth, height: el.offsetHeight }).then((dataUrl) => ({
-          dataUrl,
+        return toPng(el, {
+          backgroundColor: '#0a0a0f',
+          pixelRatio: EXPORT_SCALE,
           width: el.offsetWidth,
           height: el.offsetHeight,
+        }).then((dataUrl) => ({
+          dataUrl,
+          cssW: el.offsetWidth,
+          cssH: el.offsetHeight,
         }));
       });
       const captures = (await Promise.all(capturePromises)).filter(Boolean);
@@ -292,18 +316,18 @@ export default function RacksPage() {
 
       const GAP = 48;
       const PADDING = 32;
-      const totalWidth = captures.reduce((sum, c) => sum + c.width, 0) + GAP * (captures.length - 1) + PADDING * 2;
-      const maxHeight = Math.max(...captures.map((c) => c.height));
-      const totalHeight = maxHeight + PADDING * 2;
+      const totalCssW = captures.reduce((sum, c) => sum + c.cssW, 0) + GAP * (captures.length - 1) + PADDING * 2;
+      const maxCssH = Math.max(...captures.map((c) => c.cssH));
+      const totalCssH = maxCssH + PADDING * 2;
 
-      // Create canvas at physical pixel size for HiDPI sharpness
+      // Composite canvas at physical pixel dimensions
       const canvas = document.createElement('canvas');
-      canvas.width = totalWidth * pixelRatio;
-      canvas.height = totalHeight * pixelRatio;
+      canvas.width = totalCssW * EXPORT_SCALE;
+      canvas.height = totalCssH * EXPORT_SCALE;
       const ctx = canvas.getContext('2d');
-      ctx.scale(pixelRatio, pixelRatio);
+      ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
       ctx.fillStyle = '#0a0a0f';
-      ctx.fillRect(0, 0, totalWidth, totalHeight);
+      ctx.fillRect(0, 0, totalCssW, totalCssH);
 
       // Load all captured images in parallel, then composite in order
       const imgs = await Promise.all(
@@ -319,21 +343,15 @@ export default function RacksPage() {
 
       let x = PADDING;
       for (let i = 0; i < captures.length; i++) {
-        const y = PADDING + Math.floor((maxHeight - captures[i].height) / 2);
-        // Draw at CSS pixel coords — context scale maps to physical pixels
-        ctx.drawImage(imgs[i], x, y, captures[i].width, captures[i].height);
-        x += captures[i].width + GAP;
+        const y = PADDING + Math.floor((maxCssH - captures[i].cssH) / 2);
+        // Draw at CSS coords; ctx.scale maps to physical pixels 1:1 with captured image
+        ctx.drawImage(imgs[i], x, y, captures[i].cssW, captures[i].cssH);
+        x += captures[i].cssW + GAP;
       }
 
       const compositeDataUrl = canvas.toDataURL('image/png');
       if (format === 'pdf') {
-        const pdf = new jsPDF({
-          orientation: totalWidth >= totalHeight ? 'landscape' : 'portrait',
-          unit: 'px',
-          format: [totalWidth, totalHeight],
-        });
-        pdf.addImage(compositeDataUrl, 'PNG', 0, 0, totalWidth, totalHeight);
-        pdf.save('racks-export.pdf');
+        makePdf(compositeDataUrl, totalCssW * EXPORT_SCALE, totalCssH * EXPORT_SCALE, 'racks-export.pdf');
       } else {
         const a = document.createElement('a');
         a.download = 'racks-export.png';
