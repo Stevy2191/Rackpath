@@ -375,6 +375,22 @@
   stroke-width: 1.5;
   stroke-dasharray: 4 3;
   fill: none;
+  animation: rack-power-cord-flow 0.7s linear infinite;
+}
+
+/* Off-screen racks stop animating — no point spending cycles on them. */
+.rack-power-cords-paused .rack-power-cord-line {
+  animation-play-state: paused;
+}
+
+/* Dash pattern marches from the UPS end toward the PDU end (the direction
+   power actually flows, since the PDU is plugged into the UPS). */
+@keyframes rack-power-cord-flow {
+  to { stroke-dashoffset: -7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rack-power-cord-line { animation: none; }
 }
 
 /* ─── Export capture: front-only view ────────────────────── */

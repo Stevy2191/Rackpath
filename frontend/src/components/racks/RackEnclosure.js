@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
@@ -6,9 +6,13 @@ import './RackEnclosure.css';
 
 // Vertical PDU floating-strip layout (must match the offsets VerticalPdu.js
 // renders with — kept in JS so the cord overlay can use the same numbers).
+// Offset is measured from the dual-frame's padding edge, so the visible gap
+// from the rendered border ends up a little larger than STRIP_OFFSET_BASE -
+// STRIP_WIDTH (border + padding add a few more px) — tuned to land in the
+// 24-40px "floating, not attached" range the strip is meant to read as.
 const STRIP_WIDTH = 14;
-const STRIP_OFFSET_BASE = 18;
-const STRIP_STACK_GAP = 20;
+const STRIP_OFFSET_BASE = 40;
+const STRIP_STACK_GAP = 24;
 
 const ANNOTATION_LABELS = {
   name:         'Name',
@@ -350,12 +354,29 @@ export default function RackEnclosure({
     }
   }, [rack.show_rear, rack.show_annotations, rack.annotation_field, rack.u_height, uHeight]);
 
+  // Pause the cord "flow" animation while this rack is scrolled out of the
+  // viewport, so off-screen racks don't keep animating for nothing.
+  const [cordsInView, setCordsInView] = useState(true);
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setCordsInView(entry.isIntersecting),
+      { rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   function verticalCenterY(u_position, u_size) {
     const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
     return top + (u_size * uHeight) / 2;
   }
 
   // One cord per vertical PDU that's plugged into a UPS in this rack.
+  // Endpoints are ordered UPS → PDU (the actual direction power flows,
+  // since the PDU is plugged into the UPS) so the flow animation's
+  // direction matches reality.
   const cords = [];
   for (const pdu of verticalPdus) {
     const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
@@ -366,7 +387,7 @@ export default function RackEnclosure({
     const pduY = verticalCenterY(pdu.u_position, pdu.u_size);
     const upsX = side === 'left' ? 0 : frameSize.width;
     const upsY = verticalCenterY(ups.u_position, ups.u_size);
-    cords.push({ key: pdu.id, x1: pduX, y1: pduY, x2: upsX, y2: upsY });
+    cords.push({ key: pdu.id, x1: upsX, y1: upsY, x2: pduX, y2: pduY });
   }
 
   const frontMap = buildUMap(uSlots, 'front');
@@ -527,7 +548,11 @@ export default function RackEnclosure({
         )}
 
         {cords.length > 0 && (
-          <svg className="rack-power-cords" width={frameSize.width} height={frameSize.height}>
+          <svg
+            className={`rack-power-cords${cordsInView ? '' : ' rack-power-cords-paused'}`}
+            width={frameSize.width}
+            height={frameSize.height}
+          >
             {cords.map((c) => (
               <line key={c.key} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} className="rack-power-cord-line" />
             ))}
