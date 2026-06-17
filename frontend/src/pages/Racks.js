@@ -11,6 +11,8 @@ import AddRackModal from '../components/racks/AddRackModal';
 import RackDeviceContextMenu from '../components/racks/RackDeviceContextMenu';
 import RackContextMenu from '../components/racks/RackContextMenu';
 import ExportModal from '../components/racks/ExportModal';
+import ConfirmModal from '../components/racks/ConfirmModal';
+import { getDeviceLabel } from '../components/racks/DeviceBlock';
 import './Racks.css';
 
 function scrollRackIntoView(rackId) {
@@ -39,6 +41,7 @@ export default function RacksPage() {
   const [portEditorDevice, setPortEditorDevice] = useState(null);
   const [addRackOpen, setAddRackOpen] = useState(false);
   const [cableViewEnabled, setCableViewEnabled] = useState(false);
+  const [deleteConfirmSlot, setDeleteConfirmSlot] = useState(null);
   const racksMainRef = useRef(null);
 
   const loadRacks = useCallback(() => {
@@ -87,17 +90,31 @@ export default function RacksPage() {
   // Escape closes panels/menus
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === 'Escape') {
-        setSelectedSlotId(null);
-        setRackEditOpen(false);
-        setRackContextMenu(null);
-        setExportModal(null);
-        setRenamingRackId(null);
-      }
+      if (e.key !== 'Escape') return;
+      setSelectedSlotId(null);
+      setRackEditOpen(false);
+      setRackContextMenu(null);
+      setExportModal(null);
+      setRenamingRackId(null);
+      setDeleteConfirmSlot(null);
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
+
+  // Delete/Backspace triggers device delete confirmation for the selected slot
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (!selectedSlotId || deleteConfirmSlot) return;
+      const slot = allSlots.find((s) => s.id === selectedSlotId);
+      if (slot) setDeleteConfirmSlot(slot);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [selectedSlotId, allSlots, deleteConfirmSlot]);
 
   // Close rack edit panel when rack is deselected
   useEffect(() => {
@@ -439,9 +456,26 @@ export default function RacksPage() {
           y={contextMenu.y}
           devices={devices}
           onClose={() => setContextMenu(null)}
+          onDeleteRequest={(slot) => setDeleteConfirmSlot(slot)}
           actions={actions}
         />
       )}
+
+      {deleteConfirmSlot && (() => {
+        const { name } = getDeviceLabel(deleteConfirmSlot);
+        return (
+          <ConfirmModal
+            title={`Delete '${name}'?`}
+            message="This action cannot be undone."
+            confirmLabel="Delete"
+            onConfirm={() => {
+              actions.onSlotDelete(deleteConfirmSlot.id);
+              setDeleteConfirmSlot(null);
+            }}
+            onCancel={() => setDeleteConfirmSlot(null)}
+          />
+        );
+      })()}
 
       {addRackOpen && <AddRackModal onClose={() => setAddRackOpen(false)} onCreate={handleAddRack} />}
 

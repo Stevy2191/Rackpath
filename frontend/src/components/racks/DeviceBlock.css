@@ -18,7 +18,10 @@
 
 .device-block:hover { filter: brightness(1.18); }
 
-.device-block-selected { filter: brightness(1.28) saturate(1.1); }
+.device-block-selected {
+  box-shadow: inset 0 0 0 2px #4adede, inset 0 0 14px rgba(74, 222, 222, 0.18);
+  z-index: 1;
+}
 
 .device-block-highlighted {
   animation: device-block-pulse 1.4s ease-in-out 2;

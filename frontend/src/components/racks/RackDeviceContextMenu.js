@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pencil, Link2, ArrowLeftRight, Trash2 } from 'lucide-react';
 import './RackDeviceContextMenu.css';
 
-export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, actions }) {
+export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, onDeleteRequest, actions }) {
   const ref = useRef(null);
   const [mode, setMode] = useState('menu');
   const [label, setLabel] = useState(slot.item_label || '');
@@ -43,8 +43,8 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, ac
   };
 
   const handleDelete = () => {
-    actions.onSlotDelete(slot.id);
     onClose();
+    onDeleteRequest(slot);
   };
 
   return (

@@ -79,6 +79,12 @@ export default function DeviceBlock({
         if (e.defaultPrevented) return;
         onSelect && onSelect(slot.id);
       }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onSelect && onSelect(slot.id);
+        actions.onOpenContextMenu(slot, e.clientX, e.clientY);
+      }}
       data-slot-id={slot.id}
       data-device-id={slot.device_id || ''}
     >
