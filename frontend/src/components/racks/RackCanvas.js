@@ -43,6 +43,10 @@ export default function RackCanvas({
   onSelectSlot,
   onEditRack,
   rackEditOpen,
+  fitRackRequest,
+  renamingRackId,
+  onRenameSubmit,
+  onRenameCancel,
 }) {
   const [draggingMeta, setDraggingMeta] = useState(null);
   const [vp, setVp]       = useState({ zoom: 1, tx: 0, ty: 0 });
@@ -80,6 +84,34 @@ export default function RackCanvas({
     applyVp({ zoom: newZoom, tx: newTx, ty: newTy });
     setFitted(true);
   }, [applyVp]);
+
+  // Fit to a specific rack (Focus action from context menu).
+  useEffect(() => {
+    if (!fitRackRequest) return;
+    const rackEl = document.getElementById(`rack-${fitRackRequest.id}`);
+    if (!rackEl || !viewportRef.current) return;
+    const vpEl = viewportRef.current;
+    const vw = vpEl.clientWidth;
+    const vh = vpEl.clientHeight;
+    const { tx, ty, zoom } = vpRef.current;
+    const vpRect = vpEl.getBoundingClientRect();
+    const elRect = rackEl.getBoundingClientRect();
+    // Convert rack position from viewport coords to canvas-content coords
+    const rackCX = (elRect.left - vpRect.left - tx) / zoom;
+    const rackCY = (elRect.top  - vpRect.top  - ty) / zoom;
+    const rackCW = elRect.width  / zoom;
+    const rackCH = elRect.height / zoom;
+    const FOCUS_PAD = 80;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM,
+      (vw - FOCUS_PAD * 2) / rackCW,
+      (vh - FOCUS_PAD * 2) / rackCH,
+    ));
+    applyVp({
+      zoom: newZoom,
+      tx: vw / 2 - (rackCX + rackCW / 2) * newZoom,
+      ty: vh / 2 - (rackCY + rackCH / 2) * newZoom,
+    });
+  }, [fitRackRequest, applyVp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-fit once when racks first appear (runs before first visible paint).
   useLayoutEffect(() => {
@@ -273,6 +305,9 @@ export default function RackCanvas({
             isFocused={focusedRackId === rack.id}
             uHeight={U_HEIGHT}
             onSelectSlot={onSelectSlot}
+            isRenaming={renamingRackId === rack.id}
+            onRenameSubmit={(name) => onRenameSubmit(rack.id, name)}
+            onRenameCancel={onRenameCancel}
           />
         ))}
 

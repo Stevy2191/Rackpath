@@ -186,3 +186,76 @@
   box-sizing: border-box;
   border-bottom: 1px solid #05060a;
 }
+
+/* ─── Inline rename input ────────────────────────────────── */
+.rack-name-input {
+  display: block;
+  text-align: center;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e6e9f0;
+  background: rgba(74, 222, 222, 0.08);
+  border: 1px solid #4adede;
+  border-radius: 4px;
+  padding: 0 6px;
+  margin-bottom: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+  letter-spacing: 0.03em;
+}
+
+/* ─── Export capture: front-only view ────────────────────── */
+.rack-capture-front-only .rack-panel-frame-rear,
+.rack-capture-front-only .rack-panel-divider { display: none; }
+.rack-capture-front-only .rack-units { flex: 0 0 308px; width: 308px; }
+.rack-capture-front-only .rack-panel-frame-front .rack-top-blank,
+.rack-capture-front-only .rack-panel-frame-front .rack-bottom-blank {
+  border-radius: 4px;
+  border-right: 1px solid #060708;
+}
+
+/* ─── Export capture: rear-only view ─────────────────────── */
+.rack-capture-rear-only .rack-panel-frame-front,
+.rack-capture-rear-only .rack-panel-divider { display: none; }
+.rack-capture-rear-only .rack-units { flex: 0 0 308px; width: 308px; }
+.rack-capture-rear-only .rack-panel-frame-rear .rack-top-blank,
+.rack-capture-rear-only .rack-panel-frame-rear .rack-bottom-blank {
+  border-radius: 4px;
+  border-left: 1px solid #060708;
+}
+
+/* ─── Export capture: light theme ────────────────────────── */
+.rack-capture-light .rack-dual-frame {
+  background: linear-gradient(135deg, #dde1ea 0%, #e8ecf4 50%, #edf0f7 100%);
+  border-color: #b8c0cc;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.08), inset 0 -2px 6px rgba(0,0,0,0.08),
+              0 8px 24px rgba(0,0,0,0.12);
+}
+.rack-capture-light .rack-panel-divider {
+  background: linear-gradient(90deg, #b8c0cc 0%, #c8d0dc 50%, #b8c0cc 100%);
+  border-color: #a8b4c2;
+}
+.rack-capture-light .rack-panel-label { color: #5a6575; }
+.rack-capture-light .rack-name-label  { color: #4a5565; }
+.rack-capture-light .rack-top-blank,
+.rack-capture-light .rack-bottom-blank {
+  background: linear-gradient(180deg, #b8c0cc 0%, #c8d0dc 100%);
+  border-color: #a0acba;
+  box-shadow: none;
+}
+.rack-capture-light .rack-bottom-blank {
+  background: linear-gradient(180deg, #c8d0dc 0%, #b8c0cc 100%);
+}
+.rack-capture-light .rack-rail {
+  background: linear-gradient(180deg, #ccd4de 0%, #d8dfe8 100%);
+  border-color: #b0bac8;
+}
+.rack-capture-light .rack-rail-number { color: #5a6878; border-bottom-color: rgba(0,0,0,0.08); }
+.rack-capture-light .rack-rail-5th   { color: #303c4a; font-weight: 700; border-bottom-color: rgba(0,0,0,0.15); }
+.rack-capture-light .rack-units      { border-color: #b0bac8; }
+.rack-capture-light .rack-unit-band-0 { background: rgba(0,0,0,0.01); }
+.rack-capture-light .rack-unit-band-1 { background: rgba(0,0,0,0.04); }
+.rack-capture-light .rack-unit-slot  { border-bottom-color: rgba(0,0,0,0.07); }
+.rack-capture-light .rack-unit-slot-number { color: #a8b0bc; }

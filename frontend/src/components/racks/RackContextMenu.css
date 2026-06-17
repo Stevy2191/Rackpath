@@ -1,0 +1,41 @@
+.rack-ctx-menu {
+  position: fixed;
+  min-width: 182px;
+  background: #1a1c22;
+  border: 1px solid #2a2e38;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  z-index: 500;
+  overflow: hidden;
+  padding: 4px 0;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+}
+
+.rack-ctx-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: #c4cad6;
+  font-family: inherit;
+  font-size: 0.79rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.rack-ctx-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #e6e9f0;
+}
+
+.rack-ctx-danger { color: #ef4444; }
+.rack-ctx-danger:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+.rack-ctx-divider {
+  height: 1px;
+  background: #2a2e38;
+  margin: 4px 0;
+}

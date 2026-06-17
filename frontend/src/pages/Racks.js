@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Cable, ChevronDown, Download, LayoutGrid, Plus } from 'lucide-react';
-import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
+import { Cable, Download, LayoutGrid, Plus } from 'lucide-react';
 import client from '../api/client';
 import PortEditorModal from '../components/PortEditorModal';
 import RackCanvas from '../components/racks/RackCanvas';
@@ -11,6 +9,8 @@ import DevicePropertiesPanel from '../components/racks/DevicePropertiesPanel';
 import RackEditPanel from '../components/racks/RackEditPanel';
 import AddRackModal from '../components/racks/AddRackModal';
 import RackDeviceContextMenu from '../components/racks/RackDeviceContextMenu';
+import RackContextMenu from '../components/racks/RackContextMenu';
+import ExportModal from '../components/racks/ExportModal';
 import './Racks.css';
 
 function scrollRackIntoView(rackId) {
@@ -29,15 +29,17 @@ export default function RacksPage() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [focusedRackId, setFocusedRackId] = useState(null);
   const [rackEditOpen, setRackEditOpen] = useState(false);
-  const [exportingRack, setExportingRack] = useState(false);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const exportMenuRef = useRef(null);
   const [highlightedSlotId, setHighlightedSlotId] = useState(null);
   const [selectedSlotId, setSelectedSlotId] = useState(null);
-  const [contextMenu, setContextMenu] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);         // device context menu
+  const [rackContextMenu, setRackContextMenu] = useState(null); // { rackId, x, y }
+  const [exportModal, setExportModal] = useState(null);         // { targetRacks: [] }
+  const [renamingRackId, setRenamingRackId] = useState(null);
+  const [fitRackRequest, setFitRackRequest] = useState(null);   // { id, t }
   const [portEditorDevice, setPortEditorDevice] = useState(null);
   const [addRackOpen, setAddRackOpen] = useState(false);
   const [cableViewEnabled, setCableViewEnabled] = useState(false);
+  const racksMainRef = useRef(null);
 
   const loadRacks = useCallback(() => {
     client.get('/racks').then((res) => setRacks(res.data)).catch((err) => setError(err.message));
@@ -82,30 +84,20 @@ export default function RacksPage() {
     );
   }, [allSlots, searchParams, setSearchParams]);
 
-  // Close properties panels with Escape
+  // Escape closes panels/menus
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
         setSelectedSlotId(null);
         setRackEditOpen(false);
-        setExportMenuOpen(false);
+        setRackContextMenu(null);
+        setExportModal(null);
+        setRenamingRackId(null);
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
-
-  // Close export dropdown on outside click
-  useEffect(() => {
-    if (!exportMenuOpen) return;
-    const handler = (e) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
-        setExportMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [exportMenuOpen]);
 
   // Close rack edit panel when rack is deselected
   useEffect(() => {
@@ -243,129 +235,7 @@ export default function RacksPage() {
     setSelectedSlotId((cur) => (cur === slotId ? null : slotId));
   };
 
-  // Minimum 3× so exports are crisp even on 1× screens.
-  // devicePixelRatio is 1 on standard monitors (truthy), so || 2 returned 1 — wrong.
-  const EXPORT_SCALE = Math.max(window.devicePixelRatio || 1, 3);
-  // PDF pages sized so the embedded PNG renders at this DPI (pt = px * 72 / DPI).
-  const PDF_DPI = 150;
-
-  const makePdf = (dataUrl, physicalW, physicalH, filename) => {
-    const pdfW = (physicalW / PDF_DPI) * 72; // pt
-    const pdfH = (physicalH / PDF_DPI) * 72;
-    const pdf = new jsPDF({
-      orientation: pdfW >= pdfH ? 'landscape' : 'portrait',
-      unit: 'pt',
-      format: [pdfW, pdfH],
-    });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, pdfW, pdfH);
-    pdf.save(filename);
-  };
-
-  const exportSingleRack = async (rackId, format) => {
-    const rack = racks.find((r) => r.id === rackId);
-    if (!rack) return;
-    // .rack-dual-frame is a direct child of #rack-<id> (.rack-enclosure)
-    const frame = document.getElementById(`rack-${rackId}`)?.querySelector('.rack-dual-frame');
-    if (!frame) return;
-    setExportingRack(true);
-    try {
-      const dataUrl = await toPng(frame, {
-        backgroundColor: '#0a0a0f',
-        pixelRatio: EXPORT_SCALE,
-        width: frame.offsetWidth,
-        height: frame.offsetHeight,
-      });
-      const filename = rack.name.trim().replace(/\s+/g, '-').toLowerCase() || 'rack';
-      if (format === 'pdf') {
-        makePdf(dataUrl, frame.offsetWidth * EXPORT_SCALE, frame.offsetHeight * EXPORT_SCALE, `rack-${filename}.pdf`);
-      } else {
-        const a = document.createElement('a');
-        a.download = `rack-${filename}.png`;
-        a.href = dataUrl;
-        a.click();
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Rack export failed', err);
-    } finally {
-      setExportingRack(false);
-    }
-  };
-
-  const exportAllRacks = async (format) => {
-    const sortedRacks = [...racks].sort((a, b) => a.id - b.id);
-    setExportingRack(true);
-    try {
-      // id IS the .rack-enclosure element — use getElementById directly
-      const capturePromises = sortedRacks.map((rack) => {
-        const el = document.getElementById(`rack-${rack.id}`);
-        if (!el) return Promise.resolve(null);
-        return toPng(el, {
-          backgroundColor: '#0a0a0f',
-          pixelRatio: EXPORT_SCALE,
-          width: el.offsetWidth,
-          height: el.offsetHeight,
-        }).then((dataUrl) => ({
-          dataUrl,
-          cssW: el.offsetWidth,
-          cssH: el.offsetHeight,
-        }));
-      });
-      const captures = (await Promise.all(capturePromises)).filter(Boolean);
-      if (captures.length === 0) return;
-
-      const GAP = 48;
-      const PADDING = 32;
-      const totalCssW = captures.reduce((sum, c) => sum + c.cssW, 0) + GAP * (captures.length - 1) + PADDING * 2;
-      const maxCssH = Math.max(...captures.map((c) => c.cssH));
-      const totalCssH = maxCssH + PADDING * 2;
-
-      // Composite canvas at physical pixel dimensions
-      const canvas = document.createElement('canvas');
-      canvas.width = totalCssW * EXPORT_SCALE;
-      canvas.height = totalCssH * EXPORT_SCALE;
-      const ctx = canvas.getContext('2d');
-      ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
-      ctx.fillStyle = '#0a0a0f';
-      ctx.fillRect(0, 0, totalCssW, totalCssH);
-
-      // Load all captured images in parallel, then composite in order
-      const imgs = await Promise.all(
-        captures.map(
-          (cap) =>
-            new Promise((resolve) => {
-              const img = new Image();
-              img.onload = () => resolve(img);
-              img.src = cap.dataUrl;
-            }),
-        ),
-      );
-
-      let x = PADDING;
-      for (let i = 0; i < captures.length; i++) {
-        const y = PADDING + Math.floor((maxCssH - captures[i].cssH) / 2);
-        // Draw at CSS coords; ctx.scale maps to physical pixels 1:1 with captured image
-        ctx.drawImage(imgs[i], x, y, captures[i].cssW, captures[i].cssH);
-        x += captures[i].cssW + GAP;
-      }
-
-      const compositeDataUrl = canvas.toDataURL('image/png');
-      if (format === 'pdf') {
-        makePdf(compositeDataUrl, totalCssW * EXPORT_SCALE, totalCssH * EXPORT_SCALE, 'racks-export.pdf');
-      } else {
-        const a = document.createElement('a');
-        a.download = 'racks-export.png';
-        a.href = compositeDataUrl;
-        a.click();
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Rack export failed', err);
-    } finally {
-      setExportingRack(false);
-    }
-  };
-
+  // ─── JSON config backup (separate from new Export modal) ────────────────────
   const exportRackJson = (rackId) => {
     const rack = racks.find((r) => r.id === rackId);
     if (!rack) return;
@@ -400,54 +270,44 @@ export default function RacksPage() {
     URL.revokeObjectURL(url);
   };
 
-  const exportAllRacksJson = () => {
-    const sortedRacks = [...racks].sort((a, b) => a.id - b.id);
-    const data = {
-      version: '1.0',
-      exportedAt: new Date().toISOString(),
-      racks: sortedRacks.map((rack) => ({
-        name: rack.name,
-        location: rack.location,
-        u_height: rack.u_height,
-        rack_type: rack.rack_type,
-        notes: rack.notes,
-        show_rear: rack.show_rear,
-        slots: allSlots
-          .filter((s) => s.rack_id === rack.id)
-          .map((s) => ({
-            u_position: s.u_position,
-            u_size: s.u_size,
-            item_type: s.item_type,
-            item_label: s.item_label,
-            vendor: s.vendor,
-            catalog_id: s.catalog_id,
-            custom_type: s.custom_type,
-            mounted_face: s.mounted_face,
-            half_depth: s.half_depth,
-            color: s.color,
-            ip_address: s.ip_address,
-            slot_notes: s.slot_notes,
-            ...(s.hostname ? { device: { hostname: s.hostname, ip: s.ip, type: s.device_type } } : {}),
-          })),
-      })),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.download = 'racks-export.json';
-    a.href = url;
-    a.click();
-    URL.revokeObjectURL(url);
+  // ─── Export modal helpers ────────────────────────────────────────────────────
+  const openExportModal = (targetRacks) => {
+    if (!targetRacks || targetRacks.length === 0) return;
+    setExportModal({ targetRacks });
   };
 
-  const handleExportRack = (format) => {
-    if (racks.length > 1) {
-      if (format === 'json') exportAllRacksJson();
-      else exportAllRacks(format);
-    } else if (racks.length === 1) {
-      if (format === 'json') exportRackJson(racks[0].id);
-      else exportSingleRack(racks[0].id, format);
+  // ─── Rename ──────────────────────────────────────────────────────────────────
+  const handleRenameSubmit = async (rackId, name) => {
+    setRenamingRackId(null);
+    const rack = racks.find((r) => r.id === rackId);
+    if (!rack || !name || name === rack.name) return;
+    try {
+      await client.put(`/racks/${rackId}`, { ...rack, name });
+      loadRacks();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
     }
+  };
+
+  const handleRenameCancel = () => setRenamingRackId(null);
+
+  // ─── Rack right-click context menu ──────────────────────────────────────────
+  const handleRacksMainContextMenu = (e) => {
+    const enclosure = e.target.closest('[id^="rack-"]');
+    if (!enclosure) return;
+    e.preventDefault();
+    const rackId = parseInt(enclosure.id.replace('rack-', ''), 10);
+    if (!rackId) return;
+    setRackContextMenu({ rackId, x: e.clientX, y: e.clientY });
+  };
+
+  const ctxRack = rackContextMenu ? racks.find((r) => r.id === rackContextMenu.rackId) : null;
+
+  const handleCtxDelete = () => {
+    if (!ctxRack) return;
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`Delete "${ctxRack.name}" and all its slots? This cannot be undone.`)) return;
+    actions.onRackDelete(ctxRack.id);
   };
 
   const rightPanel = selectedSlot ? (
@@ -466,10 +326,8 @@ export default function RacksPage() {
       onSave={(edits) => actions.onRackSave(focusedRackId, edits)}
       onDuplicate={() => actions.onRackDuplicate(focusedRackId)}
       onDelete={() => actions.onRackDelete(focusedRackId)}
-      onExport={(format) => {
-        if (format === 'json') exportRackJson(focusedRackId);
-        else exportSingleRack(focusedRackId, format);
-      }}
+      onExport={() => openExportModal([focusedRack])}
+      onExportJson={() => exportRackJson(focusedRackId)}
     />
   ) : null;
 
@@ -482,29 +340,13 @@ export default function RacksPage() {
       <div className="racks-toolbar">
         <h2>Rack Builder</h2>
         <div className="racks-toolbar-actions">
-          <div className="rack-export-wrap" ref={exportMenuRef}>
-            <button
-              type="button"
-              disabled={exportingRack || racks.length === 0}
-              className={exportMenuOpen ? 'active' : ''}
-              onClick={() => setExportMenuOpen((v) => !v)}
-            >
-              <Download size={14} /> Export <ChevronDown size={11} />
-            </button>
-            {exportMenuOpen && (
-              <div className="rack-export-menu">
-                <button type="button" onClick={() => { setExportMenuOpen(false); handleExportRack('png'); }}>
-                  Export as Image (PNG)
-                </button>
-                <button type="button" onClick={() => { setExportMenuOpen(false); handleExportRack('pdf'); }}>
-                  Export as PDF
-                </button>
-                <button type="button" onClick={() => { setExportMenuOpen(false); handleExportRack('json'); }}>
-                  Export as JSON (config backup)
-                </button>
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            disabled={racks.length === 0}
+            onClick={() => openExportModal(racks)}
+          >
+            <Download size={14} /> Export…
+          </button>
           <button type="button" className={cableViewEnabled ? 'active' : ''} onClick={() => setCableViewEnabled((v) => !v)}>
             <Cable size={14} /> Show Cables
           </button>
@@ -517,7 +359,7 @@ export default function RacksPage() {
         </div>
       </div>
 
-      <div className="racks-main">
+      <div className="racks-main" ref={racksMainRef} onContextMenu={handleRacksMainContextMenu}>
         {catalogOpen && (
           <DeviceCatalog
             open={catalogOpen}
@@ -553,10 +395,42 @@ export default function RacksPage() {
           onSelectSlot={handleSelectSlot}
           onEditRack={() => setRackEditOpen((v) => !v)}
           rackEditOpen={rackEditOpen}
+          fitRackRequest={fitRackRequest}
+          renamingRackId={renamingRackId}
+          onRenameSubmit={handleRenameSubmit}
+          onRenameCancel={handleRenameCancel}
         />
 
         {rightPanel}
       </div>
+
+      {rackContextMenu && ctxRack && (
+        <RackContextMenu
+          x={rackContextMenu.x}
+          y={rackContextMenu.y}
+          onClose={() => setRackContextMenu(null)}
+          onExport={() => openExportModal([ctxRack])}
+          onFocus={() => {
+            setFocusedRackId(ctxRack.id);
+            setFitRackRequest({ id: ctxRack.id, t: Date.now() });
+          }}
+          onEditRack={() => {
+            setFocusedRackId(ctxRack.id);
+            setRackEditOpen(true);
+          }}
+          onRename={() => setRenamingRackId(ctxRack.id)}
+          onDuplicate={() => actions.onRackDuplicate(ctxRack.id)}
+          onDelete={handleCtxDelete}
+        />
+      )}
+
+      {exportModal && (
+        <ExportModal
+          targetRacks={exportModal.targetRacks}
+          allSlots={allSlots}
+          onClose={() => setExportModal(null)}
+        />
+      )}
 
       {contextMenu && (
         <RackDeviceContextMenu

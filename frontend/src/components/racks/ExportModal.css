@@ -1,0 +1,232 @@
+.em-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+}
+
+.em-modal {
+  width: 520px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  background: #12141a;
+  border: 1px solid #2a2e38;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65);
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  color: #d4d8e0;
+  overflow: hidden;
+}
+
+/* ─── Header ──────────────────────────────────────────────── */
+.em-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid #2a2e38;
+  flex-shrink: 0;
+}
+
+.em-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #e6e9f0;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.em-close {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: color 0.1s;
+}
+
+.em-close:hover { color: #e6e9f0; }
+
+/* ─── Body ────────────────────────────────────────────────── */
+.em-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* ─── Options ─────────────────────────────────────────────── */
+.em-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.em-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.em-label {
+  width: 68px;
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: #6b7280;
+}
+
+.em-select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  background: #0e0f13;
+  color: #e6e9f0;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.em-select:focus { outline: none; border-color: #4adede; }
+
+.em-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #c4cad6;
+  cursor: pointer;
+  user-select: none;
+  padding-left: 78px;
+}
+
+.em-checkbox-row input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: #4adede;
+  cursor: pointer;
+}
+
+/* ─── Preview area ────────────────────────────────────────── */
+.em-preview-area {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.em-preview-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: #6b7280;
+}
+
+.em-preview-box {
+  min-height: 120px;
+  max-height: 340px;
+  background: #0a0a0f;
+  border: 1px solid #2a2e38;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 6px;
+}
+
+.em-preview-img {
+  max-width: 100%;
+  max-height: 330px;
+  object-fit: contain;
+  border-radius: 2px;
+  display: block;
+}
+
+.em-preview-msg {
+  font-size: 0.72rem;
+  color: #4a5060;
+  font-style: italic;
+}
+
+.em-preview-err { color: #7a3a3a; }
+
+/* ─── CSV preview table ───────────────────────────────────── */
+.em-csv-preview {
+  background: #0a0a0f;
+  border: 1px solid #2a2e38;
+  border-radius: 6px;
+  overflow: auto;
+  max-height: 220px;
+  padding: 4px;
+}
+
+.em-csv-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.71rem;
+}
+
+.em-csv-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #1e2028;
+  white-space: nowrap;
+  color: #b4bac6;
+}
+
+.em-csv-header td {
+  color: #6b7280;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom-color: #2a2e38;
+}
+
+/* ─── Footer ──────────────────────────────────────────────── */
+.em-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid #2a2e38;
+  flex-shrink: 0;
+}
+
+.em-btn {
+  padding: 7px 16px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  background: transparent;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.em-btn:hover { border-color: #3a3f4a; color: #d4d8e0; }
+.em-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.em-btn:disabled:hover { border-color: #2a2e38; color: #8b91a1; }
+
+.em-btn-export {
+  border-color: #4adede;
+  color: #4adede;
+}
+
+.em-btn-export:hover { background: rgba(74, 222, 222, 0.1); border-color: #4adede; color: #4adede; }

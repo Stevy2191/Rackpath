@@ -171,6 +171,9 @@ export default function RackEnclosure({
   isFocused,
   uHeight,
   onSelectSlot,
+  isRenaming,
+  onRenameSubmit,
+  onRenameCancel,
 }) {
   const uRows = Array.from({ length: rack.u_height }, (_, i) => rack.u_height - i);
 
@@ -218,7 +221,21 @@ export default function RackEnclosure({
 
   return (
     <div className={`rack-enclosure${isFocused ? ' rack-enclosure-focused' : ''}${!showRear ? ' rack-enclosure-single' : ''}`} id={`rack-${rack.id}`}>
-      <div className="rack-name-label">{rack.name}</div>
+      {isRenaming ? (
+        <input
+          className="rack-name-input"
+          defaultValue={rack.name}
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { const v = e.target.value.trim(); onRenameSubmit(v || rack.name); }
+            if (e.key === 'Escape') onRenameCancel();
+          }}
+          onBlur={(e) => onRenameSubmit(e.target.value.trim() || rack.name)}
+          onContextMenu={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <div className="rack-name-label">{rack.name}</div>
+      )}
       <div className="rack-dual-frame" style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
         <RackPanel
           face="front"
