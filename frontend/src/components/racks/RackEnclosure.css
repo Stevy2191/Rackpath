@@ -126,8 +126,8 @@
 .rack-units {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-width: 180px;
+  flex: 0 0 220px;
+  width: 220px;
   border-top: 1px solid #060708;
   border-bottom: 1px solid #060708;
 }
