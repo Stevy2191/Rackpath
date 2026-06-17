@@ -252,6 +252,60 @@ router.delete('/history', async (req, res, next) => {
   }
 });
 
+// POST /api/scans/:id/rescan — restart an existing scan job in place.
+// Resets the row's status/results/timestamps and re-submits to the scanner,
+// avoiding duplicate history entries. Returns 409 if already pending/running.
+// Defined before /api/scans POST so the router doesn't confuse /:id with /.
+router.post('/:id/rescan', async (req, res, next) => {
+  try {
+    const jobId = req.params.id;
+    const [jobRows] = await pool.query(
+      'SELECT * FROM scan_jobs WHERE id = ? AND project_id = ?',
+      [jobId, req.projectId]
+    );
+    if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+
+    const job = jobRows[0];
+    if (job.status === 'pending' || job.status === 'running') {
+      return res.status(409).json({ error: 'Scan already running' });
+    }
+
+    await pool.query('DELETE FROM scan_results WHERE scan_job_id = ?', [jobId]);
+    await pool.query(
+      `UPDATE scan_jobs
+       SET status = 'pending', started_at = NOW(), completed_at = NULL,
+           progress_current = NULL, progress_total = NULL, results = NULL
+       WHERE id = ?`,
+      [jobId]
+    );
+
+    const opts = parseJsonField(job.options, null);
+
+    try {
+      await axios.post(`${SCANNER_URL}/scan`, {
+        job_id: jobId,
+        target_subnet: job.target_subnet,
+        snmp_community: job.snmp_community || process.env.SNMP_COMMUNITY || 'public',
+        options: opts || undefined,
+        callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/results`,
+        host_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/host`,
+        progress_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/progress`,
+      });
+      await pool.query("UPDATE scan_jobs SET status = 'running' WHERE id = ?", [jobId]);
+    } catch (scanErr) {
+      await pool.query(
+        "UPDATE scan_jobs SET status = 'failed', completed_at = NOW(), results = ? WHERE id = ?",
+        [JSON.stringify({ error: `Failed to reach scanner: ${scanErr.message}` }), jobId]
+      );
+    }
+
+    const [rows] = await pool.query('SELECT * FROM scan_jobs WHERE id = ?', [jobId]);
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/scans - start a new scan job for a subnet
 router.post('/', async (req, res, next) => {
   try {

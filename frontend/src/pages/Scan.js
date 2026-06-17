@@ -437,35 +437,26 @@ export default function ScanPage() {
     }
   };
 
-  // Immediately start a new scan for a history job using the same settings.
-  // Returns a Promise that resolves when the new scan completes so that
-  // handleRescanAll can await each one in sequence.
+  // Restart an existing scan job in place: the backend resets the same row and
+  // re-submits to the scanner, so no duplicate history entry is created.
+  // Returns a Promise that resolves when the scan completes so handleRescanAll
+  // can await each one sequentially.
   const handleRescan = async (job) => {
     if (rescanningIds.has(job.id)) return;
-
-    const opts =
-      job.options != null
-        ? job.options
-        : {
-            profile: job.scan_profile || 'standard',
-            target_type: job.target_type || 'subnet',
-            ...(PROFILE_PRESETS[job.scan_profile] || PROFILE_PRESETS.standard),
-          };
-
     setRescanningIds((prev) => new Set([...prev, job.id]));
 
     try {
-      const res = await client.post('/scans', {
-        target_subnet: job.target_subnet,
-        name: job.name,
-        snmp_community: job.snmp_community || undefined,
-        options: opts,
-      });
-      const newJobId = res.data.id;
+      await client.post(`/scans/${job.id}/rescan`);
       loadJobs();
 
+      // If this is the currently-displayed job, reconnect its stream so the
+      // results panel clears old rows and streams fresh results from the rescan.
+      if (activeJob?.id === job.id) {
+        connectStream(job.id);
+      }
+
       await new Promise((resolve) => {
-        const url = `${API_BASE}/scans/${newJobId}/stream`;
+        const url = `${API_BASE}/scans/${job.id}/stream`;
         const es = new EventSource(url, { withCredentials: true });
         rescanStreamsRef.current.set(job.id, es);
 
@@ -482,6 +473,8 @@ export default function ScanPage() {
         };
 
         es.addEventListener('scan_complete', finish);
+        // Only treat a hard close (not a transient reconnect) as completion so
+        // we don't resolve early when the SSE connection momentarily drops.
         es.onerror = () => {
           if (es.readyState === EventSource.CLOSED) finish();
         };
@@ -492,7 +485,10 @@ export default function ScanPage() {
         next.delete(job.id);
         return next;
       });
-      setError(err.response?.data?.error || err.message);
+      // 409 = already running; the UI already shows it as such — no user-visible error.
+      if (err.response?.status !== 409) {
+        setError(err.response?.data?.error || err.message);
+      }
     }
   };
 
@@ -500,7 +496,14 @@ export default function ScanPage() {
     if (rescanAllRunning || jobs.length === 0) return;
     setRescanAllRunning(true);
     try {
+      // Deduplicate by subnet+profile so that pre-existing duplicate history
+      // entries (from the old insert-on-rescan bug) don't trigger redundant
+      // parallel scans of the same subnet.
+      const seen = new Set();
       for (const job of jobs) {
+        const key = `${job.target_subnet}::${job.scan_profile || ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         // eslint-disable-next-line no-await-in-loop
         await handleRescan(job);
       }
