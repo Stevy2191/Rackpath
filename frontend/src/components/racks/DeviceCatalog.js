@@ -159,6 +159,15 @@ export default function DeviceCatalog({
     return CATALOG_VENDORS.filter((v) => byVendor.has(v)).map((vendor) => {
       const entries = byVendor.get(vendor);
       const color = VENDOR_COLORS[vendor] || '#555';
+
+      // Group this vendor's entries by category, preserving CATALOG_CATEGORIES order
+      const catMap = new Map();
+      for (const entry of entries) {
+        if (!catMap.has(entry.category)) catMap.set(entry.category, []);
+        catMap.get(entry.category).push(entry);
+      }
+      const categorized = CATALOG_CATEGORIES.filter((c) => catMap.has(c.id));
+
       return (
         <CollapsibleGroup
           key={vendor}
@@ -170,8 +179,13 @@ export default function DeviceCatalog({
             <span className="dc-group-brand-dot" style={{ background: color }} />
             <span className="dc-group-brand-name">{vendor}</span>
           </div>
-          {entries.map((entry) => (
-            <CatalogCard key={entry.id} entry={entry} onClick={() => addCatalogEntry(entry)} />
+          {categorized.map((cat) => (
+            <div key={cat.id} className="dc-brand-cat-group">
+              <div className="dc-brand-cat-header">{cat.label}</div>
+              {catMap.get(cat.id).map((entry) => (
+                <CatalogCard key={entry.id} entry={entry} onClick={() => addCatalogEntry(entry)} />
+              ))}
+            </div>
           ))}
         </CollapsibleGroup>
       );
