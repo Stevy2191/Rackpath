@@ -278,15 +278,6 @@
   margin: 0;
 }
 
-.props-capacity-row {
-  display: flex;
-  gap: 6px;
-}
-
-.props-capacity-unit {
-  flex: 0 0 60px;
-}
-
 /* ─── Outlet list ─────────────────────────────────────────── */
 .props-outlet-list {
   display: flex;
@@ -335,45 +326,45 @@
   color: #d4d8e0;
 }
 
-.props-outlet-draw {
+.props-outlet-remove {
   flex-shrink: 0;
-  font-size: 0.65rem;
-  color: #8b91a1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
 }
 
-/* ─── Load bar ────────────────────────────────────────────── */
-.props-load-bar-track {
-  height: 10px;
-  border-radius: 5px;
-  background: #1e2128;
-  overflow: hidden;
-}
-
-.props-load-bar-fill {
-  height: 100%;
-  background: #4adede;
-  transition: width 0.2s ease;
-}
-
-.props-load-bar-track.over-capacity .props-load-bar-fill {
-  background: #ef4444;
-}
-
-.props-load-bar-label {
-  font-size: 0.7rem;
-  color: #8b91a1;
-  margin-top: 4px;
-}
-
-.props-load-warning {
-  font-size: 0.7rem;
+.props-outlet-remove:hover {
+  background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
-  font-weight: 600;
-  margin-top: 2px;
 }
 
-.props-load-note {
-  font-size: 0.66rem;
-  color: #f59e0b;
-  margin-top: 2px;
+/* ─── Vertical PDU add form ───────────────────────────────── */
+.props-pdu-add-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.props-pdu-add-actions button {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  background: #0e0f13;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.props-pdu-add-actions button:hover {
+  border-color: #4adede;
+  color: #4adede;
 }

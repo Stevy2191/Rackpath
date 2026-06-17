@@ -1,8 +1,14 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
 import './RackEnclosure.css';
+
+// Vertical PDU floating-strip layout (must match the offsets VerticalPdu.js
+// renders with — kept in JS so the cord overlay can use the same numbers).
+const STRIP_WIDTH = 14;
+const STRIP_OFFSET_BASE = 18;
+const STRIP_STACK_GAP = 20;
 
 const ANNOTATION_LABELS = {
   name:         'Name',
@@ -323,6 +329,46 @@ export default function RackEnclosure({
   const verticalPdus = slots.filter((s) => s.item_type === 'vertical-pdu');
   const uSlots = slots.filter((s) => s.item_type !== 'vertical-pdu');
 
+  // Stack index per side: 1st PDU on a side sits closest to the frame,
+  // each later one on the same side floats further out.
+  const stackIndexById = new Map();
+  for (const side of ['left', 'right']) {
+    verticalPdus
+      .filter((p) => (p.mount_side === 'right' ? 'right' : 'left') === side)
+      .sort((a, b) => a.id - b.id)
+      .forEach((p, i) => stackIndexById.set(p.id, i));
+  }
+
+  // Measure the dual-frame's intrinsic (untransformed) size so the cord
+  // overlay's coordinates stay correct regardless of the canvas pan/zoom —
+  // offsetWidth/Height are unaffected by ancestor CSS transforms.
+  const frameRef = useRef(null);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    if (frameRef.current) {
+      setFrameSize({ width: frameRef.current.offsetWidth, height: frameRef.current.offsetHeight });
+    }
+  }, [rack.show_rear, rack.show_annotations, rack.annotation_field, rack.u_height, uHeight]);
+
+  function verticalCenterY(u_position, u_size) {
+    const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
+    return top + (u_size * uHeight) / 2;
+  }
+
+  // One cord per vertical PDU that's plugged into a UPS in this rack.
+  const cords = [];
+  for (const pdu of verticalPdus) {
+    const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
+    if (!ups) continue;
+    const side = pdu.mount_side === 'right' ? 'right' : 'left';
+    const offsetPx = STRIP_OFFSET_BASE + (stackIndexById.get(pdu.id) || 0) * STRIP_STACK_GAP;
+    const pduX = side === 'left' ? -offsetPx + STRIP_WIDTH / 2 : frameSize.width + offsetPx - STRIP_WIDTH / 2;
+    const pduY = verticalCenterY(pdu.u_position, pdu.u_size);
+    const upsX = side === 'left' ? 0 : frameSize.width;
+    const upsY = verticalCenterY(ups.u_position, ups.u_size);
+    cords.push({ key: pdu.id, x1: pduX, y1: pduY, x2: upsX, y2: upsY });
+  }
+
   const frontMap = buildUMap(uSlots, 'front');
   const rearMap  = buildUMap(uSlots, 'rear');
 
@@ -408,7 +454,7 @@ export default function RackEnclosure({
       ) : (
         <div className="rack-name-label">{rack.name}</div>
       )}
-      <div className="rack-dual-frame" style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
+      <div className="rack-dual-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
         <RackPanel
           face="front"
           showLeftRail
@@ -480,12 +526,21 @@ export default function RackEnclosure({
           </div>
         )}
 
+        {cords.length > 0 && (
+          <svg className="rack-power-cords" width={frameSize.width} height={frameSize.height}>
+            {cords.map((c) => (
+              <line key={c.key} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} className="rack-power-cord-line" />
+            ))}
+          </svg>
+        )}
+
         {verticalPdus.map((pdu) => (
           <VerticalPdu
             key={pdu.id}
             slot={pdu}
             rack={rack}
             uHeight={uHeight}
+            offsetPx={STRIP_OFFSET_BASE + (stackIndexById.get(pdu.id) || 0) * STRIP_STACK_GAP}
             isSelected={pdu.id === selectedSlotId}
             highlighted={pdu.id === highlightedSlotId}
             onSelect={onSelectSlot}

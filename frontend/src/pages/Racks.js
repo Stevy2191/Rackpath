@@ -8,7 +8,6 @@ import DeviceCatalog from '../components/racks/DeviceCatalog';
 import DevicePropertiesPanel from '../components/racks/DevicePropertiesPanel';
 import RackEditPanel from '../components/racks/RackEditPanel';
 import AddRackModal from '../components/racks/AddRackModal';
-import VerticalPduModal from '../components/racks/VerticalPduModal';
 import RackDeviceContextMenu from '../components/racks/RackDeviceContextMenu';
 import RackContextMenu from '../components/racks/RackContextMenu';
 import ExportModal from '../components/racks/ExportModal';
@@ -41,7 +40,6 @@ export default function RacksPage() {
   const [fitRackRequest, setFitRackRequest] = useState(null);   // { id, t }
   const [portEditorDevice, setPortEditorDevice] = useState(null);
   const [addRackOpen, setAddRackOpen] = useState(false);
-  const [verticalPduModalOpen, setVerticalPduModalOpen] = useState(false);
   const [cableViewEnabled, setCableViewEnabled] = useState(false);
   const [deleteConfirmSlot, setDeleteConfirmSlot] = useState(null);
   const [deleteConfirmRack, setDeleteConfirmRack] = useState(null);
@@ -162,11 +160,8 @@ export default function RacksPage() {
           vendor: slot.vendor,
           ip_address: slot.ip_address,
           slot_notes: slot.slot_notes,
-          power_draw_w: slot.power_draw_w,
           outlet_count: slot.outlet_count,
           outlet_type: slot.outlet_type,
-          power_capacity: slot.power_capacity,
-          power_capacity_unit: slot.power_capacity_unit,
           input_voltage: slot.input_voltage,
           power_source_slot_id: slot.power_source_slot_id,
           power_source_outlet: slot.power_source_outlet,
@@ -241,11 +236,8 @@ export default function RacksPage() {
             color: slot.color,
             ip_address: slot.ip_address,
             slot_notes: slot.slot_notes,
-            power_draw_w: slot.power_draw_w,
             outlet_count: slot.outlet_count,
             outlet_type: slot.outlet_type,
-            power_capacity: slot.power_capacity,
-            power_capacity_unit: slot.power_capacity_unit,
             input_voltage: slot.input_voltage,
             mount_side: slot.mount_side,
             // power_source_slot_id/outlet intentionally not copied — they'd
@@ -373,6 +365,8 @@ export default function RacksPage() {
       slot={selectedSlot}
       rackHeight={selectedSlotRack?.u_height || 42}
       rackSlots={allSlots.filter((s) => s.rack_id === selectedSlot.rack_id)}
+      rackCustomDevices={rackCustomDevices}
+      actions={actions}
       onClose={() => setSelectedSlotId(null)}
       onUpdated={handleSlotUpdatedFromPanel}
       onSelectSlot={handleSelectSlot}
@@ -386,7 +380,6 @@ export default function RacksPage() {
       onDelete={() => actions.onRackDelete(focusedRackId)}
       onExport={() => openExportModal([focusedRack])}
       onExportJson={() => exportRackJson(focusedRackId)}
-      onAddVerticalPdu={() => setVerticalPduModalOpen(true)}
     />
   ) : null;
 
@@ -535,18 +528,6 @@ export default function RacksPage() {
       )}
 
       {addRackOpen && <AddRackModal onClose={() => setAddRackOpen(false)} onCreate={handleAddRack} />}
-
-      {verticalPduModalOpen && focusedRack && (
-        <VerticalPduModal
-          rack={focusedRack}
-          rackCustomDevices={rackCustomDevices}
-          onClose={() => setVerticalPduModalOpen(false)}
-          onCreate={(payload) => {
-            actions.onSlotCreate(payload);
-            setVerticalPduModalOpen(false);
-          }}
-        />
-      )}
 
       {portEditorDevice && (
         <PortEditorModal device={portEditorDevice} devices={devices} onClose={() => setPortEditorDevice(null)} />

@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, ChevronUp, ChevronDown, Upload } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2 } from 'lucide-react';
 import client from '../../api/client';
-import { isPassiveItem, isPowerDevice, getOutletCount, getPowerLabel, buildOutletOptions, computeLoad } from '../../utils/power';
+import {
+  isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel,
+  buildOutletOptions, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet,
+} from '../../utils/power';
+import { pduCatalogEntries } from './rackCatalog';
 import './DevicePropertiesPanel.css';
 
 const FACE_OPTIONS = [
@@ -29,7 +33,7 @@ function outletValue(sourceSlotId, outlet) {
   return sourceSlotId ? `${sourceSlotId}:${outlet}` : WALL_DIRECT;
 }
 
-export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onClose, onUpdated, onSelectSlot }) {
+export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, rackCustomDevices, actions, onClose, onUpdated, onSelectSlot }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -40,6 +44,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
   const isVerticalPdu = slot?.item_type === 'vertical-pdu';
   const passive = slot ? isPassiveItem(slot) : false;
   const isPower = slot ? isPowerDevice(slot) : false;
+  const isUpsSlot = slot ? isUps(slot) : false;
 
   // Reset form when slot changes
   useEffect(() => {
@@ -56,11 +61,8 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
       serial_number: slot.serial_number || slot.device_serial_number   || '',
       slot_notes:    slot.slot_notes    || '',
       asset_tag:     slot.asset_tag     || '',
-      power_draw_w:        slot.power_draw_w        ?? '',
       outlet_count:        slot.outlet_count         ?? '',
       outlet_type:         slot.outlet_type          || '',
-      power_capacity:       slot.power_capacity       ?? '',
-      power_capacity_unit:  slot.power_capacity_unit  || 'W',
       input_voltage:        slot.input_voltage        || '',
       power_source_slot_id: slot.power_source_slot_id || null,
       power_source_outlet:  slot.power_source_outlet  || null,
@@ -405,19 +407,6 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
           <>
             <div className="props-section-divider">Power</div>
 
-            {/* Power Draw */}
-            <div className="props-field">
-              <label className="props-field-label">Power Draw (Watts)</label>
-              <input
-                className="props-input"
-                type="number"
-                min="0"
-                value={fields.power_draw_w}
-                onChange={(e) => setField('power_draw_w', e.target.value === '' ? null : Number(e.target.value))}
-                placeholder="Unknown"
-              />
-            </div>
-
             {isPower && (
               <>
                 {/* Outlet spec overrides */}
@@ -442,27 +431,6 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
                   />
                 </div>
                 <div className="props-field">
-                  <label className="props-field-label">Capacity</label>
-                  <div className="props-capacity-row">
-                    <input
-                      className="props-input"
-                      type="number"
-                      min="0"
-                      value={fields.power_capacity}
-                      onChange={(e) => setField('power_capacity', e.target.value === '' ? null : Number(e.target.value))}
-                      placeholder="e.g. 1500"
-                    />
-                    <select
-                      className="props-input props-capacity-unit"
-                      value={fields.power_capacity_unit}
-                      onChange={(e) => setField('power_capacity_unit', e.target.value)}
-                    >
-                      <option value="W">W</option>
-                      <option value="VA">VA</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="props-field">
                   <label className="props-field-label">Input Voltage</label>
                   <select
                     className="props-input"
@@ -478,9 +446,9 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
               </>
             )}
 
-            {/* Power Source / Upstream Power Source */}
+            {/* Plugged Into */}
             <div className="props-field">
-              <label className="props-field-label">{isPower ? 'Upstream Power Source' : 'Power Source'}</label>
+              <label className="props-field-label">Plugged Into</label>
               <select
                 className="props-input"
                 value={outletValue(fields.power_source_slot_id, fields.power_source_outlet)}
@@ -513,14 +481,26 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
 
         {isPower && (
           <>
-            <div className="props-section-divider">Outlets ({getOutletCount(slot)})</div>
+            <div className="props-section-divider">
+              Outlets — {countOccupiedOutlets(slot, rackSlots || [])} of {getOutletCount(slot)} in use
+            </div>
             {getOutletCount(slot) === 0 ? (
               <p className="props-empty-note">No outlets defined for this device.</p>
             ) : (
               <PowerOutletList slot={slot} rackSlots={rackSlots || []} onSelectSlot={onSelectSlot} />
             )}
-            <PowerLoadBar slot={slot} fields={fields} rackSlots={rackSlots || []} />
           </>
+        )}
+
+        {isUpsSlot && (
+          <VerticalPduSection
+            ups={slot}
+            rackSlots={rackSlots || []}
+            rackCustomDevices={rackCustomDevices || []}
+            rackHeight={rackHeight}
+            actions={actions}
+            onSelectSlot={onSelectSlot}
+          />
         )}
       </div>
     </div>
@@ -536,49 +516,144 @@ function PowerOutletList({ slot, rackSlots, onSelectSlot }) {
 
   return (
     <div className="props-outlet-list">
-      {outlets.map(({ n, occupant }) => {
-        const isSubSource = occupant && isPowerDevice(occupant) && getOutletCount(occupant) > 0;
-        const subLoad = isSubSource ? computeLoad(occupant, rackSlots) : null;
-        const unknownDraw = occupant && !isSubSource && (occupant.power_draw_w === null || occupant.power_draw_w === undefined);
-        return (
-          <div
-            key={n}
-            className={`props-outlet-row${occupant ? ' has-occupant' : ''}`}
-            onClick={() => occupant && onSelectSlot && onSelectSlot(occupant.id)}
-            title={occupant ? `Jump to ${getPowerLabel(occupant)}` : undefined}
-          >
-            <span className="props-outlet-num">{n}</span>
-            <span className="props-outlet-name">{occupant ? getPowerLabel(occupant) : 'Empty'}</span>
-            {occupant && (
-              <span className="props-outlet-draw">
-                {isSubSource ? `${subLoad.total}W` : unknownDraw ? 'unknown' : `${occupant.power_draw_w}W`}
-              </span>
-            )}
-          </div>
-        );
-      })}
+      {outlets.map(({ n, occupant }) => (
+        <div
+          key={n}
+          className={`props-outlet-row${occupant ? ' has-occupant' : ''}`}
+          onClick={() => occupant && onSelectSlot && onSelectSlot(occupant.id)}
+          title={occupant ? `Jump to ${getPowerLabel(occupant)}` : undefined}
+        >
+          <span className="props-outlet-num">{n}</span>
+          <span className="props-outlet-name">{occupant ? getPowerLabel(occupant) : 'Empty'}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
-function PowerLoadBar({ slot, fields, rackSlots }) {
-  const { total, hasUnknown } = computeLoad(slot, rackSlots);
-  const capacity = fields.power_capacity || null;
-  const unit = fields.power_capacity_unit || 'W';
-  const pct = capacity ? Math.min(100, (total / capacity) * 100) : 0;
-  const overCapacity = capacity && total > capacity;
+function VerticalPduSection({ ups, rackSlots, rackCustomDevices, rackHeight, actions, onSelectSlot }) {
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState(null);
+  const catalogEntries = pduCatalogEntries();
+  const customPdus = rackCustomDevices.filter((c) => c.type === 'pdu');
+  const [sourceKey, setSourceKey] = useState('');
+
+  const attached = verticalPdusForUps(rackSlots, ups.id);
+
+  const openAdd = () => {
+    setSourceKey(catalogEntries[0] ? `catalog:${catalogEntries[0].id}` : (customPdus[0] ? `custom:${customPdus[0].id}` : ''));
+    setError(null);
+    setAdding(true);
+  };
+
+  const handleAdd = () => {
+    if (!sourceKey) { setError('Choose a PDU model'); return; }
+    const outlet = firstFreeOutlet(ups, rackSlots);
+    if (!outlet) { setError('UPS has no free outlets'); return; }
+
+    const [kind, idRaw] = sourceKey.split(':');
+    let payload;
+    if (kind === 'catalog') {
+      const entry = catalogEntries.find((c) => c.id === idRaw);
+      if (!entry) return;
+      payload = {
+        item_label: entry.name,
+        vendor: entry.vendor,
+        catalog_id: entry.id,
+        custom_type: entry.renderType,
+        outlet_count: entry.outletCount,
+        outlet_type: entry.outletType,
+        input_voltage: entry.inputVoltage,
+      };
+    } else {
+      const custom = customPdus.find((c) => String(c.id) === idRaw);
+      if (!custom) return;
+      payload = {
+        item_label: custom.name,
+        vendor: custom.vendor,
+        custom_type: custom.type,
+        custom_image_url: custom.image_url,
+        outlet_count: custom.outlet_count,
+        outlet_type: custom.outlet_type,
+        input_voltage: custom.input_voltage,
+      };
+    }
+
+    // Alternate sides: 1st left, 2nd right, 3rd left (offset further out), etc.
+    const mount_side = attached.length % 2 === 0 ? 'left' : 'right';
+
+    actions.onSlotCreate({
+      rack_id: ups.rack_id,
+      item_type: 'vertical-pdu',
+      mount_side,
+      u_position: 1,
+      u_size: rackHeight,
+      power_source_slot_id: ups.id,
+      power_source_outlet: outlet,
+      ...payload,
+    });
+    setAdding(false);
+  };
+
+  const handleRemove = (pdu) => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`Remove vertical PDU "${pdu.item_label || 'PDU'}"?`)) return;
+    actions.onSlotDelete(pdu.id);
+  };
 
   return (
-    <div className="props-field">
-      <label className="props-field-label">Load</label>
-      <div className={`props-load-bar-track${overCapacity ? ' over-capacity' : ''}`}>
-        <div className="props-load-bar-fill" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="props-load-bar-label">
-        Load: {total} W {capacity ? `/ ${capacity} ${unit} capacity` : '(capacity not set)'}
-      </div>
-      {overCapacity && <div className="props-load-warning">Exceeds capacity!</div>}
-      {hasUnknown && <div className="props-load-note">Some connected devices have unknown power draw — total may be incomplete.</div>}
-    </div>
+    <>
+      <div className="props-section-divider">Vertical PDUs</div>
+      {attached.length === 0 && !adding && (
+        <p className="props-empty-note">No vertical PDUs attached.</p>
+      )}
+      {attached.length > 0 && (
+        <div className="props-outlet-list">
+          {attached.map((pdu) => (
+            <div key={pdu.id} className="props-outlet-row has-occupant" onClick={() => onSelectSlot && onSelectSlot(pdu.id)}>
+              <span className="props-outlet-name">{pdu.item_label || 'PDU'} ({pdu.mount_side || 'left'})</span>
+              <button
+                type="button"
+                className="props-outlet-remove"
+                title="Remove"
+                onClick={(e) => { e.stopPropagation(); handleRemove(pdu); }}
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adding ? (
+        <div className="props-field">
+          <select className="props-input" value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
+            {catalogEntries.length > 0 && (
+              <optgroup label="Catalog">
+                {catalogEntries.map((c) => (
+                  <option key={c.id} value={`catalog:${c.id}`}>{c.vendor} {c.name}</option>
+                ))}
+              </optgroup>
+            )}
+            {customPdus.length > 0 && (
+              <optgroup label="Custom">
+                {customPdus.map((c) => (
+                  <option key={c.id} value={`custom:${c.id}`}>{c.name}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          {error && <div className="props-panel-error">{error}</div>}
+          <div className="props-pdu-add-actions">
+            <button type="button" onClick={() => setAdding(false)}>Cancel</button>
+            <button type="button" className="props-upload-btn" onClick={handleAdd}>Add</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="props-upload-btn" onClick={openAdd} disabled={catalogEntries.length === 0 && customPdus.length === 0}>
+          <Plus size={12} /> Add Vertical PDU
+        </button>
+      )}
+    </>
   );
 }

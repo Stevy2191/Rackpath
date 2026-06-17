@@ -2,15 +2,20 @@ import { resolveRenderType } from '../components/racks/deviceRenderConfig';
 
 const PASSIVE_RENDER_TYPES = new Set(['blank', 'patch-panel', 'cable-manager']);
 
-// Devices with no power cord — nothing to draw, plug in, or power from.
+// Devices with no power cord — nothing to plug in or be plugged into.
 export function isPassiveItem(slot) {
   return PASSIVE_RENDER_TYPES.has(resolveRenderType(slot));
 }
 
-// PDU/UPS: provides outlets and can be a power source for other devices.
+// PDU/UPS: provides outlets that other devices can be plugged into.
 export function isPowerDevice(slot) {
   const type = resolveRenderType(slot);
   return type === 'ups' || type === 'pdu';
+}
+
+// UPS specifically — the only device type that can host vertical PDUs.
+export function isUps(slot) {
+  return resolveRenderType(slot) === 'ups';
 }
 
 export function getOutletCount(slot) {
@@ -36,7 +41,7 @@ export function listPowerSources(rackSlots, excludeSlotId) {
     }));
 }
 
-// Flat <option>-ready list for the Power Source / Upstream Power Source dropdown.
+// Flat <option>-ready list for the "Plugged Into" dropdown.
 export function buildOutletOptions(rackSlots, excludeSlotId, currentSlotId) {
   const options = [];
   for (const { slot, outlets } of listPowerSources(rackSlots, excludeSlotId)) {
@@ -53,27 +58,26 @@ export function buildOutletOptions(rackSlots, excludeSlotId, currentSlotId) {
   return options;
 }
 
-// Total connected load (W) on a PDU/UPS, recursively following any
-// downstream PDU/UPS chained into one of its outlets. hasUnknown is true if
-// any connected device (at any depth) has no power_draw_w set.
-export function computeLoad(sourceSlot, rackSlots) {
-  function recurse(slot, visited) {
-    if (visited.has(slot.id)) return { total: 0, hasUnknown: false };
-    visited.add(slot.id);
-    let total = 0;
-    let hasUnknown = false;
-    for (const child of rackSlots.filter((s) => s.power_source_slot_id === slot.id)) {
-      if (isPowerDevice(child) && getOutletCount(child) > 0) {
-        const sub = recurse(child, visited);
-        total += sub.total;
-        if (sub.hasUnknown) hasUnknown = true;
-      } else if (child.power_draw_w != null && child.power_draw_w !== '') {
-        total += Number(child.power_draw_w);
-      } else {
-        hasUnknown = true;
-      }
-    }
-    return { total, hasUnknown };
+// How many of a PDU/UPS's outlets currently have something plugged in.
+export function countOccupiedOutlets(slot, rackSlots) {
+  let count = 0;
+  for (let n = 1; n <= getOutletCount(slot); n++) {
+    if (rackSlots.some((s) => s.power_source_slot_id === slot.id && s.power_source_outlet === n)) count++;
   }
-  return recurse(sourceSlot, new Set());
+  return count;
+}
+
+// Vertical PDUs floating alongside the rack frame that belong to this UPS
+// (i.e. plugged into one of its outlets).
+export function verticalPdusForUps(rackSlots, upsSlotId) {
+  return rackSlots.filter((s) => s.item_type === 'vertical-pdu' && s.power_source_slot_id === upsSlotId);
+}
+
+// First free outlet number on a power source, or null if it's full.
+export function firstFreeOutlet(sourceSlot, rackSlots) {
+  for (let n = 1; n <= getOutletCount(sourceSlot); n++) {
+    const taken = rackSlots.some((s) => s.power_source_slot_id === sourceSlot.id && s.power_source_outlet === n);
+    if (!taken) return n;
+  }
+  return null;
 }

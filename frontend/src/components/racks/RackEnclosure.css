@@ -314,9 +314,6 @@
   z-index: 2;
 }
 
-.rack-vertical-pdu-left  { left: -18px; }
-.rack-vertical-pdu-right { right: -18px; }
-
 .rack-vertical-pdu:hover {
   border-color: #d97706;
 }
@@ -361,6 +358,23 @@
   color: #d97706;
   pointer-events: none;
   text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+
+/* ─── Power cord (vertical PDU → its UPS) ────────────────── */
+.rack-power-cords {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.rack-power-cord-line {
+  stroke: #f59e0b;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  fill: none;
 }
 
 /* ─── Export capture: front-only view ────────────────────── */

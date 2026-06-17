@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Copy, Download, Trash2, Zap } from 'lucide-react';
+import { X, Copy, Download, Trash2 } from 'lucide-react';
 import './RackEditPanel.css';
 
 const RACK_TYPES = [
@@ -29,7 +29,7 @@ const ANNOTATION_FIELDS = [
   { value: 'manufacturer', label: 'Manufacturer' },
 ];
 
-export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson, onAddVerticalPdu }) {
+export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
   const [edits, setEdits] = useState({
     name:             rack.name,
     location:         rack.location         || '',
@@ -197,11 +197,6 @@ export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDe
         </form>
 
         <div className="rep-actions">
-          {onAddVerticalPdu && (
-            <button type="button" className="rep-action-btn" onClick={onAddVerticalPdu}>
-              <Zap size={13} /> Add Vertical PDU
-            </button>
-          )}
           <button type="button" className="rep-action-btn" onClick={onDuplicate}>
             <Copy size={13} /> Duplicate Rack
           </button>
