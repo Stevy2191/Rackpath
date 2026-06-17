@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, Trash2, ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
 import {
   RACK_CATALOG, CATALOG_CATEGORIES, CATALOG_VENDORS,
-  VENDOR_COLORS, groupByVendor, groupByCategory,
+  VENDOR_COLORS, groupByVendor, groupByCategory, findCatalogEntryByModel,
 } from './rackCatalog';
 import { getCategoryStyle } from './deviceRenderConfig';
 import CustomDeviceModal from './CustomDeviceModal';
@@ -142,15 +142,20 @@ export default function DeviceCatalog({
 
   const addUnrackedDevice = (device) => {
     if (!focusedRack) return;
-    const u_position = findNextFreeU(focusedRack, allSlots, 1, 'front');
+    const catalogMatch = findCatalogEntryByModel(device.model);
+    const uSize = catalogMatch ? catalogMatch.uSize : 1;
+    const mountedFace = catalogMatch ? catalogMatch.mountedFace : 'front';
+    const u_position = findNextFreeU(focusedRack, allSlots, uSize, mountedFace);
     if (u_position == null) return;
     actions.onSlotCreate({
       rack_id: focusedRack.id,
       device_id: device.id,
       item_type: 'device',
       u_position,
-      u_size: 1,
-      mounted_face: 'front',
+      u_size: uSize,
+      mounted_face: mountedFace,
+      half_depth: catalogMatch?.halfDepth ? 1 : 0,
+      half_width: catalogMatch?.halfWidth ? 1 : 0,
     });
   };
 
@@ -312,13 +317,26 @@ export default function DeviceCatalog({
                   {unrackedDevices.map((device) => {
                     const { color, Icon } = getCategoryStyle({ device_type: device.type, item_type: 'device' });
                     const iconBoxStyle = { borderColor: `${color}55`, background: `${color}18` };
+                    const catalogMatch = findCatalogEntryByModel(device.model);
+                    const uSize = catalogMatch ? catalogMatch.uSize : 1;
                     return (
                       <div
                         key={device.id}
                         className="dc-card"
                         draggable
-                        onDragStart={(e) => e.dataTransfer.setData('text/device-id', String(device.id))}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/device-id', String(device.id));
+                          if (catalogMatch) {
+                            e.dataTransfer.setData('text/device-catalog', JSON.stringify({
+                              uSize: catalogMatch.uSize,
+                              mountedFace: catalogMatch.mountedFace,
+                              halfDepth: catalogMatch.halfDepth,
+                              halfWidth: catalogMatch.halfWidth,
+                            }));
+                          }
+                        }}
                         onClick={() => addUnrackedDevice(device)}
+                        title={`${device.hostname || device.ip || `Device ${device.id}`}${catalogMatch ? ` · ${uSize}U${catalogMatch.mountedFace === 'rear' ? ' · Rear' : ''}` : ''}`}
                       >
                         <GripVertical size={12} className="dc-card-grip" />
                         <div className="dc-card-icon-box" style={iconBoxStyle}>
@@ -326,7 +344,9 @@ export default function DeviceCatalog({
                         </div>
                         <span className="dc-card-name">{device.hostname || device.ip || `Device ${device.id}`}</span>
                         <div className="dc-card-badges">
-                          <span className="dc-card-badge">1U</span>
+                          <span className="dc-card-badge">{uSize}U</span>
+                          {catalogMatch?.mountedFace === 'rear' && <span className="dc-card-badge dc-card-badge-rear">Rear</span>}
+                          {catalogMatch?.halfDepth && <span className="dc-card-badge dc-card-badge-accent">½D</span>}
                         </div>
                       </div>
                     );

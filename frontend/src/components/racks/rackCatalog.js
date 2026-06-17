@@ -349,3 +349,17 @@ export function groupByCategory(entries) {
   }
   return map;
 }
+
+// Find a catalog entry whose name matches a device's model field.
+// Tries exact case-insensitive match, then "Vendor Name" combined form,
+// then suffix match so "Eaton 9PX2000RT" → "9PX2000RT" still resolves.
+export function findCatalogEntryByModel(model) {
+  if (!model) return null;
+  const needle = model.trim().toLowerCase();
+  return (
+    RACK_CATALOG.find((e) => e.name.toLowerCase() === needle) ||
+    RACK_CATALOG.find((e) => `${e.vendor} ${e.name}`.toLowerCase() === needle) ||
+    RACK_CATALOG.find((e) => needle.endsWith(e.name.toLowerCase())) ||
+    null
+  );
+}

@@ -220,13 +220,20 @@ export default function RackCanvas({
     }
 
     if (deviceId) {
+      const catalogRaw = e.dataTransfer.getData('text/device-catalog');
+      const catalogMeta = catalogRaw ? JSON.parse(catalogRaw) : null;
+      const u_size = catalogMeta?.uSize || 1;
+      const mounted_face = catalogMeta?.mountedFace || face;
+      const u_position = Math.max(1, uPosition - u_size + 1);
       actions.onSlotCreate({
         rack_id: rackId,
         device_id: Number(deviceId),
         item_type: 'device',
-        u_position: uPosition,
-        u_size: 1,
-        mounted_face: face,
+        u_position,
+        u_size,
+        mounted_face,
+        half_depth: catalogMeta?.halfDepth ? 1 : 0,
+        half_width: catalogMeta?.halfWidth ? 1 : 0,
       });
       return;
     }
