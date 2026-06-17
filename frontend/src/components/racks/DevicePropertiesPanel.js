@@ -32,10 +32,11 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
       u_position:    slot.u_position    || 1,
       color:         slot.color         || null,
       mounted_face:  slot.mounted_face  || 'front',
-      ip_address:    slot.ip_address    || '',
+      // Pre-fill from linked inventory device when the slot doesn't have its own value
+      ip_address:    slot.ip_address    || slot.ip                     || '',
+      serial_number: slot.serial_number || slot.device_serial_number   || '',
       slot_notes:    slot.slot_notes    || '',
       asset_tag:     slot.asset_tag     || '',
-      serial_number: slot.serial_number || '',
     });
     setError(null);
   }, [slot]);
@@ -316,6 +317,14 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
             placeholder="e.g. 192.168.1.1"
           />
         </div>
+
+        {/* MAC Address — read-only from linked inventory device */}
+        {slot.device_mac && (
+          <div className="props-field">
+            <label className="props-field-label">MAC Address</label>
+            <div className="props-readonly">{slot.device_mac}</div>
+          </div>
+        )}
 
         {/* Asset Tag */}
         <div className="props-field">

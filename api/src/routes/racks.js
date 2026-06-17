@@ -39,7 +39,8 @@ router.get('/:id', async (req, res, next) => {
     if (racks.length === 0) return res.status(404).json({ error: 'Rack not found' });
 
     const [slots] = await pool.query(
-      `SELECT rs.*, d.hostname, d.ip, d.type AS device_type
+      `SELECT rs.*, d.hostname, d.ip, d.mac AS device_mac,
+              d.serial_number AS device_serial_number, d.type AS device_type
        FROM rack_slots rs
        LEFT JOIN devices d ON d.id = rs.device_id
        WHERE rs.rack_id = ?

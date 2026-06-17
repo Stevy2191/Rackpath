@@ -335,7 +335,17 @@ export default function RacksPage() {
 
   const handleCtxToggleAnnotations = () => {
     if (!ctxRack) return;
-    actions.onRackSave(ctxRack.id, { ...ctxRack, show_annotations: ctxRack.show_annotations ? 0 : 1 });
+    const turningOn = !ctxRack.show_annotations;
+    // Auto-select "Name" as the annotation field when enabling for the first time
+    const annotationField =
+      turningOn && (!ctxRack.annotation_field || ctxRack.annotation_field === 'none')
+        ? 'name'
+        : ctxRack.annotation_field;
+    actions.onRackSave(ctxRack.id, {
+      ...ctxRack,
+      show_annotations: turningOn ? 1 : 0,
+      annotation_field: annotationField,
+    });
   };
 
   const rightPanel = selectedSlot ? (
@@ -450,7 +460,6 @@ export default function RacksPage() {
           onDelete={handleCtxDelete}
           onToggleAnnotations={handleCtxToggleAnnotations}
           showAnnotations={Boolean(ctxRack.show_annotations)}
-          annotationFieldSet={Boolean(ctxRack.annotation_field && ctxRack.annotation_field !== 'none')}
         />
       )}
 
