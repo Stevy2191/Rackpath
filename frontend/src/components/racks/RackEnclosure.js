@@ -89,7 +89,7 @@ function RackPanel({
         {showLeftRail && (
           <div className="rack-rail rack-rail-left">
             {uRows.map((u) => (
-              <div key={u} className="rack-rail-number">{u}</div>
+              <div key={u} className={`rack-rail-number${u % 5 === 0 ? ' rack-rail-5th' : ''}`}>{u}</div>
             ))}
           </div>
         )}
@@ -137,6 +137,7 @@ function RackPanel({
                 key={`unit-${u}`}
                 u={u}
                 band={band}
+                is5th={u % 5 === 0}
                 draggingMeta={draggingMeta}
                 occupiedByU={occupiedByU}
                 onDrop={(uPos, e) => onDrop(rack.id, uPos, face, e)}
@@ -147,7 +148,7 @@ function RackPanel({
         {showRightRail && (
           <div className="rack-rail rack-rail-right">
             {uRows.map((u) => (
-              <div key={u} className="rack-rail-number">{u}</div>
+              <div key={u} className={`rack-rail-number${u % 5 === 0 ? ' rack-rail-5th' : ''}`}>{u}</div>
             ))}
           </div>
         )}
@@ -215,6 +216,7 @@ export default function RackEnclosure({
 
   return (
     <div className={`rack-enclosure${isFocused ? ' rack-enclosure-focused' : ''}`} id={`rack-${rack.id}`}>
+      <div className="rack-name-label">{rack.name}</div>
       <div className="rack-dual-frame" style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
         <RackPanel
           face="front"
