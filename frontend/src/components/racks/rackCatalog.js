@@ -246,8 +246,10 @@ export const RACK_CATALOG = [
   e('ea-5px-2200-2u',  '5PX 2200VA',         'Eaton', 'POWER', 2, 'ups'),
   e('ea-5px-3000-2u',  '5PX 3000VA',         'Eaton', 'POWER', 2, 'ups'),
   e('ea-9px-2000rt-2u', '9PX2000RT',          'Eaton', 'POWER', 2, 'ups', { mountedFace: 'rear' }),
-  e('ea-9px-5000-3u',  '9PX 5000VA',         'Eaton', 'POWER', 3, 'ups'),
-  e('ea-9px-8000-4u',  '9PX 8000VA',         'Eaton', 'POWER', 4, 'ups'),
+  e('ea-9px-5ktf5g2-6u',    '9PX5KTF5G2',        'Eaton', 'POWER', 6, 'ups'),
+  e('ea-9pxebm180rtg2-3u', '9PXEBM180RTG2',     'Eaton', 'POWER', 3, 'ups'),
+  e('ea-9px-5000-3u',      '9PX 5000VA',         'Eaton', 'POWER', 3, 'ups'),
+  e('ea-9px-8000-4u',      '9PX 8000VA',         'Eaton', 'POWER', 4, 'ups'),
   e('ea-epdu-1u',      'ePDU G3 Metered 1U', 'Eaton', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
 
   // ─── MIKROTIK ────────────────────────────────────────────────────────────────
