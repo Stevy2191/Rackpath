@@ -217,7 +217,7 @@ export default function RackEnclosure({
   const showRear = rack.show_rear !== undefined ? Boolean(rack.show_rear) : true;
 
   return (
-    <div className={`rack-enclosure${isFocused ? ' rack-enclosure-focused' : ''}`} id={`rack-${rack.id}`}>
+    <div className={`rack-enclosure${isFocused ? ' rack-enclosure-focused' : ''}${!showRear ? ' rack-enclosure-single' : ''}`} id={`rack-${rack.id}`}>
       <div className="rack-name-label">{rack.name}</div>
       <div className="rack-dual-frame" style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
         <RackPanel

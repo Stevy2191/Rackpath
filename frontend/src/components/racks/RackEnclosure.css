@@ -4,6 +4,8 @@
   flex-direction: column;
   flex-shrink: 0;
   width: auto;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* ─── Rack name label (above the frame, moves with canvas) ── */
@@ -68,14 +70,13 @@
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.15em;
-  color: #3a414f;
+  color: #8a96aa;
   padding: 2px 0;
 }
 
 .rack-top-blank,
 .rack-bottom-blank {
   height: 12px;
-  border-radius: 2px;
   background: linear-gradient(180deg, #3a3f48 0%, #20232a 100%);
   border: 1px solid #060708;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
@@ -87,6 +88,19 @@
 }
 
 .rack-top-blank { margin-bottom: 4px; }
+
+/* Per-column border-radius: round only the outer edge of each panel's bars */
+.rack-panel-frame-front .rack-top-blank    { border-radius: 4px 0 0 4px; border-right: none; }
+.rack-panel-frame-front .rack-bottom-blank { border-radius: 4px 0 0 4px; border-right: none; }
+.rack-panel-frame-rear  .rack-top-blank    { border-radius: 0 4px 4px 0; border-left: none; }
+.rack-panel-frame-rear  .rack-bottom-blank { border-radius: 0 4px 4px 0; border-left: none; }
+
+/* Single-column mode: front panel gets full border-radius on both sides */
+.rack-enclosure-single .rack-panel-frame-front .rack-top-blank,
+.rack-enclosure-single .rack-panel-frame-front .rack-bottom-blank {
+  border-radius: 4px;
+  border-right: 1px solid #060708;
+}
 
 .rack-body {
   display: flex;
@@ -130,6 +144,12 @@
   width: 220px;
   border-top: 1px solid #060708;
   border-bottom: 1px solid #060708;
+}
+
+/* Wider units column in single-column (rear-hidden) mode */
+.rack-enclosure-single .rack-units {
+  flex: 0 0 308px;
+  width: 308px;
 }
 
 /* ─── Empty U slot ───────────────────────────────────────── */
