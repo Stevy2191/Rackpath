@@ -42,8 +42,8 @@ function mountedFaceToLegacy(mounted_face) {
   return { side: 'front', front_back: 'front' };
 }
 
-async function findCollision(rackId, projectId, uPosition, uSize, side, excludeId) {
-  let query = 'SELECT id, u_position, u_size, side FROM rack_slots WHERE rack_id = ? AND project_id = ?';
+async function findCollision(rackId, projectId, uPosition, uSize, side, excludeId, halfWidth, halfPosition) {
+  let query = 'SELECT id, u_position, u_size, side, half_width, half_position FROM rack_slots WHERE rack_id = ? AND project_id = ?';
   const params = [rackId, projectId];
   if (excludeId) {
     query += ' AND id != ?';
@@ -57,7 +57,13 @@ async function findCollision(rackId, projectId, uPosition, uSize, side, excludeI
     const overlaps = uPosition <= rowTop && top >= row.u_position;
     if (!overlaps) continue;
     const sidesCollide = side === 'both' || row.side === 'both' || side === row.side;
-    if (sidesCollide) return row;
+    if (!sidesCollide) continue;
+    // Two half-width devices can share the same U rows when on opposite halves.
+    if (halfWidth && row.half_width) {
+      const rowHalf = row.half_position || 'left';
+      if (rowHalf !== (halfPosition || 'left')) continue;
+    }
+    return row;
   }
   return null;
 }
@@ -97,7 +103,7 @@ router.post('/', async (req, res, next) => {
   try {
     const {
       rack_id, device_id, u_position, item_type, item_label, side,
-      custom_type, color, front_back, mounted_face, half_depth, half_width,
+      custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
     } = req.body;
     const u_size = req.body.u_size || 1;
@@ -123,8 +129,9 @@ router.post('/', async (req, res, next) => {
     const legacy = mountedFaceToLegacy(resolvedFace);
     const resolvedSide = (side && SIDES.includes(side)) ? side : legacy.side;
     const resolvedFrontBack = (front_back && FRONT_BACK.includes(front_back)) ? front_back : legacy.front_back;
+    const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
-    const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, null);
+    const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, null, half_width, resolvedHalfPos);
     if (collision) {
       return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
     }
@@ -133,14 +140,14 @@ router.post('/', async (req, res, next) => {
       `INSERT INTO rack_slots
          (project_id, rack_id, device_id, item_type, item_label, custom_type, color,
           u_position, position_offset, u_size, side, front_back, mounted_face,
-          half_depth, half_width, catalog_id, custom_image_url, vendor, ip_address, slot_notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
         u_position, position_offset || 0, u_size,
         resolvedSide, resolvedFrontBack, resolvedFace,
-        half_depth ? 1 : 0, half_width ? 1 : 0,
+        half_depth ? 1 : 0, half_width ? 1 : 0, resolvedHalfPos,
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
       ]
@@ -169,7 +176,7 @@ router.put('/:id', async (req, res, next) => {
   try {
     const {
       rack_id, device_id, item_type, item_label, side,
-      custom_type, color, front_back, mounted_face, half_depth, half_width,
+      custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
     } = req.body;
     let u_position = req.body.u_position;
@@ -196,8 +203,9 @@ router.put('/:id', async (req, res, next) => {
     const legacy = mountedFaceToLegacy(resolvedFace);
     const resolvedSide = (side && SIDES.includes(side)) ? side : legacy.side;
     const resolvedFrontBack = (front_back && FRONT_BACK.includes(front_back)) ? front_back : legacy.front_back;
+    const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
-    const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id);
+    const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id, half_width, resolvedHalfPos);
     if (collision) {
       return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
     }
@@ -206,7 +214,7 @@ router.put('/:id', async (req, res, next) => {
       `UPDATE rack_slots
        SET rack_id=?, device_id=?, item_type=?, item_label=?, custom_type=?, color=?,
            u_position=?, position_offset=?, u_size=?, side=?, front_back=?, mounted_face=?,
-           half_depth=?, half_width=?, catalog_id=?, custom_image_url=?, vendor=?,
+           half_depth=?, half_width=?, half_position=?, catalog_id=?, custom_image_url=?, vendor=?,
            ip_address=?, slot_notes=?
        WHERE id=? AND project_id=?`,
       [
@@ -214,7 +222,7 @@ router.put('/:id', async (req, res, next) => {
         item_type || 'device', item_label || null, custom_type || null, color || null,
         u_position, position_offset || 0, u_size,
         resolvedSide, resolvedFrontBack, resolvedFace,
-        half_depth ? 1 : 0, half_width ? 1 : 0,
+        half_depth ? 1 : 0, half_width ? 1 : 0, resolvedHalfPos,
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
         req.params.id, req.projectId,
@@ -237,7 +245,7 @@ router.put('/:id', async (req, res, next) => {
 router.patch('/:id', async (req, res, next) => {
   try {
     const allowed = [
-      'item_label', 'color', 'mounted_face', 'half_depth', 'half_width',
+      'item_label', 'color', 'mounted_face', 'half_depth', 'half_width', 'half_position',
       'u_size', 'u_position', 'position_offset', 'ip_address', 'slot_notes',
       'front_image_url', 'rear_image_url',
     ];
