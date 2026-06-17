@@ -1,12 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toPng, toJpeg, toSvg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { CATEGORY_CONFIG, resolveRenderType } from './deviceRenderConfig';
 import './ExportModal.css';
 
 const EXPORT_SCALE = Math.max(window.devicePixelRatio || 1, 3);
 const PREVIEW_SCALE = 1;
 const PDF_DPI = 150;
 const PREVIEW_DEBOUNCE = 350;
+
+// Human-readable names for each device type key
+const TYPE_LABELS = {
+  switch:          'Switch',
+  firewall:        'Firewall / Router',
+  server:          'Server',
+  storage:         'Storage / NAS',
+  ups:             'UPS',
+  pdu:             'PDU',
+  'patch-panel':   'Patch Panel',
+  'cable-manager': 'Cable Mgr',
+  blank:           'Blank Panel',
+  kvm:             'KVM',
+  ap:              'Access Point',
+  other:           'Device',
+};
+
+// ─── Canvas helpers ───────────────────────────────────────────────────────────
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -15,6 +34,20 @@ function loadImage(src) {
     img.onerror = reject;
     img.src = src;
   });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 async function withClasses(el, classes, fn) {
@@ -55,11 +88,11 @@ function makePdf(dataUrl, physW, physH, filename) {
   pdf.save(filename);
 }
 
-// Capture a single rack in the requested view/theme. Returns { dataUrl, cssW, cssH }.
+// ─── Capture a single rack in the requested view/theme ────────────────────────
+// Returns { dataUrl, cssW, cssH }
 async function captureSingle(rackId, { format, view, theme, scale }) {
   const enclosure = document.getElementById(`rack-${rackId}`);
   if (!enclosure) return null;
-
   const frame = enclosure.querySelector('.rack-dual-frame');
   if (!frame) return null;
 
@@ -68,7 +101,6 @@ async function captureSingle(rackId, { format, view, theme, scale }) {
   const bg = bgFor(theme);
 
   if (view === 'stacked') {
-    // Capture front-only then rear-only, composite vertically
     const frontResult = await withClasses(enclosure, ['rack-capture-front-only', ...themeClass], async () => {
       const w = frame.offsetWidth;
       const h = frame.offsetHeight;
@@ -114,7 +146,8 @@ async function captureSingle(rackId, { format, view, theme, scale }) {
   });
 }
 
-// Composite multiple rack captures side-by-side. Returns { dataUrl, cssW, cssH }.
+// ─── Composite multiple rack captures side-by-side ────────────────────────────
+// Returns { dataUrl, cssW, cssH }
 async function compositeRacks(captures, { theme, scale, format }) {
   const valid = captures.filter(Boolean);
   if (valid.length === 0) return null;
@@ -146,72 +179,123 @@ async function compositeRacks(captures, { theme, scale, format }) {
   return { dataUrl: canvas.toDataURL(mime, 0.95), cssW: totalCssW, cssH: totalCssH };
 }
 
-// Composite a legend strip below the image.
+// ─── Composite a legend panel to the top-right of the rack image ──────────────
+// Returns { dataUrl, cssW, cssH } with updated (expanded) dimensions.
 async function compositeWithLegend(dataUrl, cssW, cssH, slots, { theme, scale }) {
-  const items = [];
-  const seen = new Set();
+  // Build unique device-type entries (skip blanks, one per type)
+  const seen = new Map();
   for (const s of slots) {
-    const color = s.color || '#4a90d9';
-    const label = s.item_label || s.hostname || s.custom_type || s.item_type || 'Device';
-    const key = color + '|' + label;
-    if (!seen.has(key)) { seen.add(key); items.push({ color, label }); }
+    if (s.item_type === 'blank') continue;
+    const type = resolveRenderType(s);
+    if (!seen.has(type)) {
+      const color = CATEGORY_CONFIG[type] || CATEGORY_CONFIG.other;
+      const label = TYPE_LABELS[type] || 'Device';
+      seen.set(type, { color, label, uSize: s.u_size });
+    }
   }
-  if (items.length === 0) return dataUrl;
 
-  const sw = 12;                       // swatch side (CSS px)
-  const fontSize = 11;
-  const rowH = sw + 4;                 // per legend row height (CSS px)
-  const hPad = 16;
-  const vPad = 10;
-  const colW = 160;
-  const cols = Math.max(1, Math.floor(cssW / colW));
-  const rows = Math.ceil(items.length / cols);
-  const legendCssH = rows * rowH + vPad * 2 + hPad;
+  const items = [...seen.values()];
+  if (items.length === 0) return { dataUrl, cssW, cssH };
 
-  const physW = cssW * scale;
-  const physH = cssH * scale;
-  const physLegH = legendCssH * scale;
+  // Legend panel dimensions (CSS px)
+  const LEG_W    = 168;  // legend panel width
+  const LEG_GAP  = 20;   // gap between rack image and legend panel
+  const SWATCH   = 11;   // colored swatch size
+  const ROW_H    = 20;   // height per entry row
+  const HEADER_H = 22;   // "LEGEND" header row
+  const LEG_PADV = 10;   // top/bottom padding inside panel
+  const LEG_PADH = 12;   // left/right padding inside panel
+  const FONT_SZ  = 10;
+
+  const legContentH = LEG_PADV * 2 + HEADER_H + items.length * ROW_H;
+  const TOP_OFFSET  = 20;  // drop legend 20px from top so it doesn't crowd the rack name
+
+  const totalCssW = cssW + LEG_GAP + LEG_W;
+  const totalCssH = Math.max(cssH, TOP_OFFSET + legContentH + 24);
+
+  const physW = totalCssW * scale;
+  const physH = totalCssH * scale;
+  const s = scale; // shorthand
 
   const canvas = document.createElement('canvas');
   canvas.width = physW;
-  canvas.height = physH + physLegH;
+  canvas.height = physH;
   const ctx = canvas.getContext('2d');
 
+  // Background fill
   ctx.fillStyle = bgFor(theme);
-  ctx.fillRect(0, 0, physW, physH + physLegH);
+  ctx.fillRect(0, 0, physW, physH);
 
+  // Rack image — centered vertically on left side
+  const rackOffsetY = Math.floor((totalCssH - cssH) / 2);
   const mainImg = await loadImage(dataUrl);
-  ctx.drawImage(mainImg, 0, 0, physW, physH);
+  ctx.drawImage(mainImg, 0, rackOffsetY * s, cssW * s, cssH * s);
 
-  // Legend background strip
-  const stripColor = theme === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.03)';
-  ctx.fillStyle = stripColor;
-  ctx.fillRect(0, physH + hPad * scale / 2, physW, physLegH);
+  // Legend panel
+  const legPanelX = (cssW + LEG_GAP) * s;
+  const legPanelY = TOP_OFFSET * s;
+  const legPanelW = LEG_W * s;
+  const legPanelH = legContentH * s;
 
-  ctx.font = `${fontSize * scale}px monospace`;
-  const textColor = theme === 'light' ? '#405060' : '#c4cad6';
+  const panelBg  = theme === 'light' ? 'rgba(200,210,225,0.55)' : 'rgba(26,28,36,0.96)';
+  const panelBrd = theme === 'light' ? '#a8b4c4' : '#2a2e38';
+
+  ctx.fillStyle = panelBg;
+  roundRect(ctx, legPanelX, legPanelY, legPanelW, legPanelH, 6 * s);
+  ctx.fill();
+  ctx.strokeStyle = panelBrd;
+  ctx.lineWidth = 1 * s;
+  roundRect(ctx, legPanelX, legPanelY, legPanelW, legPanelH, 6 * s);
+  ctx.stroke();
+
+  // "LEGEND" header text
+  const hdrColor  = theme === 'light' ? '#607080' : '#6b7280';
+  const sepColor  = theme === 'light' ? '#a8b4c4' : '#2a2e38';
+  const txtColor  = theme === 'light' ? '#263040' : '#d4d8e0';
+
+  ctx.fillStyle = hdrColor;
+  ctx.font = `bold ${Math.round(8 * s)}px monospace`;
+  ctx.fillText('LEGEND', legPanelX + LEG_PADH * s, legPanelY + (LEG_PADV + 12) * s);
+
+  // Header separator line
+  ctx.fillStyle = sepColor;
+  ctx.fillRect(
+    legPanelX + LEG_PADH * s,
+    legPanelY + (LEG_PADV + HEADER_H - 2) * s,
+    (LEG_W - LEG_PADH * 2) * s,
+    Math.max(1, Math.round(s)),
+  );
+
+  // Entry rows
+  ctx.font = `${Math.round(FONT_SZ * s)}px monospace`;
 
   for (let i = 0; i < items.length; i++) {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const x = (col * colW + hPad) * scale;
-    const y = physH + hPad * scale + row * rowH * scale;
+    const { color, label, uSize } = items[i];
+    const rowTop = legPanelY + (LEG_PADV + HEADER_H + i * ROW_H) * s;
+    const rowMid = rowTop + (ROW_H / 2) * s;
+    const swX    = legPanelX + LEG_PADH * s;
+    const swY    = rowMid - (SWATCH / 2) * s;
 
-    ctx.fillStyle = items[i].color;
-    ctx.fillRect(x, y + 1 * scale, sw * scale, sw * scale);
+    // Colored swatch
+    ctx.fillStyle = color;
+    roundRect(ctx, swX, swY, SWATCH * s, SWATCH * s, 3 * s);
+    ctx.fill();
 
-    ctx.fillStyle = textColor;
-    const maxLabelW = colW - sw - hPad - 8;
-    let label = items[i].label;
-    while (label.length > 3 && ctx.measureText(label).width > maxLabelW * scale) {
-      label = label.slice(0, -1);
-    }
-    if (label !== items[i].label) label += '…';
-    ctx.fillText(label, x + (sw + 6) * scale, y + (sw - 1) * scale);
+    // Label "(NNU)"
+    const fullLabel = `${label} (${uSize}U)`;
+    ctx.fillStyle = txtColor;
+    // Truncate if too long for the panel
+    let text = fullLabel;
+    const maxW = (LEG_W - LEG_PADH * 2 - SWATCH - 8) * s;
+    while (text.length > 4 && ctx.measureText(text).width > maxW) text = text.slice(0, -1);
+    if (text !== fullLabel) text += '…';
+    ctx.fillText(text, swX + (SWATCH + 7) * s, rowMid + 4 * s);
   }
 
-  return canvas.toDataURL('image/png');
+  return { dataUrl: canvas.toDataURL('image/png'), cssW: totalCssW, cssH: totalCssH };
 }
+
+// ─── CSV export ───────────────────────────────────────────────────────────────
 
 function buildCsvRows(targetRacks, allSlots) {
   const isMulti = targetRacks.length > 1;
@@ -252,6 +336,8 @@ function downloadCsv(targetRacks, allSlots) {
   URL.revokeObjectURL(url);
 }
 
+// ─── Main export orchestration ────────────────────────────────────────────────
+
 async function performExport(targetRacks, allSlots, { format, view, theme, includeLegend }) {
   if (format === 'csv') { downloadCsv(targetRacks, allSlots); return; }
 
@@ -278,8 +364,8 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
 
   if (includeLegend && format !== 'svg') {
     const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-    dataUrl = await compositeWithLegend(dataUrl, cssW, cssH, slots, { theme, scale });
-    cssH = cssH + 80; // approximate; not used for PDF with legend (legend adds to physH)
+    const legResult = await compositeWithLegend(dataUrl, cssW, cssH, slots, { theme, scale });
+    ({ dataUrl, cssW, cssH } = legResult);
   }
 
   const filename = targetRacks.length === 1
@@ -317,14 +403,13 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
   const isSingle = targetRacks.length === 1;
   const title = isSingle ? `Export — ${targetRacks[0]?.name}` : `Export All Racks (${targetRacks.length})`;
 
-  // Generate preview on option change, debounced
   const generatePreview = useCallback(async ({ format: f, view: v, theme: t, includeLegend: il }) => {
     if (!['png', 'jpeg', 'svg', 'pdf'].includes(f)) { setPreviewUrl(null); return; }
     setPreviewLoading(true);
     setPreviewError(false);
     try {
+      const previewFormat = f === 'svg' ? 'svg' : 'png';
       let result;
-      const previewFormat = f === 'svg' ? 'svg' : 'png'; // always PNG for preview except SVG
       if (targetRacks.length === 1) {
         result = await captureSingle(targetRacks[0].id, { format: previewFormat, view: v, theme: t, scale: PREVIEW_SCALE });
       } else {
@@ -338,7 +423,8 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
       let { dataUrl, cssW, cssH } = result;
       if (il) {
         const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-        dataUrl = await compositeWithLegend(dataUrl, cssW, cssH, slots, { theme: t, scale: PREVIEW_SCALE });
+        const legResult = await compositeWithLegend(dataUrl, cssW, cssH, slots, { theme: t, scale: PREVIEW_SCALE });
+        dataUrl = legResult.dataUrl;
       }
       setPreviewUrl(dataUrl);
     } catch (err) {
@@ -369,7 +455,6 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
     }
   };
 
-  // CSV preview: first few rows as table
   const csvPreviewRows = !isVisual ? buildCsvRows(targetRacks, allSlots).slice(0, 8) : null;
 
   return (
@@ -427,7 +512,6 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
             )}
           </div>
 
-          {/* Preview area */}
           <div className="em-preview-area">
             <span className="em-preview-label">PREVIEW</span>
             {isVisual ? (

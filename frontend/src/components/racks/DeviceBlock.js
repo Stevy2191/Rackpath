@@ -60,7 +60,7 @@ export default function DeviceBlock({
     : (slot.front_image_url || slot.custom_image_url);
 
   const { color, Icon } = getCategoryStyle(slot);
-  const iconBoxStyle = { borderColor: `${color}55`, background: `${color}18` };
+  const iconBoxStyle = { background: 'rgba(0,0,0,0.22)', borderColor: 'rgba(0,0,0,0.3)' };
 
   return (
     <div
@@ -69,7 +69,7 @@ export default function DeviceBlock({
         highlighted ? 'device-block-highlighted' : '',
         isSelected ? 'device-block-selected' : '',
       ].filter(Boolean).join(' ')}
-      style={{ height: blockHeight }}
+      style={{ height: blockHeight, background: color }}
       draggable
       onDragStart={handleDragStart}
       onDragEnd={() => setDraggingMeta(null)}
@@ -91,7 +91,7 @@ export default function DeviceBlock({
         <>
           <GripVertical size={12} className="device-block-grip" />
           <div className="device-block-icon-box" style={iconBoxStyle}>
-            <Icon size={13} color={color} />
+            <Icon size={13} color="rgba(255,255,255,0.9)" />
           </div>
           <span className="device-block-name">{name}</span>
           <div className="device-block-badges">
