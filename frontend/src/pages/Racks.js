@@ -228,11 +228,10 @@ export default function RacksPage() {
     setSelectedSlotId((cur) => (cur === slotId ? null : slotId));
   };
 
-  const handleExportRack = async (format) => {
-    if (!focusedRackId) return;
-    const rack = racks.find((r) => r.id === focusedRackId);
+  const exportSingleRack = async (rackId, format) => {
+    const rack = racks.find((r) => r.id === rackId);
     if (!rack) return;
-    const frame = document.querySelector(`#rack-${focusedRackId} .rack-dual-frame`);
+    const frame = document.querySelector(`#rack-${rackId} .rack-dual-frame`);
     if (!frame) return;
     setExportingRack(true);
     try {
@@ -256,6 +255,86 @@ export default function RacksPage() {
     }
   };
 
+  const exportAllRacks = async (format) => {
+    const sortedRacks = [...racks].sort((a, b) => a.id - b.id);
+    setExportingRack(true);
+    try {
+      // Capture each rack enclosure (includes name label) in parallel
+      const capturePromises = sortedRacks.map((rack) => {
+        const el = document.querySelector(`#rack-${rack.id} .rack-enclosure`);
+        if (!el) return Promise.resolve(null);
+        return toPng(el, { backgroundColor: '#0a0a0f', width: el.offsetWidth, height: el.offsetHeight }).then((dataUrl) => ({
+          dataUrl,
+          width: el.offsetWidth,
+          height: el.offsetHeight,
+        }));
+      });
+      const captures = (await Promise.all(capturePromises)).filter(Boolean);
+      if (captures.length === 0) return;
+
+      const GAP = 48;
+      const PADDING = 32;
+      const totalWidth = captures.reduce((sum, c) => sum + c.width, 0) + GAP * (captures.length - 1) + PADDING * 2;
+      const maxHeight = Math.max(...captures.map((c) => c.height));
+      const totalHeight = maxHeight + PADDING * 2;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = totalWidth;
+      canvas.height = totalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#0a0a0f';
+      ctx.fillRect(0, 0, totalWidth, totalHeight);
+
+      // Load all images in parallel, then draw in order
+      const imgs = await Promise.all(
+        captures.map(
+          (cap) =>
+            new Promise((resolve) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.src = cap.dataUrl;
+            }),
+        ),
+      );
+
+      let x = PADDING;
+      for (let i = 0; i < captures.length; i++) {
+        const y = PADDING + Math.floor((maxHeight - captures[i].height) / 2);
+        ctx.drawImage(imgs[i], x, y);
+        x += captures[i].width + GAP;
+      }
+
+      const compositeDataUrl = canvas.toDataURL('image/png');
+      if (format === 'pdf') {
+        const pdf = new jsPDF({
+          orientation: totalWidth >= totalHeight ? 'landscape' : 'portrait',
+          unit: 'px',
+          format: [totalWidth, totalHeight],
+        });
+        pdf.addImage(compositeDataUrl, 'PNG', 0, 0, totalWidth, totalHeight);
+        pdf.save('racks-export.pdf');
+      } else {
+        const a = document.createElement('a');
+        a.download = 'racks-export.png';
+        a.href = compositeDataUrl;
+        a.click();
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Rack export failed', err);
+    } finally {
+      setExportingRack(false);
+    }
+  };
+
+  const handleExportRack = (format) => {
+    if (racks.length > 1) {
+      exportAllRacks(format);
+    } else if (focusedRackId) {
+      exportSingleRack(focusedRackId, format);
+    }
+  };
+
   const rightPanel = selectedSlot ? (
     <DevicePropertiesPanel
       slot={selectedSlot}
@@ -271,6 +350,7 @@ export default function RacksPage() {
       onSave={(edits) => actions.onRackSave(focusedRackId, edits)}
       onDuplicate={() => actions.onRackDuplicate(focusedRackId)}
       onDelete={() => actions.onRackDelete(focusedRackId)}
+      onExport={(format) => exportSingleRack(focusedRackId, format)}
     />
   ) : null;
 
@@ -285,17 +365,17 @@ export default function RacksPage() {
         <div className="racks-toolbar-actions">
           <button
             type="button"
-            disabled={!focusedRackId || exportingRack}
+            disabled={exportingRack || racks.length === 0 || (racks.length === 1 && !focusedRackId)}
             onClick={() => handleExportRack('png')}
-            title="Export focused rack as PNG"
+            title={racks.length > 1 ? 'Export all racks as PNG' : 'Export focused rack as PNG'}
           >
             <Download size={14} />
           </button>
           <button
             type="button"
-            disabled={!focusedRackId || exportingRack}
+            disabled={exportingRack || racks.length === 0 || (racks.length === 1 && !focusedRackId)}
             onClick={() => handleExportRack('pdf')}
-            title="Export focused rack as PDF"
+            title={racks.length > 1 ? 'Export all racks as PDF' : 'Export focused rack as PDF'}
           >
             <FileDown size={14} />
           </button>

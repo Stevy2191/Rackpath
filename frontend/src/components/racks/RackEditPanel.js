@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronUp, ChevronDown, Copy, Trash2 } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, Copy, Download, FileDown, Trash2 } from 'lucide-react';
 import './RackEditPanel.css';
 
 const RACK_TYPES = [
@@ -10,7 +10,7 @@ const RACK_TYPES = [
   { value: 'blade-enclosure', label: 'Blade Enclosure' },
 ];
 
-export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDelete }) {
+export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDelete, onExport }) {
   const [edits, setEdits] = useState({
     name:      rack.name,
     location:  rack.location  || '',
@@ -126,6 +126,12 @@ export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDe
         <div className="rep-actions">
           <button type="button" className="rep-action-btn" onClick={onDuplicate}>
             <Copy size={13} /> Duplicate Rack
+          </button>
+          <button type="button" className="rep-action-btn" onClick={() => onExport('png')}>
+            <Download size={13} /> Export PNG
+          </button>
+          <button type="button" className="rep-action-btn" onClick={() => onExport('pdf')}>
+            <FileDown size={13} /> Export PDF
           </button>
           <button type="button" className="rep-action-btn rep-action-danger" onClick={handleDelete}>
             <Trash2 size={13} /> Delete Rack
