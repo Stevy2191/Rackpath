@@ -237,9 +237,10 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 130px;
+  width: 150px;
   border-left: 1px solid rgba(255, 255, 255, 0.07);
-  padding-left: 8px;
+  /* No padding here — the header spans full width for centering;
+     left indent is applied to the body only. */
 }
 
 .rack-annotation-header {
@@ -249,7 +250,8 @@
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: #8a96aa;
-  padding: 2px 0;
+  padding: 2px 6px;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -272,6 +274,7 @@
 .rack-annotation-body {
   display: flex;
   flex-direction: column;
+  padding-left: 8px;
 }
 
 .rack-annotation-cell {
@@ -281,17 +284,17 @@
   align-items: center;
   overflow: hidden;
   border-bottom: 1px dotted rgba(255, 255, 255, 0.05);
+  padding-right: 4px;
 }
 
 .rack-annotation-text {
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.60rem;
   color: #9ca3af;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
   overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 100%;
-  padding-right: 4px;
 }
 
 /* ─── Export capture: front-only view ────────────────────── */
