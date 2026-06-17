@@ -290,11 +290,3 @@
   flex-shrink: 0;
 }
 
-.rep-toggle.rep-toggle-disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.rep-toggle.rep-toggle-disabled input {
-  cursor: not-allowed;
-}

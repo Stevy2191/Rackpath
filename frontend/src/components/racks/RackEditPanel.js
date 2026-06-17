@@ -19,7 +19,7 @@ const WIDTH_OPTIONS = [
 
 const HEIGHT_PRESETS = [8, 12, 16, 24, 32, 42, 47];
 
-export default function RackEditPanel({ rack, rackSlots, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
+export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
   const [edits, setEdits] = useState({
     name:       rack.name,
     location:   rack.location  || '',
@@ -30,11 +30,6 @@ export default function RackEditPanel({ rack, rackSlots, onClose, onSave, onDupl
     show_rear:  rack.show_rear !== undefined ? rack.show_rear : 1,
   });
 
-  const hasRearSlots = (rackSlots || []).some((s) => {
-    const face = s.mounted_face || 'front';
-    return face === 'rear' || face === 'both';
-  });
-  const rearToggleDisabled = hasRearSlots && Boolean(edits.show_rear);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -161,14 +156,10 @@ export default function RackEditPanel({ rack, rackSlots, onClose, onSave, onDupl
 
           <div className="rep-field">
             <span className="rep-label">REAR VIEW</span>
-            <label
-              className={`rep-toggle${rearToggleDisabled ? ' rep-toggle-disabled' : ''}`}
-              title={rearToggleDisabled ? 'Rear-mounted equipment exists' : ''}
-            >
+            <label className="rep-toggle">
               <input
                 type="checkbox"
                 checked={Boolean(edits.show_rear)}
-                disabled={rearToggleDisabled}
                 onChange={(e) => setEdits({ ...edits, show_rear: e.target.checked ? 1 : 0 })}
               />
               Show rear panel
