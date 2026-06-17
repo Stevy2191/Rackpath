@@ -19,28 +19,40 @@ const WIDTH_OPTIONS = [
 
 const HEIGHT_PRESETS = [8, 12, 16, 24, 32, 42, 47];
 
+const ANNOTATION_FIELDS = [
+  { value: 'none',         label: 'None' },
+  { value: 'name',         label: 'Name' },
+  { value: 'ip_address',   label: 'IP Address' },
+  { value: 'notes',        label: 'Notes' },
+  { value: 'asset_tag',    label: 'Asset Tag' },
+  { value: 'serial',       label: 'Serial Number' },
+  { value: 'manufacturer', label: 'Manufacturer' },
+];
+
 export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
   const [edits, setEdits] = useState({
-    name:       rack.name,
-    location:   rack.location  || '',
-    u_height:   rack.u_height,
-    rack_width: rack.rack_width || '19"',
-    rack_type:  rack.rack_type || '4-post',
-    notes:      rack.notes     || '',
-    show_rear:  rack.show_rear !== undefined ? rack.show_rear : 1,
+    name:             rack.name,
+    location:         rack.location         || '',
+    u_height:         rack.u_height,
+    rack_width:       rack.rack_width        || '19"',
+    rack_type:        rack.rack_type         || '4-post',
+    notes:            rack.notes             || '',
+    show_rear:        rack.show_rear !== undefined ? rack.show_rear : 1,
+    annotation_field: rack.annotation_field  || 'none',
   });
 
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setEdits({
-      name:       rack.name,
-      location:   rack.location  || '',
-      u_height:   rack.u_height,
-      rack_width: rack.rack_width || '19"',
-      rack_type:  rack.rack_type || '4-post',
-      notes:      rack.notes     || '',
-      show_rear:  rack.show_rear !== undefined ? rack.show_rear : 1,
+      name:             rack.name,
+      location:         rack.location         || '',
+      u_height:         rack.u_height,
+      rack_width:       rack.rack_width        || '19"',
+      rack_type:        rack.rack_type         || '4-post',
+      notes:            rack.notes             || '',
+      show_rear:        rack.show_rear !== undefined ? rack.show_rear : 1,
+      annotation_field: rack.annotation_field  || 'none',
     });
   }, [rack.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -164,6 +176,19 @@ export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDe
               />
               Show rear panel
             </label>
+          </div>
+
+          <div className="rep-field">
+            <label className="rep-label">ANNOTATION FIELD</label>
+            <select
+              className="rep-input"
+              value={edits.annotation_field}
+              onChange={(e) => setEdits({ ...edits, annotation_field: e.target.value })}
+            >
+              {ANNOTATION_FIELDS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
           </div>
 
           <button type="submit" className="rep-save-btn" disabled={saving}>

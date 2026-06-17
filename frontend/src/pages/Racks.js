@@ -333,6 +333,11 @@ export default function RacksPage() {
     setDeleteConfirmRack(ctxRack);
   };
 
+  const handleCtxToggleAnnotations = () => {
+    if (!ctxRack) return;
+    actions.onRackSave(ctxRack.id, { ...ctxRack, show_annotations: ctxRack.show_annotations ? 0 : 1 });
+  };
+
   const rightPanel = selectedSlot ? (
     <DevicePropertiesPanel
       slot={selectedSlot}
@@ -443,6 +448,9 @@ export default function RacksPage() {
           onRename={() => setRenamingRackId(ctxRack.id)}
           onDuplicate={() => actions.onRackDuplicate(ctxRack.id)}
           onDelete={handleCtxDelete}
+          onToggleAnnotations={handleCtxToggleAnnotations}
+          showAnnotations={Boolean(ctxRack.show_annotations)}
+          annotationFieldSet={Boolean(ctxRack.annotation_field && ctxRack.annotation_field !== 'none')}
         />
       )}
 

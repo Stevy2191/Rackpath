@@ -247,6 +247,7 @@ router.patch('/:id', async (req, res, next) => {
     const allowed = [
       'item_label', 'color', 'mounted_face', 'half_depth', 'half_width', 'half_position',
       'u_size', 'u_position', 'position_offset', 'ip_address', 'slot_notes',
+      'asset_tag', 'serial_number',
       'front_image_url', 'rear_image_url',
     ];
     const updates = {};

@@ -31,8 +31,10 @@
   color: #e6e9f0;
 }
 
-.rack-ctx-danger { color: #ef4444; }
+.rack-ctx-danger  { color: #ef4444; }
 .rack-ctx-danger:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.rack-ctx-disabled { opacity: 0.38; cursor: not-allowed; }
+.rack-ctx-disabled:hover { background: transparent; }
 
 .rack-ctx-divider {
   height: 1px;

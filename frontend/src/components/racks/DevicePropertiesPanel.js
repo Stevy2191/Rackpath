@@ -27,13 +27,15 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
   useEffect(() => {
     if (!slot) { setFields(null); return; }
     setFields({
-      item_label: slot.item_label || '',
-      u_size: slot.u_size || 1,
-      u_position: slot.u_position || 1,
-      color: slot.color || null,
-      mounted_face: slot.mounted_face || 'front',
-      ip_address: slot.ip_address || '',
-      slot_notes: slot.slot_notes || '',
+      item_label:    slot.item_label    || '',
+      u_size:        slot.u_size        || 1,
+      u_position:    slot.u_position    || 1,
+      color:         slot.color         || null,
+      mounted_face:  slot.mounted_face  || 'front',
+      ip_address:    slot.ip_address    || '',
+      slot_notes:    slot.slot_notes    || '',
+      asset_tag:     slot.asset_tag     || '',
+      serial_number: slot.serial_number || '',
     });
     setError(null);
   }, [slot]);
@@ -312,6 +314,28 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, onC
             value={fields.ip_address}
             onChange={(e) => setField('ip_address', e.target.value)}
             placeholder="e.g. 192.168.1.1"
+          />
+        </div>
+
+        {/* Asset Tag */}
+        <div className="props-field">
+          <label className="props-field-label">Asset Tag</label>
+          <input
+            className="props-input"
+            value={fields.asset_tag}
+            onChange={(e) => setField('asset_tag', e.target.value)}
+            placeholder="e.g. ASSET-001"
+          />
+        </div>
+
+        {/* Serial Number */}
+        <div className="props-field">
+          <label className="props-field-label">Serial Number</label>
+          <input
+            className="props-input"
+            value={fields.serial_number}
+            onChange={(e) => setField('serial_number', e.target.value)}
+            placeholder="e.g. SN123456"
           />
         </div>
 

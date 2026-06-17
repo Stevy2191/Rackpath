@@ -3,6 +3,27 @@ import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import './RackEnclosure.css';
 
+const ANNOTATION_LABELS = {
+  name:         'Name',
+  ip_address:   'IP Address',
+  notes:        'Notes',
+  asset_tag:    'Asset Tag',
+  serial:       'Serial No.',
+  manufacturer: 'Manufacturer',
+};
+
+function getAnnotationValue(slot, field) {
+  switch (field) {
+    case 'name':         return slot.item_label || slot.hostname || slot.ip || '';
+    case 'ip_address':   return slot.ip_address || slot.ip || '';
+    case 'notes':        return slot.slot_notes || '';
+    case 'asset_tag':    return slot.asset_tag || '';
+    case 'serial':       return slot.serial_number || '';
+    case 'manufacturer': return slot.vendor || '';
+    default:             return '';
+  }
+}
+
 function resolveface(s) {
   if (s.mounted_face) return s.mounted_face;
   if (s.front_back === 'back' || s.side === 'back') return 'rear';
@@ -349,7 +370,14 @@ export default function RackEnclosure({
     onSelectSlot,
   };
 
-  const showRear = rack.show_rear !== undefined ? Boolean(rack.show_rear) : true;
+  const showRear        = rack.show_rear !== undefined ? Boolean(rack.show_rear) : true;
+  const annotationField = (rack.annotation_field && rack.annotation_field !== 'none') ? rack.annotation_field : null;
+  const showAnnotations = Boolean(rack.show_annotations) && Boolean(annotationField);
+
+  // Merged top-U map for annotation column: front face takes priority over rear
+  const annotationByTopU = { ...rearMap.fullByTop, ...frontMap.fullByTop };
+  // Combined covered set for skipping non-top rows
+  const annotationCovered = new Set([...frontMap.covered, ...rearMap.covered]);
 
   return (
     <div className={`rack-enclosure${isFocused ? ' rack-enclosure-focused' : ''}${!showRear ? ' rack-enclosure-single' : ''}`} id={`rack-${rack.id}`}>
@@ -401,6 +429,43 @@ export default function RackEnclosure({
               {...panelProps}
             />
           </>
+        )}
+
+        {showAnnotations && (
+          <div className="rack-annotation-col">
+            <div className="rack-annotation-header">
+              {ANNOTATION_LABELS[annotationField] || annotationField}
+            </div>
+            <div className="rack-annotation-top-pad" />
+            <div className="rack-annotation-body">
+              {uRows.map((u) => {
+                const slot = annotationByTopU[u];
+                if (slot) {
+                  const text = getAnnotationValue(slot, annotationField);
+                  return (
+                    <div
+                      key={u}
+                      className="rack-annotation-cell"
+                      style={{ height: slot.u_size * uHeight }}
+                    >
+                      {text && <span className="rack-annotation-text">{text}</span>}
+                    </div>
+                  );
+                }
+                // Skip rows covered by a multi-U device above (already rendered)
+                if (annotationCovered.has(u)) return null;
+                // Empty row
+                return (
+                  <div
+                    key={u}
+                    className="rack-annotation-cell"
+                    style={{ height: uHeight }}
+                  />
+                );
+              })}
+            </div>
+            <div className="rack-annotation-bottom-pad" />
+          </div>
         )}
       </div>
     </div>

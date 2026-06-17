@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import './RackContextMenu.css';
 
-export default function RackContextMenu({ x, y, onClose, onExport, onFocus, onEditRack, onRename, onDuplicate, onDelete }) {
+export default function RackContextMenu({ x, y, onClose, onExport, onFocus, onEditRack, onRename, onDuplicate, onDelete, onToggleAnnotations, showAnnotations, annotationFieldSet }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -21,6 +21,13 @@ export default function RackContextMenu({ x, y, onClose, onExport, onFocus, onEd
       <button type="button" className="rack-ctx-item" onClick={act(onEditRack)}>Edit Rack</button>
       <button type="button" className="rack-ctx-item" onClick={act(onRename)}>Rename</button>
       <button type="button" className="rack-ctx-item" onClick={act(onDuplicate)}>Duplicate Rack</button>
+      <button
+        type="button"
+        className={`rack-ctx-item${!annotationFieldSet ? ' rack-ctx-disabled' : ''}`}
+        onClick={annotationFieldSet ? act(onToggleAnnotations) : undefined}
+      >
+        {showAnnotations ? 'Hide Annotations' : 'Show Annotations'}
+      </button>
       <div className="rack-ctx-divider" />
       <button type="button" className="rack-ctx-item rack-ctx-danger" onClick={act(onDelete)}>Delete Rack</button>
     </div>

@@ -232,6 +232,68 @@
   border-left: 1px solid rgba(0, 0, 0, 0.35);
 }
 
+/* ─── Annotation column ──────────────────────────────────── */
+.rack-annotation-col {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 130px;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  padding-left: 8px;
+}
+
+.rack-annotation-header {
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #8a96aa;
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Matches .rack-top-blank height (12px) + margin-bottom (4px) */
+.rack-annotation-top-pad {
+  height: 12px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+/* Matches .rack-bottom-blank height (12px) + margin-top (4px) */
+.rack-annotation-bottom-pad {
+  height: 12px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.rack-annotation-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.rack-annotation-cell {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.05);
+}
+
+.rack-annotation-text {
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 0.60rem;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding-right: 4px;
+}
+
 /* ─── Export capture: front-only view ────────────────────── */
 .rack-capture-front-only .rack-panel-frame-rear,
 .rack-capture-front-only .rack-panel-divider { display: none; }
