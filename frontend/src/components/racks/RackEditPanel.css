@@ -192,6 +192,51 @@
   color: #ef4444;
 }
 
+/* ─── Export dropdown in actions section ────────────────── */
+.rep-export-wrap {
+  position: relative;
+}
+
+.rep-export-btn {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.rep-export-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #12141a;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  box-shadow: 0 -6px 20px rgba(0,0,0,0.55);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.rep-export-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #9ca3af;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.rep-export-menu button:hover {
+  background: rgba(255,255,255,0.07);
+  color: #d4d8e0;
+}
+
 /* ─── Rear view toggle ───────────────────────────────────── */
 .rep-toggle {
   display: flex;

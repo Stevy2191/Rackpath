@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, ChevronUp, ChevronDown, Copy, Download, FileDown, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, ChevronUp, ChevronDown, Copy, Download, Trash2 } from 'lucide-react';
 import './RackEditPanel.css';
 
 const RACK_TYPES = [
@@ -26,6 +26,19 @@ export default function RackEditPanel({ rack, rackSlots, onClose, onSave, onDupl
   });
   const rearToggleDisabled = hasRearSlots && Boolean(edits.show_rear);
   const [saving, setSaving] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handler = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [exportMenuOpen]);
 
   useEffect(() => {
     setEdits({
@@ -151,12 +164,24 @@ export default function RackEditPanel({ rack, rackSlots, onClose, onSave, onDupl
           <button type="button" className="rep-action-btn" onClick={onDuplicate}>
             <Copy size={13} /> Duplicate Rack
           </button>
-          <button type="button" className="rep-action-btn" onClick={() => onExport('png')}>
-            <Download size={13} /> Export PNG
-          </button>
-          <button type="button" className="rep-action-btn" onClick={() => onExport('pdf')}>
-            <FileDown size={13} /> Export PDF
-          </button>
+          <div className="rep-export-wrap" ref={exportMenuRef}>
+            <button type="button" className="rep-action-btn rep-export-btn" onClick={() => setExportMenuOpen((v) => !v)}>
+              <Download size={13} /> Export <ChevronDown size={11} />
+            </button>
+            {exportMenuOpen && (
+              <div className="rep-export-menu">
+                <button type="button" onClick={() => { setExportMenuOpen(false); onExport('png'); }}>
+                  Export as Image (PNG)
+                </button>
+                <button type="button" onClick={() => { setExportMenuOpen(false); onExport('pdf'); }}>
+                  Export as PDF
+                </button>
+                <button type="button" onClick={() => { setExportMenuOpen(false); onExport('json'); }}>
+                  Export as JSON (config backup)
+                </button>
+              </div>
+            )}
+          </div>
           <button type="button" className="rep-action-btn rep-action-danger" onClick={handleDelete}>
             <Trash2 size={13} /> Delete Rack
           </button>

@@ -57,6 +57,47 @@
 .racks-toolbar-actions button.primary         { background: rgba(74,222,222,0.12); border-color: var(--rack-accent); color: var(--rack-accent); }
 .racks-toolbar-actions button.primary:hover   { background: rgba(74,222,222,0.2); }
 
+/* ─── Export dropdown ────────────────────────────────────── */
+.rack-export-wrap {
+  position: relative;
+}
+
+.rack-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 210px;
+  background: #12141a;
+  border: 1px solid #2a2e38;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+  z-index: 200;
+  overflow: hidden;
+}
+
+.rack-export-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 9px 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #c4cad6;
+  font-family: var(--rack-font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.rack-export-menu button:hover {
+  background: rgba(255,255,255,0.07);
+  color: #e6e9f0;
+  border-color: transparent;
+}
+
 /* ─── Three-column canvas area ───────────────────────────── */
 .racks-main {
   flex: 1;
