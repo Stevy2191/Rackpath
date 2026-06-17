@@ -59,7 +59,8 @@ export default function DeviceBlock({
     ? (slot.rear_image_url || slot.custom_image_url)
     : (slot.front_image_url || slot.custom_image_url);
 
-  const { color, Icon } = getCategoryStyle(slot);
+  const { color: categoryColor, Icon } = getCategoryStyle(slot);
+  const color = slot.color || categoryColor;
   const iconBoxStyle = { background: 'rgba(0,0,0,0.22)', borderColor: 'rgba(0,0,0,0.3)' };
 
   return (
