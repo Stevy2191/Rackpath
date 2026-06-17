@@ -241,13 +241,14 @@ export const RACK_CATALOG = [
   e('cp-pdu-20b',   'PDU20B2F20R',    'CyberPower', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
 
   // ─── EATON ───────────────────────────────────────────────────────────────────
-  e('ea-5px-1000-1u', '5PX 1000VA',         'Eaton', 'POWER', 1, 'ups'),
-  e('ea-5px-1500-2u', '5PX 1500VA',         'Eaton', 'POWER', 2, 'ups'),
-  e('ea-5px-2200-2u', '5PX 2200VA',         'Eaton', 'POWER', 2, 'ups'),
-  e('ea-5px-3000-2u', '5PX 3000VA',         'Eaton', 'POWER', 2, 'ups'),
-  e('ea-9px-5000-3u', '9PX 5000VA',         'Eaton', 'POWER', 3, 'ups'),
-  e('ea-9px-8000-4u', '9PX 8000VA',         'Eaton', 'POWER', 4, 'ups'),
-  e('ea-epdu-1u',     'ePDU G3 Metered 1U', 'Eaton', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
+  e('ea-5px-1000-1u',  '5PX 1000VA',         'Eaton', 'POWER', 1, 'ups'),
+  e('ea-5px-1500-2u',  '5PX 1500VA',         'Eaton', 'POWER', 2, 'ups'),
+  e('ea-5px-2200-2u',  '5PX 2200VA',         'Eaton', 'POWER', 2, 'ups'),
+  e('ea-5px-3000-2u',  '5PX 3000VA',         'Eaton', 'POWER', 2, 'ups'),
+  e('ea-9px-200rt-2u', '9PX200RT',           'Eaton', 'POWER', 2, 'ups', { mountedFace: 'rear' }),
+  e('ea-9px-5000-3u',  '9PX 5000VA',         'Eaton', 'POWER', 3, 'ups'),
+  e('ea-9px-8000-4u',  '9PX 8000VA',         'Eaton', 'POWER', 4, 'ups'),
+  e('ea-epdu-1u',      'ePDU G3 Metered 1U', 'Eaton', 'POWER', 1, 'pdu', { halfDepth: true, mountedFace: 'rear' }),
 
   // ─── MIKROTIK ────────────────────────────────────────────────────────────────
   e('mt-crs328',  'CRS328-24P-4S+RM',    'MikroTik', 'NETWORK',   1, 'switch'),
