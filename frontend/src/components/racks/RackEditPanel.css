@@ -93,43 +93,77 @@
   min-height: 56px;
 }
 
-/* ─── U Height stepper ───────────────────────────────────── */
-.rep-stepper {
+/* ─── Width cards ────────────────────────────────────────── */
+.rep-width-cards {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
-.rep-stepper button {
+.rep-width-card {
+  flex: 1;
+  padding: 7px 4px;
+  border: 1px solid #2a2e38;
+  border-radius: 5px;
+  background: #0e0f13;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
+  gap: 2px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.rep-width-label { font-size: 0.88rem; font-weight: 700; color: #d4d8e0; }
+.rep-width-sub   { font-size: 0.60rem; color: #6b7280; }
+.rep-width-card.selected { border-color: #4adede; background: rgba(74, 222, 222, 0.08); }
+.rep-width-card.selected .rep-width-label { color: #4adede; }
+.rep-width-card:hover:not(.selected) { border-color: #3a3f4a; }
+
+/* ─── Height presets + slider ────────────────────────────── */
+.rep-height-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.rep-preset-btn {
+  padding: 4px 9px;
   border: 1px solid #2a2e38;
   border-radius: 4px;
   background: #0e0f13;
   color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.73rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.rep-stepper button:hover:not(:disabled) {
-  border-color: #4adede;
-  color: #4adede;
+.rep-preset-btn.selected { border-color: #4adede; color: #4adede; background: rgba(74, 222, 222, 0.08); }
+.rep-preset-btn:hover:not(.selected) { border-color: #3a3f4a; color: #d4d8e0; }
+
+.rep-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
 }
 
-.rep-stepper button:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+.rep-slider-row input[type='range'] {
+  flex: 1;
+  accent-color: #4adede;
+  cursor: pointer;
 }
 
-.rep-stepper-val {
-  min-width: 38px;
-  text-align: center;
+.rep-slider-val {
+  min-width: 34px;
+  text-align: right;
   font-size: 0.83rem;
   font-weight: 600;
-  color: #e6e9f0;
+  color: #d4d8e0;
 }
 
 /* ─── Save button ────────────────────────────────────────── */

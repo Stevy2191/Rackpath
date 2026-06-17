@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronUp, ChevronDown, Copy, Download, Trash2 } from 'lucide-react';
+import { X, Copy, Download, Trash2 } from 'lucide-react';
 import './RackEditPanel.css';
 
 const RACK_TYPES = [
@@ -10,14 +10,24 @@ const RACK_TYPES = [
   { value: 'blade-enclosure', label: 'Blade Enclosure' },
 ];
 
+const WIDTH_OPTIONS = [
+  { value: '10"', label: '10"', sub: 'Compact' },
+  { value: '19"', label: '19"', sub: 'Standard' },
+  { value: '21"', label: '21"', sub: 'Wide' },
+  { value: '23"', label: '23"', sub: 'Telco' },
+];
+
+const HEIGHT_PRESETS = [8, 12, 16, 24, 32, 42, 47];
+
 export default function RackEditPanel({ rack, rackSlots, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
   const [edits, setEdits] = useState({
-    name:      rack.name,
-    location:  rack.location  || '',
-    u_height:  rack.u_height,
-    rack_type: rack.rack_type || '4-post',
-    notes:     rack.notes     || '',
-    show_rear: rack.show_rear !== undefined ? rack.show_rear : 1,
+    name:       rack.name,
+    location:   rack.location  || '',
+    u_height:   rack.u_height,
+    rack_width: rack.rack_width || '19"',
+    rack_type:  rack.rack_type || '4-post',
+    notes:      rack.notes     || '',
+    show_rear:  rack.show_rear !== undefined ? rack.show_rear : 1,
   });
 
   const hasRearSlots = (rackSlots || []).some((s) => {
@@ -29,12 +39,13 @@ export default function RackEditPanel({ rack, rackSlots, onClose, onSave, onDupl
 
   useEffect(() => {
     setEdits({
-      name:      rack.name,
-      location:  rack.location  || '',
-      u_height:  rack.u_height,
-      rack_type: rack.rack_type || '4-post',
-      notes:     rack.notes     || '',
-      show_rear: rack.show_rear !== undefined ? rack.show_rear : 1,
+      name:       rack.name,
+      location:   rack.location  || '',
+      u_height:   rack.u_height,
+      rack_width: rack.rack_width || '19"',
+      rack_type:  rack.rack_type || '4-post',
+      notes:      rack.notes     || '',
+      show_rear:  rack.show_rear !== undefined ? rack.show_rear : 1,
     });
   }, [rack.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -83,23 +94,45 @@ export default function RackEditPanel({ rack, rackSlots, onClose, onSave, onDupl
           </div>
 
           <div className="rep-field">
+            <label className="rep-label">WIDTH</label>
+            <div className="rep-width-cards">
+              {WIDTH_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`rep-width-card${edits.rack_width === opt.value ? ' selected' : ''}`}
+                  onClick={() => setEdits({ ...edits, rack_width: opt.value })}
+                >
+                  <span className="rep-width-label">{opt.label}</span>
+                  <span className="rep-width-sub">{opt.sub}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rep-field">
             <label className="rep-label">HEIGHT</label>
-            <div className="rep-stepper">
-              <button
-                type="button"
-                onClick={() => setEdits({ ...edits, u_height: Math.max(1, edits.u_height - 1) })}
-                disabled={edits.u_height <= 1}
-              >
-                <ChevronDown size={13} />
-              </button>
-              <span className="rep-stepper-val">{edits.u_height}U</span>
-              <button
-                type="button"
-                onClick={() => setEdits({ ...edits, u_height: Math.min(100, edits.u_height + 1) })}
-                disabled={edits.u_height >= 100}
-              >
-                <ChevronUp size={13} />
-              </button>
+            <div className="rep-height-presets">
+              {HEIGHT_PRESETS.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  className={`rep-preset-btn${edits.u_height === h ? ' selected' : ''}`}
+                  onClick={() => setEdits({ ...edits, u_height: h })}
+                >
+                  {h}U
+                </button>
+              ))}
+            </div>
+            <div className="rep-slider-row">
+              <input
+                type="range"
+                min={1}
+                max={100}
+                value={edits.u_height}
+                onChange={(e) => setEdits({ ...edits, u_height: Number(e.target.value) })}
+              />
+              <span className="rep-slider-val">{edits.u_height}U</span>
             </div>
           </div>
 

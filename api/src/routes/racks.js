@@ -78,14 +78,14 @@ router.post('/', async (req, res, next) => {
 // PUT /api/racks/:id - update rack
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, location, u_height, rack_type, notes, show_rear } = req.body;
+    const { name, location, u_height, rack_type, notes, show_rear, rack_width } = req.body;
 
     const validationError = validateRackFields(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
     const [result] = await pool.query(
-      'UPDATE racks SET name = ?, location = ?, u_height = ?, rack_type = ?, notes = ?, show_rear = ? WHERE id = ? AND project_id = ?',
-      [name, location || null, u_height || 42, rack_type || '4-post', notes || null, show_rear !== undefined ? show_rear : 1, req.params.id, req.projectId]
+      'UPDATE racks SET name = ?, location = ?, u_height = ?, rack_type = ?, notes = ?, show_rear = ?, rack_width = ? WHERE id = ? AND project_id = ?',
+      [name, location || null, u_height || 42, rack_type || '4-post', notes || null, show_rear !== undefined ? show_rear : 1, rack_width || '19"', req.params.id, req.projectId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack not found' });
     const [rows] = await pool.query('SELECT * FROM racks WHERE id = ?', [req.params.id]);
