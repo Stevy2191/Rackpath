@@ -423,13 +423,13 @@ export default function RacksPage() {
   };
 
   const handleExportRack = (format) => {
-    if (format === 'json') {
-      if (racks.length > 1) exportAllRacksJson();
-      else if (focusedRackId) exportRackJson(focusedRackId);
-      return;
+    if (racks.length > 1) {
+      if (format === 'json') exportAllRacksJson();
+      else exportAllRacks(format);
+    } else if (racks.length === 1) {
+      if (format === 'json') exportRackJson(racks[0].id);
+      else exportSingleRack(racks[0].id, format);
     }
-    if (racks.length > 1) exportAllRacks(format);
-    else if (focusedRackId) exportSingleRack(focusedRackId, format);
   };
 
   const rightPanel = selectedSlot ? (
@@ -467,7 +467,7 @@ export default function RacksPage() {
           <div className="rack-export-wrap" ref={exportMenuRef}>
             <button
               type="button"
-              disabled={exportingRack || racks.length === 0 || (racks.length === 1 && !focusedRackId)}
+              disabled={exportingRack || racks.length === 0}
               className={exportMenuOpen ? 'active' : ''}
               onClick={() => setExportMenuOpen((v) => !v)}
             >
