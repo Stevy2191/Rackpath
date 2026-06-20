@@ -86,27 +86,51 @@ router.put('/:id', async (req, res, next) => {
 
     const resolvedHeight = u_height || 42;
 
-    // Shrinking the rack must not orphan existing devices above the new
-    // height — they'd simply stop rendering (since the U-grid only loops
-    // 1..u_height) while still occupying their old position in the DB,
-    // making them appear to vanish until the rack is grown back. Vertical
-    // PDUs are 0U floating elements, not real U-grid occupants, so they
-    // don't block a resize — their u_size is kept in sync with the rack
+    // Shrinking the rack only fails if the devices genuinely don't fit —
+    // i.e. the total number of distinct U rows they occupy exceeds the new
+    // height. If they do fit but some are positioned above the new height,
+    // reflow (compact) everything downward to close the gaps rather than
+    // blocking the resize outright. Vertical PDUs are 0U floating elements,
+    // not real U-grid occupants, so they're excluded from both the fit
+    // check and the reflow — their u_size is kept in sync with the rack
     // height below instead.
-    const [conflicts] = await pool.query(
-      `SELECT item_label, custom_type, u_position, u_size FROM rack_slots
-       WHERE rack_id = ? AND project_id = ? AND item_type != 'vertical-pdu'
-         AND (u_position + u_size - 1) > ?
-       ORDER BY (u_position + u_size - 1) DESC`,
-      [req.params.id, req.projectId, resolvedHeight]
+    const [slots] = await pool.query(
+      `SELECT id, u_position, u_size FROM rack_slots
+       WHERE rack_id = ? AND project_id = ? AND item_type != 'vertical-pdu'`,
+      [req.params.id, req.projectId]
     );
-    if (conflicts.length > 0) {
-      const top = conflicts[0];
-      const label = top.item_label || top.custom_type || 'A device';
-      const extra = conflicts.length > 1 ? ` (and ${conflicts.length - 1} other device${conflicts.length > 2 ? 's' : ''})` : '';
+
+    const occupied = new Set();
+    for (const s of slots) {
+      const top = s.u_position + s.u_size - 1;
+      for (let u = s.u_position; u <= top; u++) occupied.add(u);
+    }
+    const usedCount = occupied.size;
+
+    if (usedCount > resolvedHeight) {
       return res.status(400).json({
-        error: `Cannot resize to ${resolvedHeight}U — ${label} occupies U${top.u_position}-${top.u_position + top.u_size - 1}${extra}, above the new height. Remove or relocate it first.`,
+        error: `Cannot resize: ${usedCount}U of devices installed, but ${resolvedHeight}U rack selected. Remove ${usedCount - resolvedHeight}U of equipment first.`,
       });
+    }
+
+    // Only reflow when something would otherwise land above the new
+    // height — a shrink that already fits, or a grow, leaves positions
+    // untouched. Mapping each occupied row to its rank among occupied rows
+    // (ascending) packs everything down from U1 with no gaps, while
+    // preserving relative order and keeping co-located slots (half-width
+    // pairs sharing a row, or a device spanning multiple contiguous rows)
+    // aligned, since they share the same row numbers before and after.
+    const needsReflow = slots.some((s) => s.u_position + s.u_size - 1 > resolvedHeight);
+    if (needsReflow) {
+      const sortedRows = Array.from(occupied).sort((a, b) => a - b);
+      const rank = new Map();
+      sortedRows.forEach((row, i) => rank.set(row, i + 1));
+      for (const s of slots) {
+        const newPosition = rank.get(s.u_position);
+        if (newPosition !== s.u_position) {
+          await pool.query('UPDATE rack_slots SET u_position = ? WHERE id = ?', [newPosition, s.id]);
+        }
+      }
     }
 
     const [result] = await pool.query(

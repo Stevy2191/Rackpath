@@ -68,17 +68,3 @@ export function countUsedU(slots, rackId) {
   }
   return used.size;
 }
-
-// Returns the highest U number occupied by any non-floating item in the
-// rack, or 0 if the rack is empty. Used to tell the user exactly how small
-// they can shrink a rack before something would no longer fit.
-export function highestOccupiedU(slots, rackId) {
-  let highest = 0;
-  for (const s of slots) {
-    if (s.rack_id !== rackId) continue;
-    if (s.item_type === 'vertical-pdu') continue;
-    const top = s.u_position + s.u_size - 1;
-    if (top > highest) highest = top;
-  }
-  return highest;
-}

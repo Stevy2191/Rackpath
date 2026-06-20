@@ -29,7 +29,7 @@ const ANNOTATION_FIELDS = [
   { value: 'manufacturer', label: 'Manufacturer' },
 ];
 
-export default function RackEditPanel({ rack, usedU = 0, highestOccupiedU = 0, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
+export default function RackEditPanel({ rack, usedU = 0, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
   const [edits, setEdits] = useState({
     name:             rack.name,
     location:         rack.location         || '',
@@ -69,7 +69,7 @@ export default function RackEditPanel({ rack, usedU = 0, highestOccupiedU = 0, o
     onDelete();
   };
 
-  const wontFit = highestOccupiedU > 0 && edits.u_height < highestOccupiedU;
+  const wontFit = usedU > edits.u_height;
 
   return (
     <div className="rack-edit-panel">
@@ -146,8 +146,8 @@ export default function RackEditPanel({ rack, usedU = 0, highestOccupiedU = 0, o
             </div>
             {wontFit && (
               <div className="rep-warning">
-                Can't shrink to {edits.u_height}U — a device occupies up to U{highestOccupiedU}.
-                Remove or relocate it first.
+                Cannot resize: {usedU}U of devices installed, but {edits.u_height}U rack selected.
+                Remove {usedU - edits.u_height}U of equipment first.
               </div>
             )}
           </div>

@@ -9,7 +9,7 @@ import QuickConfigModal from '../components/racks/QuickConfigModal';
 import { SIMPLE_ITEM_TYPES } from '../components/racks/rackCatalog';
 import DevicePropertiesPanel from '../components/racks/DevicePropertiesPanel';
 import RackEditPanel from '../components/racks/RackEditPanel';
-import { countUsedU, highestOccupiedU } from '../components/racks/rackPlacement';
+import { countUsedU } from '../components/racks/rackPlacement';
 import AddRackModal from '../components/racks/AddRackModal';
 import RackDeviceContextMenu from '../components/racks/RackDeviceContextMenu';
 import RackContextMenu from '../components/racks/RackContextMenu';
@@ -243,6 +243,9 @@ export default function RacksPage() {
       try {
         await client.put(`/racks/${rackId}`, edits);
         loadRacks();
+        // A height change may have reflowed device positions server-side —
+        // refetch so the canvas reflects their new U positions.
+        loadAllSlots();
       } catch (err) {
         setError(err.response?.data?.error || err.message);
       }
@@ -510,7 +513,6 @@ export default function RacksPage() {
     <RackEditPanel
       rack={focusedRack}
       usedU={countUsedU(allSlots, focusedRack.id)}
-      highestOccupiedU={highestOccupiedU(allSlots, focusedRack.id)}
       onClose={() => setRackEditOpen(false)}
       onSave={(edits) => actions.onRackSave(focusedRackId, edits)}
       onDuplicate={() => actions.onRackDuplicate(focusedRackId)}
