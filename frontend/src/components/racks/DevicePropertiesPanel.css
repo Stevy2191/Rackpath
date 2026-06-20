@@ -88,23 +88,40 @@
 .props-outlet-groups {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.props-outlet-group-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 5px;
-}
-
-.props-outlet-group-type {
-  flex: 1;
+  gap: 8px;
   min-width: 0;
 }
 
-.props-outlet-group-count {
-  flex-shrink: 0;
-  width: 48px;
+/* Each group stacks Type/Count full-width instead of cramming them into one
+   row — the properties panel is only ~260px wide, too narrow to fit a
+   native <select> (which can't shrink below its content's intrinsic width)
+   alongside a count input and a remove button without overflowing and
+   getting clipped by the panel's overflow:hidden. */
+.props-outlet-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #1e2128;
+  border-radius: 5px;
+  background: #161820;
+}
+
+.props-outlet-group .props-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.props-outlet-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6b7280;
 }
 
 .props-outlet-group-remove {
@@ -112,9 +129,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin-top: 1px;
+  width: 22px;
+  height: 22px;
   border: none;
   border-radius: 3px;
   background: transparent;
@@ -123,9 +139,14 @@
   transition: background 0.15s, color 0.15s;
 }
 
-.props-outlet-group-remove:hover {
+.props-outlet-group-remove:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
+}
+
+.props-outlet-group-remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* ─── Capacity (value + unit) ──────────────────────────────── */

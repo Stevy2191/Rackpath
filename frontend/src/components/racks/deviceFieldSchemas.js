@@ -14,8 +14,11 @@ export const COLOR_SWATCHES = [
 
 export const PORT_COUNT_PRESETS = [8, 12, 24, 48, 96];
 export const PATCH_PORT_PRESETS = [12, 24, 48];
-export const OUTLET_TYPES = ['NEMA 5-15R', 'NEMA 5-20R', 'NEMA L5-30R', 'NEMA L6-20R', 'NEMA L6-30R', 'IEC C13', 'IEC C19', 'IEC C7', 'Other'];
-export const INPUT_PLUG_TYPES = ['NEMA 5-15P', 'NEMA 5-20P', 'NEMA L5-30P', 'NEMA L6-20P', 'NEMA L6-30P', 'IEC C14', 'IEC C20', 'Other'];
+// "Other" isn't listed here — TypeSelect always appends its own "Other…"
+// option (which reveals a free-text input), so including it in the preset
+// list too would show it twice.
+export const OUTLET_TYPES = ['NEMA 5-15R', 'NEMA 5-20R', 'NEMA L5-30R', 'NEMA L6-20R', 'NEMA L6-30R', 'IEC C13', 'IEC C19', 'IEC C7'];
+export const INPUT_PLUG_TYPES = ['NEMA 5-15P', 'NEMA 5-20P', 'NEMA L5-30P', 'NEMA L6-20P', 'NEMA L6-30P', 'IEC C14', 'IEC C20'];
 export const INPUT_VOLTAGES = ['120V', '208V', '240V'];
 export const CAPACITY_UNITS = ['A', 'W'];
 

@@ -59,25 +59,36 @@ export default function OutletGroupsEditor({ groups, onChange }) {
     <div className="props-outlet-groups">
       {list.length === 0 && <p className="props-empty-note">No outlet groups defined.</p>}
       {list.map((group, i) => (
-        <div key={i} className="props-outlet-group-row">
-          <div className="props-outlet-group-type">
-            <TypeSelect
-              value={group.type}
-              presets={OUTLET_TYPES}
-              onChange={(type) => updateGroup(i, { type })}
-              placeholder="Custom outlet type"
-            />
+        <div key={i} className="props-outlet-group">
+          <div className="props-outlet-group-header">
+            <span>Outlet Group {i + 1}</span>
+            <button
+              type="button"
+              className="props-outlet-group-remove"
+              title={list.length <= 1 ? "Can't remove the last outlet group" : 'Remove'}
+              disabled={list.length <= 1}
+              onClick={() => removeGroup(i)}
+            >
+              <Trash2 size={12} />
+            </button>
           </div>
+
+          <label className="props-field-label">Outlet Type</label>
+          <TypeSelect
+            value={group.type}
+            presets={OUTLET_TYPES}
+            onChange={(type) => updateGroup(i, { type })}
+            placeholder="Custom outlet type"
+          />
+
+          <label className="props-field-label">Count</label>
           <input
-            className="props-input props-outlet-group-count"
+            className="props-input"
             type="number"
             min="1"
             value={group.count}
             onChange={(e) => updateGroup(i, { count: Math.max(1, Number(e.target.value) || 1) })}
           />
-          <button type="button" className="props-outlet-group-remove" title="Remove" onClick={() => removeGroup(i)}>
-            <Trash2 size={12} />
-          </button>
         </div>
       ))}
       <button type="button" className="props-upload-btn" onClick={addGroup}>
