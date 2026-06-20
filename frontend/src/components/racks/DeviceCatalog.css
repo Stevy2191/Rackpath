@@ -1,6 +1,6 @@
 .device-catalog {
   flex-shrink: 0;
-  width: 300px;
+  width: 360px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -214,14 +214,6 @@
   overflow: hidden;
 }
 
-/* Thumbnail for custom devices with an uploaded image */
-.dc-card-icon-img {
-  object-fit: cover;
-  padding: 0;
-  border-color: #2a2e38 !important;
-  background: #0a0a0f !important;
-}
-
 /* Device name */
 .dc-card-name {
   flex: 1;
@@ -233,6 +225,22 @@
   text-overflow: ellipsis;
   min-width: 0;
 }
+
+/* Inline rename input (Custom tab) */
+.dc-card-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 5px;
+  border: 1px solid #4adede;
+  border-radius: 3px;
+  background: #0e0f13;
+  color: #e6e9f0;
+  font-family: inherit;
+  font-size: 0.73rem;
+  font-weight: 600;
+}
+
+.dc-card-rename-input:focus { outline: none; }
 
 /* Pill badges */
 .dc-card-badges {
@@ -292,35 +300,11 @@
 /* ─── Custom section ─────────────────────────────────────── */
 .dc-custom-section { padding-top: 4px; }
 
-.dc-add-custom-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  padding: 8px;
-  margin-top: 6px;
-  border: 1px dashed #3a3f4a;
-  border-radius: 6px;
-  background: transparent;
-  color: #8b91a1;
-  font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-
-.dc-add-custom-btn:hover {
-  border-color: #4adede;
-  color: #4adede;
-  background: rgba(74, 222, 222, 0.05);
-}
-
 .dc-empty {
   margin: 6px 0;
   font-size: 0.72rem;
   color: #6b7280;
+  line-height: 1.5;
 }
 
 .dc-group-unracked {
@@ -329,14 +313,39 @@
   border-bottom: 1px solid #2a2e38;
 }
 
-/* ─── Brand-tab category sub-headers ─────────────────────── */
-.dc-brand-cat-group { margin-top: 6px; }
-
-.dc-brand-cat-header {
-  padding: 2px 6px 3px;
-  font-size: 0.60rem;
-  font-weight: 700;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  color: #4a5060;
+/* ─── Custom-card right-click context menu ────────────────── */
+.dc-ctx-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
 }
+
+.dc-ctx-menu {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid #2a2e38;
+  border-radius: 6px;
+  background: #1a1d26;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1001;
+}
+
+.dc-ctx-menu button {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #d4d8e0;
+  font-family: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dc-ctx-menu button:hover { background: rgba(255, 255, 255, 0.06); }
+
+.dc-ctx-menu button.dc-ctx-menu-danger { color: #ef4444; }
+.dc-ctx-menu button.dc-ctx-menu-danger:hover { background: rgba(239, 68, 68, 0.12); }

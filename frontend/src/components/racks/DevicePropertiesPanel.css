@@ -225,6 +225,15 @@
   color: #4adede;
 }
 
+/* ─── Save to Catalog ─────────────────────────────────────── */
+.props-save-catalog-row {
+  display: flex;
+  gap: 6px;
+}
+
+.props-save-catalog-row .props-input { flex: 1; min-width: 0; }
+.props-save-catalog-row .props-upload-btn { flex-shrink: 0; white-space: nowrap; }
+
 /* ─── Image upload ───────────────────────────────────────── */
 .props-image-row {
   display: flex;

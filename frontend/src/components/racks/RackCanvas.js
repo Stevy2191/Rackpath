@@ -5,8 +5,6 @@ import CableOverlay from './CableOverlay';
 import { resolveUPosition, isSpanFree, buildOccupiedSet } from './rackPlacement';
 import './RackCanvas.css';
 
-const SIMPLE_ITEM_TYPES = ['patch-panel', 'blank', 'cable-manager'];
-
 const U_HEIGHT    = 40;
 const MIN_ZOOM    = 0.25;
 const MAX_ZOOM    = 2.0;
@@ -34,10 +32,11 @@ function ZoomControls({ zoom, onZoomIn, onZoomOut, onFit }) {
 export default function RackCanvas({
   racks,
   allSlots,
-  rackCustomDevices,
+  userCatalogEntries,
   highlightedSlotId,
   selectedSlotId,
   actions,
+  onRequestPlacement,
   cableViewEnabled,
   focusedRackId,
   onFocusRack,
@@ -247,46 +246,18 @@ export default function RackCanvas({
 
     if (catalogItem) {
       const entry = JSON.parse(catalogItem);
-      const itemType = SIMPLE_ITEM_TYPES.includes(entry.renderType) ? entry.renderType : 'custom-device';
       const mounted_face = entry.mountedFace || face;
       const u_position = resolvePosition(entry.uSize, mounted_face, null);
-      actions.onSlotCreate({
-        rack_id: rackId,
-        item_type: itemType,
-        item_label: entry.name,
-        vendor: entry.vendor,
-        catalog_id: entry.id,
-        custom_type: entry.renderType,
-        u_position,
-        u_size: entry.uSize,
-        mounted_face,
-        half_depth: entry.halfDepth ? 1 : 0,
-        half_width: entry.halfWidth ? 1 : 0,
-        outlet_count: entry.outletCount,
-        outlet_type: entry.outletType,
-        input_voltage: entry.inputVoltage,
-      });
+      onRequestPlacement({ source: 'catalog', entry, target: { rack_id: rackId, u_position, mounted_face } });
       return;
     }
 
     if (customDevId) {
-      const custom = rackCustomDevices.find((c) => String(c.id) === customDevId);
+      const custom = userCatalogEntries.find((c) => String(c.id) === customDevId);
       if (!custom) return;
-      const u_position = resolvePosition(custom.u_size, face, null);
-      actions.onSlotCreate({
-        rack_id: rackId,
-        item_type: 'custom-device',
-        item_label: custom.name,
-        vendor: custom.vendor,
-        custom_type: custom.type,
-        custom_image_url: custom.image_url,
-        u_position,
-        u_size: custom.u_size,
-        mounted_face: face,
-        outlet_count: custom.outlet_count,
-        outlet_type: custom.outlet_type,
-        input_voltage: custom.input_voltage,
-      });
+      const mounted_face = custom.mounted_face || face;
+      const u_position = resolvePosition(custom.u_size, mounted_face, null);
+      onRequestPlacement({ source: 'custom', entry: custom, target: { rack_id: rackId, u_position, mounted_face } });
     }
   };
 

@@ -144,7 +144,7 @@ router.post('/', async (req, res, next) => {
       rack_id, device_id, u_position, item_type, item_label, side,
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
-      outlet_count, outlet_type, input_voltage,
+      outlet_count, outlet_type, input_voltage, port_count, bay_count, capacity_va,
       power_source_slot_id, power_source_outlet, mount_side,
     } = req.body;
     const u_size = req.body.u_size || 1;
@@ -198,9 +198,9 @@ router.post('/', async (req, res, next) => {
          (project_id, rack_id, device_id, item_type, item_label, custom_type, color,
           u_position, position_offset, u_size, side, front_back, mounted_face,
           half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes,
-          outlet_count, outlet_type, input_voltage,
+          outlet_count, outlet_type, input_voltage, port_count, bay_count, capacity_va,
           power_source_slot_id, power_source_outlet, mount_side)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
@@ -210,6 +210,7 @@ router.post('/', async (req, res, next) => {
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
         outlet_count || null, outlet_type || null, input_voltage || null,
+        port_count || null, bay_count || null, capacity_va || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
       ]
     );
@@ -239,7 +240,7 @@ router.put('/:id', async (req, res, next) => {
       rack_id, device_id, item_type, item_label, side,
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
-      outlet_count, outlet_type, input_voltage,
+      outlet_count, outlet_type, input_voltage, port_count, bay_count, capacity_va,
       power_source_slot_id, power_source_outlet, mount_side,
     } = req.body;
     let u_position = req.body.u_position;
@@ -293,7 +294,7 @@ router.put('/:id', async (req, res, next) => {
            u_position=?, position_offset=?, u_size=?, side=?, front_back=?, mounted_face=?,
            half_depth=?, half_width=?, half_position=?, catalog_id=?, custom_image_url=?, vendor=?,
            ip_address=?, slot_notes=?,
-           outlet_count=?, outlet_type=?, input_voltage=?,
+           outlet_count=?, outlet_type=?, input_voltage=?, port_count=?, bay_count=?, capacity_va=?,
            power_source_slot_id=?, power_source_outlet=?, mount_side=?
        WHERE id=? AND project_id=?`,
       [
@@ -305,6 +306,7 @@ router.put('/:id', async (req, res, next) => {
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
         outlet_count || null, outlet_type || null, input_voltage || null,
+        port_count || null, bay_count || null, capacity_va || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
         req.params.id, req.projectId,
       ]
@@ -330,7 +332,7 @@ router.patch('/:id', async (req, res, next) => {
       'u_size', 'u_position', 'position_offset', 'ip_address', 'slot_notes',
       'asset_tag', 'serial_number',
       'front_image_url', 'rear_image_url',
-      'outlet_count', 'outlet_type', 'input_voltage',
+      'outlet_count', 'outlet_type', 'input_voltage', 'port_count', 'bay_count', 'capacity_va',
       'power_source_slot_id', 'power_source_outlet', 'mount_side',
     ];
     const updates = {};

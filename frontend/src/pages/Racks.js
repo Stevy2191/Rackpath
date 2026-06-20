@@ -5,6 +5,8 @@ import client from '../api/client';
 import PortEditorModal from '../components/PortEditorModal';
 import RackCanvas from '../components/racks/RackCanvas';
 import DeviceCatalog from '../components/racks/DeviceCatalog';
+import QuickConfigModal from '../components/racks/QuickConfigModal';
+import { SIMPLE_ITEM_TYPES } from '../components/racks/rackCatalog';
 import DevicePropertiesPanel from '../components/racks/DevicePropertiesPanel';
 import RackEditPanel from '../components/racks/RackEditPanel';
 import AddRackModal from '../components/racks/AddRackModal';
@@ -26,7 +28,8 @@ export default function RacksPage() {
   const [racks, setRacks] = useState([]);
   const [devices, setDevices] = useState([]);
   const [allSlots, setAllSlots] = useState([]);
-  const [rackCustomDevices, setRackCustomDevices] = useState([]);
+  const [userCatalogEntries, setUserCatalogEntries] = useState([]);
+  const [pendingPlacement, setPendingPlacement] = useState(null); // { source, entry, target }
   const [error, setError] = useState(null);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [focusedRackId, setFocusedRackId] = useState(null);
@@ -57,16 +60,16 @@ export default function RacksPage() {
     client.get('/rack-slots').then((res) => setAllSlots(res.data)).catch((err) => setError(err.message));
   }, []);
 
-  const loadCustomDevices = useCallback(() => {
-    client.get('/rack-custom-devices').then((res) => setRackCustomDevices(res.data)).catch((err) => setError(err.message));
+  const loadUserCatalogEntries = useCallback(() => {
+    client.get('/user-catalog-entries').then((res) => setUserCatalogEntries(res.data)).catch((err) => setError(err.message));
   }, []);
 
   useEffect(() => {
     loadRacks();
     loadDevices();
     loadAllSlots();
-    loadCustomDevices();
-  }, [loadRacks, loadDevices, loadAllSlots, loadCustomDevices]);
+    loadUserCatalogEntries();
+  }, [loadRacks, loadDevices, loadAllSlots, loadUserCatalogEntries]);
 
   // Cross-link from Topology: ?highlightDevice=<id>
   useEffect(() => {
@@ -256,6 +259,79 @@ export default function RacksPage() {
     onOpenPortEditor: (device) => setPortEditorDevice(device),
   };
 
+  // ─── Generic catalog placement (quick-config step) ──────────────────────────
+  const requestPlacement = (pending) => setPendingPlacement(pending);
+  const cancelPlacement = () => setPendingPlacement(null);
+
+  const confirmPlacement = (fields) => {
+    if (!pendingPlacement) return;
+    const { source, entry, target } = pendingPlacement;
+    const renderType = fields.render_type;
+    const itemType = SIMPLE_ITEM_TYPES.includes(renderType) ? renderType : 'custom-device';
+    actions.onSlotCreate({
+      rack_id: target.rack_id,
+      item_type: itemType,
+      item_label: fields.label,
+      catalog_id: source === 'catalog' ? entry.id : null,
+      custom_type: renderType,
+      u_position: target.u_position,
+      u_size: fields.u_size,
+      mounted_face: target.mounted_face,
+      color: fields.color,
+      half_depth: fields.half_depth ? 1 : 0,
+      half_width: fields.half_width ? 1 : 0,
+      outlet_count: fields.outlet_count || null,
+      outlet_type: fields.outlet_type || null,
+      input_voltage: fields.input_voltage || null,
+      capacity_va: fields.capacity_va || null,
+      port_count: fields.port_count || null,
+      bay_count: fields.bay_count || null,
+    });
+    setPendingPlacement(null);
+  };
+
+  // ─── User catalog entries ("Save to Catalog" / Custom tab) ──────────────────
+  const saveSlotToCatalog = async (slot, name) => {
+    try {
+      const res = await client.post('/user-catalog-entries', {
+        name,
+        render_type: slot.custom_type || slot.item_type,
+        u_size: slot.u_size,
+        color: slot.color,
+        half_width: slot.half_width,
+        half_depth: slot.half_depth,
+        mounted_face: slot.mounted_face || slot.front_back || 'front',
+        outlet_count: slot.outlet_count,
+        outlet_type: slot.outlet_type,
+        input_voltage: slot.input_voltage,
+        capacity_va: slot.capacity_va,
+        port_count: slot.port_count,
+        bay_count: slot.bay_count,
+      });
+      setUserCatalogEntries((cur) => [...cur, res.data]);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const renameCustomEntry = async (id, name) => {
+    try {
+      const res = await client.put(`/user-catalog-entries/${id}`, { name });
+      setUserCatalogEntries((cur) => cur.map((c) => (c.id === id ? res.data : c)));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const deleteCustomEntry = async (id) => {
+    try {
+      await client.delete(`/user-catalog-entries/${id}`);
+      setUserCatalogEntries((cur) => cur.filter((c) => c.id !== id));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
   const handleAddRack = async (rack) => {
     const res = await client.post('/racks', rack);
     loadRacks();
@@ -365,11 +441,12 @@ export default function RacksPage() {
       slot={selectedSlot}
       rackHeight={selectedSlotRack?.u_height || 42}
       rackSlots={allSlots.filter((s) => s.rack_id === selectedSlot.rack_id)}
-      rackCustomDevices={rackCustomDevices}
+      userCatalogEntries={userCatalogEntries}
       actions={actions}
       onClose={() => setSelectedSlotId(null)}
       onUpdated={handleSlotUpdatedFromPanel}
       onSelectSlot={handleSelectSlot}
+      onSaveToCatalog={saveSlotToCatalog}
     />
   ) : (focusedRack && rackEditOpen) ? (
     <RackEditPanel
@@ -419,28 +496,23 @@ export default function RacksPage() {
             racks={racks}
             allSlots={allSlots}
             devices={devices}
-            rackCustomDevices={rackCustomDevices}
+            userCatalogEntries={userCatalogEntries}
             focusedRackId={focusedRackId}
             actions={actions}
-            onCustomDeviceCreated={(custom) => setRackCustomDevices((prev) => [...prev, custom])}
-            onCustomDeviceDeleted={async (id) => {
-              try {
-                await client.delete(`/rack-custom-devices/${id}`);
-                setRackCustomDevices((prev) => prev.filter((c) => c.id !== id));
-              } catch (err) {
-                setError(err.response?.data?.error || err.message);
-              }
-            }}
+            onRequestPlacement={requestPlacement}
+            onCustomEntryRenamed={renameCustomEntry}
+            onCustomEntryDeleted={deleteCustomEntry}
           />
         )}
 
         <RackCanvas
           racks={racks}
           allSlots={allSlots}
-          rackCustomDevices={rackCustomDevices}
+          userCatalogEntries={userCatalogEntries}
           highlightedSlotId={highlightedSlotId}
           selectedSlotId={selectedSlotId}
           actions={actions}
+          onRequestPlacement={requestPlacement}
           cableViewEnabled={cableViewEnabled}
           focusedRackId={focusedRackId}
           onFocusRack={setFocusedRackId}
@@ -528,6 +600,10 @@ export default function RacksPage() {
       )}
 
       {addRackOpen && <AddRackModal onClose={() => setAddRackOpen(false)} onCreate={handleAddRack} />}
+
+      {pendingPlacement && (
+        <QuickConfigModal pending={pendingPlacement} onConfirm={confirmPlacement} onCancel={cancelPlacement} />
+      )}
 
       {portEditorDevice && (
         <PortEditorModal device={portEditorDevice} devices={devices} onClose={() => setPortEditorDevice(null)} />

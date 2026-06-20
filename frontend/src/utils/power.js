@@ -1,6 +1,9 @@
 import { resolveRenderType } from '../components/racks/deviceRenderConfig';
 
-const PASSIVE_RENDER_TYPES = new Set(['blank', 'patch-panel', 'cable-manager']);
+const PASSIVE_RENDER_TYPES = new Set([
+  'blank', 'patch-panel', 'patch-panel-copper', 'patch-panel-fiber',
+  'cable-manager', 'keystone', 'shelf', 'drawer',
+]);
 
 // Devices with no power cord — nothing to plug in or be plugged into.
 export function isPassiveItem(slot) {
@@ -10,7 +13,7 @@ export function isPassiveItem(slot) {
 // PDU/UPS: provides outlets that other devices can be plugged into.
 export function isPowerDevice(slot) {
   const type = resolveRenderType(slot);
-  return type === 'ups' || type === 'pdu';
+  return type === 'ups' || type === 'pdu' || type === 'pdu-vertical';
 }
 
 // UPS specifically — the only device type that can host vertical PDUs.

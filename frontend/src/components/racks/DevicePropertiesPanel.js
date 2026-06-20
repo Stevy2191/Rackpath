@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2 } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus } from 'lucide-react';
 import client from '../../api/client';
 import {
   isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel,
   buildOutletOptions, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet,
 } from '../../utils/power';
 import { pduCatalogEntries } from './rackCatalog';
+import { COLOR_SWATCHES, getFieldSchema } from './deviceFieldSchemas';
+import DeviceConfigFields from './DeviceConfigFields';
+import { resolveRenderType } from './deviceRenderConfig';
 import './DevicePropertiesPanel.css';
 
 const FACE_OPTIONS = [
@@ -19,24 +22,18 @@ const MOUNT_SIDE_OPTIONS = [
   { value: 'right', label: 'Right' },
 ];
 
-const VOLTAGE_OPTIONS = ['120V', '208V', '240V'];
-
-const COLOR_SWATCHES = [
-  '#4adede', '#34d976', '#f59e0b', '#ef4444',
-  '#a78bfa', '#fb923c', '#38bdf8', '#f472b6',
-  null, // null = clear
-];
-
 const WALL_DIRECT = '';
 
 function outletValue(sourceSlotId, outlet) {
   return sourceSlotId ? `${sourceSlotId}:${outlet}` : WALL_DIRECT;
 }
 
-export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, rackCustomDevices, actions, onClose, onUpdated, onSelectSlot }) {
+export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [savingToCatalog, setSavingToCatalog] = useState(false);
+  const [catalogName, setCatalogName] = useState('');
   const frontFileRef = useRef(null);
   const rearFileRef = useRef(null);
   const saveTimer = useRef(null);
@@ -45,6 +42,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, rac
   const passive = slot ? isPassiveItem(slot) : false;
   const isPower = slot ? isPowerDevice(slot) : false;
   const isUpsSlot = slot ? isUps(slot) : false;
+  const configSchema = slot ? getFieldSchema(resolveRenderType(slot)) : [];
 
   // Reset form when slot changes
   useEffect(() => {
@@ -64,10 +62,14 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, rac
       outlet_count:        slot.outlet_count         ?? '',
       outlet_type:         slot.outlet_type          || '',
       input_voltage:        slot.input_voltage        || '',
+      capacity_va:          slot.capacity_va          ?? '',
+      port_count:           slot.port_count           ?? '',
+      bay_count:            slot.bay_count            ?? '',
       power_source_slot_id: slot.power_source_slot_id || null,
       power_source_outlet:  slot.power_source_outlet  || null,
     });
     setError(null);
+    setSavingToCatalog(false);
   }, [slot]);
 
   if (!slot || !fields) return null;
@@ -225,6 +227,45 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, rac
             onChange={(e) => setField('item_label', e.target.value)}
             placeholder="Device name..."
           />
+        </div>
+
+        {/* Save to Catalog */}
+        <div className="props-field">
+          {savingToCatalog ? (
+            <div className="props-save-catalog-row">
+              <input
+                className="props-input"
+                value={catalogName}
+                onChange={(e) => setCatalogName(e.target.value)}
+                placeholder="Name for this catalog entry"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Escape') setSavingToCatalog(false); }}
+              />
+              <button
+                type="button"
+                className="props-upload-btn"
+                onClick={() => {
+                  const name = catalogName.trim();
+                  if (!name) return;
+                  onSaveToCatalog(slot, name);
+                  setSavingToCatalog(false);
+                }}
+              >
+                Save
+              </button>
+              <button type="button" className="props-upload-btn" onClick={() => setSavingToCatalog(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="props-upload-btn"
+              onClick={() => { setCatalogName(fields.item_label || 'Untitled device'); setSavingToCatalog(true); }}
+            >
+              <BookmarkPlus size={12} /> Save to Catalog
+            </button>
+          )}
         </div>
 
         {/* U Height */}
@@ -403,48 +444,16 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, rac
           />
         </div>
 
+        {configSchema.length > 0 && (
+          <>
+            <div className="props-section-divider">Configuration</div>
+            <DeviceConfigFields schema={configSchema} values={fields} onChange={setField} />
+          </>
+        )}
+
         {!passive && (
           <>
             <div className="props-section-divider">Power</div>
-
-            {isPower && (
-              <>
-                {/* Outlet spec overrides */}
-                <div className="props-field">
-                  <label className="props-field-label">Outlet Count</label>
-                  <input
-                    className="props-input"
-                    type="number"
-                    min="0"
-                    value={fields.outlet_count}
-                    onChange={(e) => setField('outlet_count', e.target.value === '' ? null : Number(e.target.value))}
-                    placeholder="e.g. 8"
-                  />
-                </div>
-                <div className="props-field">
-                  <label className="props-field-label">Outlet Type</label>
-                  <input
-                    className="props-input"
-                    value={fields.outlet_type}
-                    onChange={(e) => setField('outlet_type', e.target.value)}
-                    placeholder="e.g. NEMA 5-15R, C13, C19"
-                  />
-                </div>
-                <div className="props-field">
-                  <label className="props-field-label">Input Voltage</label>
-                  <select
-                    className="props-input"
-                    value={fields.input_voltage}
-                    onChange={(e) => setField('input_voltage', e.target.value)}
-                  >
-                    <option value="">Unset</option>
-                    {VOLTAGE_OPTIONS.map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
 
             {/* Plugged Into */}
             <div className="props-field">
@@ -496,7 +505,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, rac
           <VerticalPduSection
             ups={slot}
             rackSlots={rackSlots || []}
-            rackCustomDevices={rackCustomDevices || []}
+            userCatalogEntries={userCatalogEntries || []}
             rackHeight={rackHeight}
             actions={actions}
             onSelectSlot={onSelectSlot}
@@ -531,11 +540,11 @@ function PowerOutletList({ slot, rackSlots, onSelectSlot }) {
   );
 }
 
-function VerticalPduSection({ ups, rackSlots, rackCustomDevices, rackHeight, actions, onSelectSlot }) {
+function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, actions, onSelectSlot }) {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState(null);
   const catalogEntries = pduCatalogEntries();
-  const customPdus = rackCustomDevices.filter((c) => c.type === 'pdu');
+  const customPdus = userCatalogEntries.filter((c) => c.render_type === 'pdu' || c.render_type === 'pdu-vertical');
   const [sourceKey, setSourceKey] = useState('');
 
   const attached = verticalPdusForUps(rackSlots, ups.id);
@@ -558,7 +567,6 @@ function VerticalPduSection({ ups, rackSlots, rackCustomDevices, rackHeight, act
       if (!entry) return;
       payload = {
         item_label: entry.name,
-        vendor: entry.vendor,
         catalog_id: entry.id,
         custom_type: entry.renderType,
         outlet_count: entry.outletCount,
@@ -570,9 +578,7 @@ function VerticalPduSection({ ups, rackSlots, rackCustomDevices, rackHeight, act
       if (!custom) return;
       payload = {
         item_label: custom.name,
-        vendor: custom.vendor,
-        custom_type: custom.type,
-        custom_image_url: custom.image_url,
+        custom_type: custom.render_type,
         outlet_count: custom.outlet_count,
         outlet_type: custom.outlet_type,
         input_voltage: custom.input_voltage,
@@ -631,7 +637,7 @@ function VerticalPduSection({ ups, rackSlots, rackCustomDevices, rackHeight, act
             {catalogEntries.length > 0 && (
               <optgroup label="Catalog">
                 {catalogEntries.map((c) => (
-                  <option key={c.id} value={`catalog:${c.id}`}>{c.vendor} {c.name}</option>
+                  <option key={c.id} value={`catalog:${c.id}`}>{c.name}</option>
                 ))}
               </optgroup>
             )}
