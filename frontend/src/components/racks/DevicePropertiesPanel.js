@@ -231,45 +231,6 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
           />
         </div>
 
-        {/* Save to Catalog */}
-        <div className="props-field">
-          {savingToCatalog ? (
-            <div className="props-save-catalog-row">
-              <input
-                className="props-input"
-                value={catalogName}
-                onChange={(e) => setCatalogName(e.target.value)}
-                placeholder="Name for this catalog entry"
-                autoFocus
-                onKeyDown={(e) => { if (e.key === 'Escape') setSavingToCatalog(false); }}
-              />
-              <button
-                type="button"
-                className="props-upload-btn"
-                onClick={() => {
-                  const name = catalogName.trim();
-                  if (!name) return;
-                  onSaveToCatalog(slot, name);
-                  setSavingToCatalog(false);
-                }}
-              >
-                Save
-              </button>
-              <button type="button" className="props-upload-btn" onClick={() => setSavingToCatalog(false)}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="props-upload-btn"
-              onClick={() => { setCatalogName(fields.item_label || 'Untitled device'); setSavingToCatalog(true); }}
-            >
-              <BookmarkPlus size={12} /> Save to Catalog
-            </button>
-          )}
-        </div>
-
         {/* U Height */}
         <div className="props-field">
           <label className="props-field-label">Height (U)</label>
@@ -583,6 +544,41 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
 
         <div className="props-section-divider">Actions</div>
         <div className="props-danger-zone">
+          {savingToCatalog ? (
+            <div className="props-save-catalog-row">
+              <input
+                className="props-input"
+                value={catalogName}
+                onChange={(e) => setCatalogName(e.target.value)}
+                placeholder="Name for this catalog entry"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Escape') setSavingToCatalog(false); }}
+              />
+              <button
+                type="button"
+                className="props-upload-btn"
+                onClick={() => {
+                  const name = catalogName.trim();
+                  if (!name) return;
+                  onSaveToCatalog(slot, name);
+                  setSavingToCatalog(false);
+                }}
+              >
+                Save
+              </button>
+              <button type="button" className="props-upload-btn" onClick={() => setSavingToCatalog(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="props-upload-btn"
+              onClick={() => { setCatalogName(fields.item_label || 'Untitled device'); setSavingToCatalog(true); }}
+            >
+              <BookmarkPlus size={12} /> Save to Catalog
+            </button>
+          )}
           <button type="button" className="props-upload-btn" onClick={() => onDuplicate(slot)}>
             <Copy size={12} /> Duplicate Device
           </button>
