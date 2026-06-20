@@ -1,10 +1,55 @@
-// Shared helper for placing a multi-U device relative to the rack row it was
-// dropped on. Drops are normally anchored so the drop row becomes the
-// device's topmost U, but that anchoring can push the device past U1 (the
-// bottom of the rack) or past the rack's top. Clamping here lets the device
-// slide the other direction so it still lands at the drop point whenever the
-// rack has enough total U's, regardless of which edge the drop is near.
-export function clampUPosition(dropU, uSize, rackUHeight) {
-  const desired = dropU - uSize + 1;
-  return Math.max(1, Math.min(rackUHeight - uSize + 1, desired));
+// Shared helpers for placing a multi-U device relative to the rack row it
+// was dropped on.
+//
+// Drops are normally anchored so the drop row becomes the device's topmost
+// U (the device extends downward from the cursor). That anchoring can push
+// the device past U1 (the bottom of the rack) or, when the row directly
+// below the drop point is already occupied (e.g. dropping on the empty row
+// right above an existing device to stack on top of it), into a collision
+// that a bottom-anchored placement at the same drop point would have
+// avoided. `resolveUPosition` tries the top-anchored position first and
+// falls back to bottom-anchored (device extends upward from the cursor)
+// whenever that avoids the problem, so the device still lands at the drop
+// point as long as the rack has room in either direction.
+
+function clampToRackRange(pos, uSize, rackUHeight) {
+  return Math.max(1, Math.min(rackUHeight - uSize + 1, pos));
+}
+
+// isFree(pos) must report whether the uSize-tall span starting at `pos` is
+// free of collisions (excluding the slot being moved, if any).
+export function resolveUPosition(dropU, uSize, rackUHeight, isFree) {
+  const topAnchored = clampToRackRange(dropU - uSize + 1, uSize, rackUHeight);
+  if (isFree(topAnchored)) return topAnchored;
+
+  const bottomAnchored = clampToRackRange(dropU, uSize, rackUHeight);
+  if (isFree(bottomAnchored)) return bottomAnchored;
+
+  return topAnchored;
+}
+
+export function isSpanFree(pos, uSize, occupied) {
+  for (let u = pos; u < pos + uSize; u++) {
+    if (occupied.has(u)) return false;
+  }
+  return true;
+}
+
+// Builds the set of U rows occupied on a given face of a rack, for a quick
+// client-side collision heuristic. This intentionally ignores half-width
+// nuances (two half-width devices can share U rows on opposite halves) —
+// the backend remains the authoritative collision check; this is only used
+// to pick which anchor direction to try first.
+export function buildOccupiedSet(slots, rackId, face, excludeSlotId) {
+  const occupied = new Set();
+  for (const s of slots) {
+    if (s.rack_id !== rackId) continue;
+    if (excludeSlotId != null && String(s.id) === String(excludeSlotId)) continue;
+    const mountedFace = s.mounted_face || s.front_back || 'front';
+    const matches = face === 'both' || mountedFace === 'both' || mountedFace === face;
+    if (!matches) continue;
+    const top = s.u_position + s.u_size - 1;
+    for (let u = s.u_position; u <= top; u++) occupied.add(u);
+  }
+  return occupied;
 }
