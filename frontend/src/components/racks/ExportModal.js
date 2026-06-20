@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toPng, toJpeg, toSvg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { CATEGORY_CONFIG, resolveRenderType } from './deviceRenderConfig';
+import {
+  isPowerDevice, isPassiveItem, isUps, getPowerLabel, flattenOutlets, verticalPdusForUps, listPowerSources,
+} from '../../utils/power';
 import './ExportModal.css';
 
 const EXPORT_SCALE = Math.max(window.devicePixelRatio || 1, 3);
@@ -48,6 +51,14 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+// Truncates text with an ellipsis so it fits maxWidthPx under ctx's current font.
+function truncateToWidth(ctx, text, maxWidthPx) {
+  let result = text;
+  while (result.length > 1 && ctx.measureText(result).width > maxWidthPx) result = result.slice(0, -1);
+  if (result !== text) result = `${result.slice(0, -1)}…`;
+  return result;
 }
 
 async function withClasses(el, classes, fn) {
@@ -179,9 +190,15 @@ async function compositeRacks(captures, { theme, scale, format }) {
   return { dataUrl: canvas.toDataURL(mime, 0.95), cssW: totalCssW, cssH: totalCssH };
 }
 
-// ─── Composite a legend panel to the top-right of the rack image ──────────────
-// Returns { dataUrl, cssW, cssH } with updated (expanded) dimensions.
-async function compositeWithLegend(dataUrl, cssW, cssH, slots, { theme, scale }) {
+// ─── Legend panel: device type → color swatch, one entry per type ─────────────
+const LEG_SWATCH   = 11;   // colored swatch size
+const LEG_ROW_H    = 20;   // height per entry row
+const LEG_HEADER_H = 22;   // "LEGEND" header row
+const LEG_PADV     = 10;   // top/bottom padding inside panel
+const LEG_PADH     = 12;   // left/right padding inside panel
+const LEG_FONT_SZ  = 10;
+
+function buildLegendItems(slots) {
   // Build unique device-type entries (skip blanks, one per type)
   const seen = new Map();
   for (const s of slots) {
@@ -193,103 +210,299 @@ async function compositeWithLegend(dataUrl, cssW, cssH, slots, { theme, scale })
       seen.set(type, { color, label, uSize: s.u_size });
     }
   }
+  return [...seen.values()];
+}
 
-  const items = [...seen.values()];
-  if (items.length === 0) return { dataUrl, cssW, cssH };
+function measureLegendHeight(items) {
+  return LEG_PADV * 2 + LEG_HEADER_H + items.length * LEG_ROW_H;
+}
 
-  // Legend panel dimensions (CSS px)
-  const LEG_W    = 168;  // legend panel width
-  const LEG_GAP  = 20;   // gap between rack image and legend panel
-  const SWATCH   = 11;   // colored swatch size
-  const ROW_H    = 20;   // height per entry row
-  const HEADER_H = 22;   // "LEGEND" header row
-  const LEG_PADV = 10;   // top/bottom padding inside panel
-  const LEG_PADH = 12;   // left/right padding inside panel
-  const FONT_SZ  = 10;
+// Draws the legend panel with its top-left at (x, y), both already in
+// physical (scaled) px, with the given panel width (also physical px).
+function drawLegendPanel(ctx, x, y, panelW, items, { theme, scale }) {
+  const s = scale;
+  const panelH = measureLegendHeight(items) * s;
 
-  const legContentH = LEG_PADV * 2 + HEADER_H + items.length * ROW_H;
-  const TOP_OFFSET  = 20;  // drop legend 20px from top so it doesn't crowd the rack name
+  const panelBg  = theme === 'light' ? 'rgba(200,210,225,0.55)' : 'rgba(26,28,36,0.96)';
+  const panelBrd = theme === 'light' ? '#a8b4c4' : '#2a2e38';
 
-  const totalCssW = cssW + LEG_GAP + LEG_W;
-  const totalCssH = Math.max(cssH, TOP_OFFSET + legContentH + 24);
+  ctx.fillStyle = panelBg;
+  roundRect(ctx, x, y, panelW, panelH, 6 * s);
+  ctx.fill();
+  ctx.strokeStyle = panelBrd;
+  ctx.lineWidth = 1 * s;
+  roundRect(ctx, x, y, panelW, panelH, 6 * s);
+  ctx.stroke();
+
+  const hdrColor = theme === 'light' ? '#607080' : '#6b7280';
+  const sepColor = theme === 'light' ? '#a8b4c4' : '#2a2e38';
+  const txtColor = theme === 'light' ? '#263040' : '#d4d8e0';
+
+  ctx.fillStyle = hdrColor;
+  ctx.font = `bold ${Math.round(8 * s)}px monospace`;
+  ctx.fillText('LEGEND', x + LEG_PADH * s, y + (LEG_PADV + 12) * s);
+
+  ctx.fillStyle = sepColor;
+  ctx.fillRect(x + LEG_PADH * s, y + (LEG_PADV + LEG_HEADER_H - 2) * s, panelW - LEG_PADH * 2 * s, Math.max(1, Math.round(s)));
+
+  ctx.font = `${Math.round(LEG_FONT_SZ * s)}px monospace`;
+
+  for (let i = 0; i < items.length; i++) {
+    const { color, label, uSize } = items[i];
+    const rowTop = y + (LEG_PADV + LEG_HEADER_H + i * LEG_ROW_H) * s;
+    const rowMid = rowTop + (LEG_ROW_H / 2) * s;
+    const swX = x + LEG_PADH * s;
+    const swY = rowMid - (LEG_SWATCH / 2) * s;
+
+    ctx.fillStyle = color;
+    roundRect(ctx, swX, swY, LEG_SWATCH * s, LEG_SWATCH * s, 3 * s);
+    ctx.fill();
+
+    const fullLabel = `${label} (${uSize}U)`;
+    ctx.fillStyle = txtColor;
+    const maxW = panelW - (LEG_PADH * 2 + LEG_SWATCH + 8) * s;
+    const text = truncateToWidth(ctx, fullLabel, maxW);
+    ctx.fillText(text, swX + (LEG_SWATCH + 7) * s, rowMid + 4 * s);
+  }
+}
+
+// ─── Power summary: per-device outlet map + a device → plugged-into table ─────
+const POW_PADV         = 10;
+const POW_PADH         = 12;
+const POW_HEADER_H     = 22;  // "POWER" header row
+const POW_SUB_H        = 16;  // device label sub-header
+const POW_INPUT_H      = 13;  // "Input: ..." line
+const POW_TYPE_H       = 13;  // outlet-type sub-group header (e.g. "C13")
+const POW_OUTLET_H     = 12;  // one numbered outlet row
+const POW_BLOCK_GAP    = 7;   // gap between two devices' outlet-map blocks
+const POW_SECTION_GAP  = 12;  // gap between outlet map and connections table
+const POW_TABLE_HEADER_H = 15;
+const POW_TABLE_ROW_H  = 12;
+const POW_FONT_SZ      = 9;
+const POW_FONT_SZ_SM   = 8;   // outlet rows / table rows — kept small so the panel stays compact
+
+// Vertical PDUs are floating 0U elements owned by a UPS — list each main
+// power device top-of-rack-first, with any vertical PDUs it owns
+// immediately following it (any orphaned ones, if that ever happens, at
+// the end so nothing silently disappears from the summary).
+function orderPowerDevices(slots) {
+  const main = slots
+    .filter((s) => isPowerDevice(s) && s.item_type !== 'vertical-pdu')
+    .sort((a, b) => b.u_position - a.u_position);
+
+  const result = [];
+  const seen = new Set();
+  for (const dev of main) {
+    result.push(dev);
+    seen.add(dev.id);
+    if (isUps(dev)) {
+      for (const vpdu of verticalPdusForUps(slots, dev.id)) {
+        result.push(vpdu);
+        seen.add(vpdu.id);
+      }
+    }
+  }
+  for (const s of slots) {
+    if (s.item_type === 'vertical-pdu' && !seen.has(s.id)) result.push(s);
+  }
+  return result;
+}
+
+// Pure data model — no canvas. { outletBlocks, connections, hasContent }
+function buildPowerSummaryModel(slots) {
+  const powerDevices = orderPowerDevices(slots);
+  if (powerDevices.length === 0) return { outletBlocks: [], connections: [], hasContent: false };
+
+  const sourceById = new Map(listPowerSources(slots).map((entry) => [entry.slot.id, entry]));
+
+  const outletBlocks = powerDevices.map((dev) => {
+    const entry = sourceById.get(dev.id);
+    const groups = [];
+    if (entry) {
+      let curType = null;
+      let curRows = null;
+      for (const o of entry.outlets) {
+        if (o.type !== curType) {
+          curType = o.type;
+          curRows = [];
+          groups.push({ type: curType, rows: curRows });
+        }
+        curRows.push({
+          index: o.indexInGroup,
+          label: o.occupant ? getPowerLabel(o.occupant) : 'Empty',
+          empty: !o.occupant,
+        });
+      }
+    }
+    return {
+      label: getPowerLabel(dev),
+      inputLine: `Input: ${dev.input_plug_type || '—'} · ${dev.input_voltage || '—'}`,
+      groups,
+    };
+  });
+
+  // Every non-power, non-passive device (passive items like blanks/patch
+  // panels/shelves have no power cord, so they're not relevant here).
+  const connections = slots
+    .filter((s) => !isPowerDevice(s) && !isPassiveItem(s) && s.item_type !== 'vertical-pdu')
+    .sort((a, b) => b.u_position - a.u_position)
+    .map((s) => {
+      const source = s.power_source_slot_id ? slots.find((x) => x.id === s.power_source_slot_id) : null;
+      if (!source) return { device: getPowerLabel(s), pluggedInto: 'Wall (Direct)', dim: true };
+      const outlet = flattenOutlets(source).find((o) => o.n === s.power_source_outlet);
+      const outletLabel = outlet ? `${outlet.type} Outlet ${outlet.indexInGroup}` : `Outlet ${s.power_source_outlet}`;
+      return { device: getPowerLabel(s), pluggedInto: `${getPowerLabel(source)} → ${outletLabel}`, dim: false };
+    });
+
+  return { outletBlocks, connections, hasContent: true };
+}
+
+function measurePowerSummaryHeight(model) {
+  if (!model.hasContent) return 0;
+  let h = POW_PADV * 2 + POW_HEADER_H;
+  model.outletBlocks.forEach((b, i) => {
+    if (i > 0) h += POW_BLOCK_GAP;
+    h += POW_SUB_H + POW_INPUT_H;
+    b.groups.forEach((g) => { h += POW_TYPE_H + g.rows.length * POW_OUTLET_H; });
+  });
+  if (model.connections.length > 0) {
+    h += POW_SECTION_GAP + POW_TABLE_HEADER_H + model.connections.length * POW_TABLE_ROW_H;
+  }
+  return h;
+}
+
+// Draws the power summary panel with its top-left at (x, y), both already in
+// physical (scaled) px, with the given panel width (also physical px).
+function drawPowerSummaryPanel(ctx, x, y, panelW, model, { theme, scale }) {
+  const s = scale;
+  const panelH = measurePowerSummaryHeight(model) * s;
+
+  const panelBg  = theme === 'light' ? 'rgba(200,210,225,0.55)' : 'rgba(26,28,36,0.96)';
+  const panelBrd = theme === 'light' ? '#a8b4c4' : '#2a2e38';
+  const hdrColor = theme === 'light' ? '#607080' : '#6b7280';
+  const sepColor = theme === 'light' ? '#a8b4c4' : '#2a2e38';
+  const txtColor = theme === 'light' ? '#263040' : '#d4d8e0';
+  const dimColor = theme === 'light' ? '#8a96a8' : '#5a6170';
+
+  ctx.fillStyle = panelBg;
+  roundRect(ctx, x, y, panelW, panelH, 6 * s);
+  ctx.fill();
+  ctx.strokeStyle = panelBrd;
+  ctx.lineWidth = 1 * s;
+  roundRect(ctx, x, y, panelW, panelH, 6 * s);
+  ctx.stroke();
+
+  ctx.fillStyle = hdrColor;
+  ctx.font = `bold ${Math.round(8 * s)}px monospace`;
+  ctx.fillText('POWER', x + POW_PADH * s, y + (POW_PADV + 12) * s);
+  ctx.fillStyle = sepColor;
+  ctx.fillRect(x + POW_PADH * s, y + (POW_PADV + POW_HEADER_H - 2) * s, panelW - POW_PADH * 2 * s, Math.max(1, Math.round(s)));
+
+  const innerMaxW = panelW - POW_PADH * 2 * s;
+  let cy = y + (POW_PADV + POW_HEADER_H) * s;
+
+  // ── Section 1: outlet map ──────────────────────────────────────────────
+  model.outletBlocks.forEach((block, bi) => {
+    if (bi > 0) cy += POW_BLOCK_GAP * s;
+
+    ctx.font = `bold ${Math.round(POW_FONT_SZ * s)}px monospace`;
+    ctx.fillStyle = txtColor;
+    ctx.fillText(truncateToWidth(ctx, block.label, innerMaxW), x + POW_PADH * s, cy + 11 * s);
+    cy += POW_SUB_H * s;
+
+    ctx.font = `${Math.round(POW_FONT_SZ_SM * s)}px monospace`;
+    ctx.fillStyle = dimColor;
+    ctx.fillText(truncateToWidth(ctx, block.inputLine, innerMaxW), x + POW_PADH * s, cy + 9 * s);
+    cy += POW_INPUT_H * s;
+
+    block.groups.forEach((group) => {
+      ctx.font = `bold ${Math.round(POW_FONT_SZ_SM * s)}px monospace`;
+      ctx.fillStyle = hdrColor;
+      ctx.fillText(truncateToWidth(ctx, group.type, innerMaxW), x + POW_PADH * s, cy + 10 * s);
+      cy += POW_TYPE_H * s;
+
+      ctx.font = `${Math.round(POW_FONT_SZ_SM * s)}px monospace`;
+      group.rows.forEach((row) => {
+        ctx.fillStyle = txtColor;
+        ctx.fillText(String(row.index), x + (POW_PADH + 2) * s, cy + 9 * s);
+        ctx.fillStyle = row.empty ? dimColor : txtColor;
+        const rowMaxW = innerMaxW - 20 * s;
+        ctx.fillText(truncateToWidth(ctx, row.label, rowMaxW), x + (POW_PADH + 20) * s, cy + 9 * s);
+        cy += POW_OUTLET_H * s;
+      });
+    });
+  });
+
+  // ── Section 2: device → plugged-into table ─────────────────────────────
+  if (model.connections.length > 0) {
+    cy += POW_SECTION_GAP * s;
+
+    ctx.font = `bold ${Math.round(POW_FONT_SZ_SM * s)}px monospace`;
+    ctx.fillStyle = hdrColor;
+    ctx.fillText('DEVICE → PLUGGED INTO', x + POW_PADH * s, cy + 10 * s);
+    cy += POW_TABLE_HEADER_H * s;
+
+    ctx.font = `${Math.round(POW_FONT_SZ_SM * s)}px monospace`;
+    const colSplit = Math.round(panelW * 0.32);
+    model.connections.forEach((row) => {
+      ctx.fillStyle = txtColor;
+      ctx.fillText(truncateToWidth(ctx, row.device, colSplit - POW_PADH * s), x + POW_PADH * s, cy + 9 * s);
+      ctx.fillStyle = row.dim ? dimColor : txtColor;
+      ctx.fillText(truncateToWidth(ctx, row.pluggedInto, panelW - colSplit - POW_PADH * s), x + colSplit, cy + 9 * s);
+      cy += POW_TABLE_ROW_H * s;
+    });
+  }
+}
+
+// ─── Composite the legend and/or power summary, stacked in one side column ────
+// Returns { dataUrl, cssW, cssH } with updated (expanded) dimensions.
+async function compositeSidePanel(dataUrl, cssW, cssH, slots, { theme, scale, includeLegend, includePowerSummary }) {
+  const legendItems = includeLegend ? buildLegendItems(slots) : [];
+  const powerModel = includePowerSummary ? buildPowerSummaryModel(slots) : { hasContent: false };
+
+  const legendH = legendItems.length > 0 ? measureLegendHeight(legendItems) : 0;
+  const powerH = powerModel.hasContent ? measurePowerSummaryHeight(powerModel) : 0;
+  if (legendH === 0 && powerH === 0) return { dataUrl, cssW, cssH };
+
+  const LEG_W = 168;   // legend-only column width (unchanged from before)
+  const POW_W = 260;   // wider column when the power summary is present, to fit "Device → Type Outlet N"
+  const SIDE_GAP = 20; // gap between rack image and the side column
+  const STACK_GAP = 14; // gap between legend and power summary within the column
+  const TOP_OFFSET = 20; // drop the column 20px from the top so it doesn't crowd the rack name
+  const BOTTOM_PAD = 24;
+
+  const colW = powerH > 0 ? POW_W : LEG_W;
+  const betweenGap = (legendH > 0 && powerH > 0) ? STACK_GAP : 0;
+  const colContentH = legendH + betweenGap + powerH;
+
+  const totalCssW = cssW + SIDE_GAP + colW;
+  const totalCssH = Math.max(cssH, TOP_OFFSET + colContentH + BOTTOM_PAD);
 
   const physW = totalCssW * scale;
   const physH = totalCssH * scale;
-  const s = scale; // shorthand
+  const s = scale;
 
   const canvas = document.createElement('canvas');
   canvas.width = physW;
   canvas.height = physH;
   const ctx = canvas.getContext('2d');
 
-  // Background fill
   ctx.fillStyle = bgFor(theme);
   ctx.fillRect(0, 0, physW, physH);
 
-  // Rack image — centered vertically on left side
   const rackOffsetY = Math.floor((totalCssH - cssH) / 2);
   const mainImg = await loadImage(dataUrl);
   ctx.drawImage(mainImg, 0, rackOffsetY * s, cssW * s, cssH * s);
 
-  // Legend panel
-  const legPanelX = (cssW + LEG_GAP) * s;
-  const legPanelY = TOP_OFFSET * s;
-  const legPanelW = LEG_W * s;
-  const legPanelH = legContentH * s;
+  const colX = (cssW + SIDE_GAP) * s;
+  let curY = TOP_OFFSET * s;
 
-  const panelBg  = theme === 'light' ? 'rgba(200,210,225,0.55)' : 'rgba(26,28,36,0.96)';
-  const panelBrd = theme === 'light' ? '#a8b4c4' : '#2a2e38';
-
-  ctx.fillStyle = panelBg;
-  roundRect(ctx, legPanelX, legPanelY, legPanelW, legPanelH, 6 * s);
-  ctx.fill();
-  ctx.strokeStyle = panelBrd;
-  ctx.lineWidth = 1 * s;
-  roundRect(ctx, legPanelX, legPanelY, legPanelW, legPanelH, 6 * s);
-  ctx.stroke();
-
-  // "LEGEND" header text
-  const hdrColor  = theme === 'light' ? '#607080' : '#6b7280';
-  const sepColor  = theme === 'light' ? '#a8b4c4' : '#2a2e38';
-  const txtColor  = theme === 'light' ? '#263040' : '#d4d8e0';
-
-  ctx.fillStyle = hdrColor;
-  ctx.font = `bold ${Math.round(8 * s)}px monospace`;
-  ctx.fillText('LEGEND', legPanelX + LEG_PADH * s, legPanelY + (LEG_PADV + 12) * s);
-
-  // Header separator line
-  ctx.fillStyle = sepColor;
-  ctx.fillRect(
-    legPanelX + LEG_PADH * s,
-    legPanelY + (LEG_PADV + HEADER_H - 2) * s,
-    (LEG_W - LEG_PADH * 2) * s,
-    Math.max(1, Math.round(s)),
-  );
-
-  // Entry rows
-  ctx.font = `${Math.round(FONT_SZ * s)}px monospace`;
-
-  for (let i = 0; i < items.length; i++) {
-    const { color, label, uSize } = items[i];
-    const rowTop = legPanelY + (LEG_PADV + HEADER_H + i * ROW_H) * s;
-    const rowMid = rowTop + (ROW_H / 2) * s;
-    const swX    = legPanelX + LEG_PADH * s;
-    const swY    = rowMid - (SWATCH / 2) * s;
-
-    // Colored swatch
-    ctx.fillStyle = color;
-    roundRect(ctx, swX, swY, SWATCH * s, SWATCH * s, 3 * s);
-    ctx.fill();
-
-    // Label "(NNU)"
-    const fullLabel = `${label} (${uSize}U)`;
-    ctx.fillStyle = txtColor;
-    // Truncate if too long for the panel
-    let text = fullLabel;
-    const maxW = (LEG_W - LEG_PADH * 2 - SWATCH - 8) * s;
-    while (text.length > 4 && ctx.measureText(text).width > maxW) text = text.slice(0, -1);
-    if (text !== fullLabel) text += '…';
-    ctx.fillText(text, swX + (SWATCH + 7) * s, rowMid + 4 * s);
+  if (legendH > 0) {
+    drawLegendPanel(ctx, colX, curY, colW * s, legendItems, { theme, scale: s });
+    curY += (legendH + betweenGap) * s;
+  }
+  if (powerH > 0) {
+    drawPowerSummaryPanel(ctx, colX, curY, colW * s, powerModel, { theme, scale: s });
   }
 
   return { dataUrl: canvas.toDataURL('image/png'), cssW: totalCssW, cssH: totalCssH };
@@ -338,7 +551,7 @@ function downloadCsv(targetRacks, allSlots) {
 
 // ─── Main export orchestration ────────────────────────────────────────────────
 
-async function performExport(targetRacks, allSlots, { format, view, theme, includeLegend }) {
+async function performExport(targetRacks, allSlots, { format, view, theme, includeLegend, includePowerSummary }) {
   if (format === 'csv') { downloadCsv(targetRacks, allSlots); return; }
 
   const scale = EXPORT_SCALE;
@@ -362,10 +575,10 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
 
   let { dataUrl, cssW, cssH } = result;
 
-  if (includeLegend && format !== 'svg') {
+  if ((includeLegend || includePowerSummary) && format !== 'svg') {
     const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-    const legResult = await compositeWithLegend(dataUrl, cssW, cssH, slots, { theme, scale });
-    ({ dataUrl, cssW, cssH } = legResult);
+    const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, { theme, scale, includeLegend, includePowerSummary });
+    ({ dataUrl, cssW, cssH } = sideResult);
   }
 
   const filename = targetRacks.length === 1
@@ -394,6 +607,7 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
   const [view, setView] = useState('side-by-side');
   const [theme, setTheme] = useState('dark');
   const [includeLegend, setIncludeLegend] = useState(false);
+  const [includePowerSummary, setIncludePowerSummary] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -403,7 +617,7 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
   const isSingle = targetRacks.length === 1;
   const title = isSingle ? `Export — ${targetRacks[0]?.name}` : `Export All Racks (${targetRacks.length})`;
 
-  const generatePreview = useCallback(async ({ format: f, view: v, theme: t, includeLegend: il }) => {
+  const generatePreview = useCallback(async ({ format: f, view: v, theme: t, includeLegend: il, includePowerSummary: ips }) => {
     if (!['png', 'jpeg', 'svg', 'pdf'].includes(f)) { setPreviewUrl(null); return; }
     setPreviewLoading(true);
     setPreviewError(false);
@@ -421,10 +635,10 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
       if (!result) { setPreviewError(true); return; }
 
       let { dataUrl, cssW, cssH } = result;
-      if (il) {
+      if (il || ips) {
         const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-        const legResult = await compositeWithLegend(dataUrl, cssW, cssH, slots, { theme: t, scale: PREVIEW_SCALE });
-        dataUrl = legResult.dataUrl;
+        const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, { theme: t, scale: PREVIEW_SCALE, includeLegend: il, includePowerSummary: ips });
+        dataUrl = sideResult.dataUrl;
       }
       setPreviewUrl(dataUrl);
     } catch (err) {
@@ -439,14 +653,14 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
   useEffect(() => {
     if (!isVisual) { setPreviewUrl(null); return; }
     setPreviewLoading(true);
-    const timer = setTimeout(() => generatePreview({ format, view, theme, includeLegend }), PREVIEW_DEBOUNCE);
+    const timer = setTimeout(() => generatePreview({ format, view, theme, includeLegend, includePowerSummary }), PREVIEW_DEBOUNCE);
     return () => clearTimeout(timer);
-  }, [format, view, theme, includeLegend, isVisual, generatePreview]);
+  }, [format, view, theme, includeLegend, includePowerSummary, isVisual, generatePreview]);
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      await performExport(targetRacks, allSlots, { format, view, theme, includeLegend });
+      await performExport(targetRacks, allSlots, { format, view, theme, includeLegend, includePowerSummary });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Export failed', err);
@@ -508,6 +722,17 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
                   onChange={(e) => setIncludeLegend(e.target.checked)}
                 />
                 Include device legend
+              </label>
+            )}
+
+            {isVisual && (
+              <label className="em-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={includePowerSummary}
+                  onChange={(e) => setIncludePowerSummary(e.target.checked)}
+                />
+                Include power summary
               </label>
             )}
           </div>
