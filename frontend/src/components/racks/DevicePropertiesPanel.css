@@ -20,6 +20,123 @@
   gap: 8px;
 }
 
+/* ─── General/Power tabs (UPS, PDU) ───────────────────────── */
+.props-tabs {
+  display: flex;
+  border-bottom: 1px solid #2a2e38;
+  flex-shrink: 0;
+}
+
+.props-tabs button {
+  flex: 1;
+  padding: 7px 4px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.props-tabs button:hover { color: #d4d8e0; }
+
+.props-tabs button.active {
+  color: #4adede;
+  border-bottom-color: #4adede;
+}
+
+/* ─── Collapsible Power accordion (non-power devices) ─────── */
+.props-collapsible {
+  border: 1px solid #1e2128;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.props-collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  background: #161820;
+  color: #8b91a1;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.props-collapsible-header:hover { color: #d4d8e0; }
+
+.props-collapsible-body {
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ─── Outlet groups editor ─────────────────────────────────── */
+.props-outlet-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.props-outlet-group-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.props-outlet-group-type {
+  flex: 1;
+  min-width: 0;
+}
+
+.props-outlet-group-count {
+  flex-shrink: 0;
+  width: 48px;
+}
+
+.props-outlet-group-remove {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.props-outlet-group-remove:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+/* ─── Capacity (value + unit) ──────────────────────────────── */
+.props-capacity-row {
+  display: flex;
+  gap: 6px;
+}
+
+.props-capacity-row .props-input:first-child { flex: 1; min-width: 0; }
+.props-capacity-unit { flex-shrink: 0; width: 56px; }
+
 .props-panel-title {
   flex: 1;
   font-size: 0.83rem;

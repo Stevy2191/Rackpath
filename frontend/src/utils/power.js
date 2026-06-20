@@ -21,8 +21,35 @@ export function isUps(slot) {
   return resolveRenderType(slot) === 'ups';
 }
 
+// A device's outlets are modeled as groups of same-typed outlets, e.g.
+// [{type:'NEMA 5-15R', count:6}, {type:'C19', count:2}] for a mixed unit,
+// rather than one flat count + type. Outlet *numbers* (power_source_outlet)
+// stay a single continuous integer across all groups in order — group 1's
+// outlets are 1..count1, group 2's are count1+1..count1+count2, etc. —
+// display labels just re-derive "Type — Outlet i within its group" from
+// that, so no schema change was needed for the numbering itself.
+export function getOutletGroups(slot) {
+  return Array.isArray(slot?.outlet_groups) ? slot.outlet_groups : [];
+}
+
 export function getOutletCount(slot) {
-  return Number(slot?.outlet_count) || 0;
+  return getOutletGroups(slot).reduce((sum, g) => sum + (Number(g?.count) || 0), 0);
+}
+
+// Flattens a device's outlet groups into one ordered list with both the
+// global outlet number (used for power_source_outlet) and the type/local
+// index within its group (used for display, e.g. "C19 — Outlet 2").
+export function flattenOutlets(slot) {
+  const result = [];
+  let n = 0;
+  for (const group of getOutletGroups(slot)) {
+    const count = Number(group?.count) || 0;
+    for (let i = 1; i <= count; i++) {
+      n++;
+      result.push({ n, type: group.type || 'Outlet', indexInGroup: i });
+    }
+  }
+  return result;
 }
 
 export function getPowerLabel(slot) {
@@ -30,16 +57,15 @@ export function getPowerLabel(slot) {
 }
 
 // All outlet-providing slots in the rack except the one being edited, with
-// their occupancy resolved. Shape: [{ slot, outlets: [{ n, occupant }] }]
+// their occupancy resolved. Shape: [{ slot, outlets: [{ n, type, indexInGroup, occupant }] }]
 export function listPowerSources(rackSlots, excludeSlotId) {
   return rackSlots
     .filter((s) => isPowerDevice(s) && s.id !== excludeSlotId && getOutletCount(s) > 0)
     .map((s) => ({
       slot: s,
-      outlets: Array.from({ length: getOutletCount(s) }, (_, i) => {
-        const n = i + 1;
+      outlets: flattenOutlets(s).map(({ n, type, indexInGroup }) => {
         const occupant = rackSlots.find((c) => c.power_source_slot_id === s.id && c.power_source_outlet === n);
-        return { n, occupant: occupant || null };
+        return { n, type, indexInGroup, occupant: occupant || null };
       }),
     }));
 }

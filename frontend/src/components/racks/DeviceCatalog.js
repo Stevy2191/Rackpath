@@ -30,7 +30,12 @@ function buildBadges(normalized) {
   if (normalized.bay_count) badges.push(`${normalized.bay_count}-bay`);
   if (normalized.capacity_va) badges.push(`${normalized.capacity_va}VA`);
   if (normalized.input_voltage) badges.push(normalized.input_voltage);
-  if (normalized.outlet_count) badges.push(`${normalized.outlet_count}x ${normalized.outlet_type || 'outlet'}`);
+  const groups = normalized.outlet_groups || [];
+  if (groups.length === 1 && groups[0].count) {
+    badges.push(`${groups[0].count}x ${groups[0].type || 'outlet'}`);
+  } else if (groups.length > 1) {
+    badges.push(`${groups.reduce((sum, g) => sum + (Number(g.count) || 0), 0)} outlets`);
+  }
   return badges;
 }
 

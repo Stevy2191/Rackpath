@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { logActivity } = require('../services/activityLog');
+const { parseRowsOutletGroups } = require('../utils/outletGroups');
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ router.get('/:id', async (req, res, next) => {
       [req.params.id]
     );
 
-    res.json({ ...racks[0], slots });
+    res.json({ ...racks[0], slots: parseRowsOutletGroups(slots) });
   } catch (err) {
     next(err);
   }

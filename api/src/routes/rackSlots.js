@@ -4,6 +4,7 @@ const path = require('path');
 const multer = require('multer');
 const pool = require('../db/pool');
 const { logActivity } = require('../services/activityLog');
+const { parseRowOutletGroups, parseRowsOutletGroups, sumOutletGroups } = require('../utils/outletGroups');
 
 const router = express.Router();
 
@@ -85,9 +86,10 @@ async function findOutletConflict(rackId, projectId, sourceSlotId, outlet, exclu
 }
 
 // Validates a power_source_slot_id/power_source_outlet pair: source must
-// exist in the same rack, outlet must be within its outlet_count, and a
-// slot can't be wired to itself. Returns an error string, or null if valid
-// (including the "no source set" / Wall-Direct case).
+// exist in the same rack, outlet must be within the total count of its
+// outlet groups, and a slot can't be wired to itself. Returns an error
+// string, or null if valid (including the "no source set" / Wall-Direct
+// case).
 async function validatePowerSource(rackId, projectId, slotId, sourceSlotId, outlet) {
   if (!sourceSlotId) return null;
   if (outlet === undefined || outlet === null) {
@@ -97,12 +99,13 @@ async function validatePowerSource(rackId, projectId, slotId, sourceSlotId, outl
     return 'A device cannot be its own power source';
   }
   const [[source]] = await pool.query(
-    'SELECT id, outlet_count FROM rack_slots WHERE id = ? AND rack_id = ? AND project_id = ?',
+    'SELECT id, outlet_groups FROM rack_slots WHERE id = ? AND rack_id = ? AND project_id = ?',
     [sourceSlotId, rackId, projectId]
   );
   if (!source) return 'Power source not found in this rack';
-  if (!source.outlet_count || outlet < 1 || outlet > source.outlet_count) {
-    return `Outlet must be between 1 and ${source.outlet_count || 0}`;
+  const outletCount = sumOutletGroups(source.outlet_groups);
+  if (!outletCount || outlet < 1 || outlet > outletCount) {
+    return `Outlet must be between 1 and ${outletCount || 0}`;
   }
   return null;
 }
@@ -123,7 +126,7 @@ router.get('/', async (req, res, next) => {
     }
     query += ' ORDER BY rs.u_position';
     const [rows] = await pool.query(query, params);
-    res.json(rows);
+    res.json(parseRowsOutletGroups(rows));
   } catch (err) {
     next(err);
   }
@@ -144,7 +147,8 @@ router.post('/', async (req, res, next) => {
       rack_id, device_id, u_position, item_type, item_label, side,
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
-      outlet_count, outlet_type, input_voltage, port_count, bay_count, capacity_va,
+      outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
+      port_count, bay_count, capacity_va,
       power_source_slot_id, power_source_outlet, mount_side,
     } = req.body;
     const u_size = req.body.u_size || 1;
@@ -198,9 +202,10 @@ router.post('/', async (req, res, next) => {
          (project_id, rack_id, device_id, item_type, item_label, custom_type, color,
           u_position, position_offset, u_size, side, front_back, mounted_face,
           half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes,
-          outlet_count, outlet_type, input_voltage, port_count, bay_count, capacity_va,
+          outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
+          port_count, bay_count, capacity_va,
           power_source_slot_id, power_source_outlet, mount_side)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
@@ -209,7 +214,8 @@ router.post('/', async (req, res, next) => {
         half_depth ? 1 : 0, half_width ? 1 : 0, resolvedHalfPos,
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
-        outlet_count || null, outlet_type || null, input_voltage || null,
+        outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
+        input_plug_type || null, capacity_value || null, capacity_unit || null,
         port_count || null, bay_count || null, capacity_va || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
       ]
@@ -227,7 +233,7 @@ router.post('/', async (req, res, next) => {
       itemName = deviceRows[0]?.hostname || itemName;
     }
     logActivity(req.projectId, req.user.id, 'rack_slot.assigned', `${itemName} → U${u_position}`);
-    res.status(201).json(rows[0]);
+    res.status(201).json(parseRowOutletGroups(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -240,7 +246,8 @@ router.put('/:id', async (req, res, next) => {
       rack_id, device_id, item_type, item_label, side,
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
-      outlet_count, outlet_type, input_voltage, port_count, bay_count, capacity_va,
+      outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
+      port_count, bay_count, capacity_va,
       power_source_slot_id, power_source_outlet, mount_side,
     } = req.body;
     let u_position = req.body.u_position;
@@ -294,7 +301,8 @@ router.put('/:id', async (req, res, next) => {
            u_position=?, position_offset=?, u_size=?, side=?, front_back=?, mounted_face=?,
            half_depth=?, half_width=?, half_position=?, catalog_id=?, custom_image_url=?, vendor=?,
            ip_address=?, slot_notes=?,
-           outlet_count=?, outlet_type=?, input_voltage=?, port_count=?, bay_count=?, capacity_va=?,
+           outlet_groups=?, input_voltage=?, input_plug_type=?, capacity_value=?, capacity_unit=?,
+           port_count=?, bay_count=?, capacity_va=?,
            power_source_slot_id=?, power_source_outlet=?, mount_side=?
        WHERE id=? AND project_id=?`,
       [
@@ -305,7 +313,8 @@ router.put('/:id', async (req, res, next) => {
         half_depth ? 1 : 0, half_width ? 1 : 0, resolvedHalfPos,
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
-        outlet_count || null, outlet_type || null, input_voltage || null,
+        outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
+        input_plug_type || null, capacity_value || null, capacity_unit || null,
         port_count || null, bay_count || null, capacity_va || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
         req.params.id, req.projectId,
@@ -318,7 +327,7 @@ router.put('/:id', async (req, res, next) => {
        FROM rack_slots rs LEFT JOIN devices d ON d.id = rs.device_id WHERE rs.id = ?`,
       [req.params.id]
     );
-    res.json(rows[0]);
+    res.json(parseRowOutletGroups(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -332,7 +341,8 @@ router.patch('/:id', async (req, res, next) => {
       'u_size', 'u_position', 'position_offset', 'ip_address', 'slot_notes',
       'asset_tag', 'serial_number',
       'front_image_url', 'rear_image_url',
-      'outlet_count', 'outlet_type', 'input_voltage', 'port_count', 'bay_count', 'capacity_va',
+      'outlet_groups', 'input_voltage', 'input_plug_type', 'capacity_value', 'capacity_unit',
+      'port_count', 'bay_count', 'capacity_va',
       'power_source_slot_id', 'power_source_outlet', 'mount_side',
     ];
     const updates = {};
@@ -341,6 +351,9 @@ router.patch('/:id', async (req, res, next) => {
     }
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    if ('outlet_groups' in updates) {
+      updates.outlet_groups = updates.outlet_groups ? JSON.stringify(updates.outlet_groups) : null;
     }
 
     if ('mount_side' in updates && updates.mount_side !== null && !MOUNT_SIDES.includes(updates.mount_side)) {
@@ -421,7 +434,7 @@ router.patch('/:id', async (req, res, next) => {
        FROM rack_slots rs LEFT JOIN devices d ON d.id = rs.device_id WHERE rs.id = ?`,
       [req.params.id]
     );
-    res.json(rows[0]);
+    res.json(parseRowOutletGroups(rows[0]));
   } catch (err) {
     next(err);
   }

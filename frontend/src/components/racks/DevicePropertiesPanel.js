@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, ChevronRight, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
 import client from '../../api/client';
 import {
   isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel,
   listPowerSources, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet,
 } from '../../utils/power';
 import { pduCatalogEntries } from './rackCatalog';
-import { COLOR_SWATCHES, getFieldSchema } from './deviceFieldSchemas';
+import { COLOR_SWATCHES, getFieldSchema, INPUT_VOLTAGES, INPUT_PLUG_TYPES, CAPACITY_UNITS } from './deviceFieldSchemas';
 import DeviceConfigFields from './DeviceConfigFields';
+import OutletGroupsEditor, { TypeSelect } from './OutletGroupsEditor';
 import { resolveRenderType } from './deviceRenderConfig';
 import './DevicePropertiesPanel.css';
 
@@ -24,12 +25,28 @@ const MOUNT_SIDE_OPTIONS = [
 
 const WALL_DIRECT = '';
 
+// Collapsed-by-default accordion used to tuck the Power section out of the
+// way for plain (non-UPS/PDU) devices, which don't need tabs.
+function CollapsibleSection({ title, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="props-collapsible">
+      <button type="button" className="props-collapsible-header" onClick={() => setOpen((v) => !v)}>
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        <span>{title}</span>
+      </button>
+      {open && <div className="props-collapsible-body">{children}</div>}
+    </div>
+  );
+}
+
 export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest, onDuplicate }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [savingToCatalog, setSavingToCatalog] = useState(false);
   const [catalogName, setCatalogName] = useState('');
+  const [tab, setTab] = useState('general');
   const frontFileRef = useRef(null);
   const rearFileRef = useRef(null);
   const saveTimer = useRef(null);
@@ -40,7 +57,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
   const isUpsSlot = slot ? isUps(slot) : false;
   const configSchema = slot ? getFieldSchema(resolveRenderType(slot)) : [];
 
-  // Reset form when slot changes
+  // Reset form (and the tab) when slot changes
   useEffect(() => {
     if (!slot) { setFields(null); return; }
     setFields({
@@ -55,10 +72,12 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
       serial_number: slot.serial_number || slot.device_serial_number   || '',
       slot_notes:    slot.slot_notes    || '',
       asset_tag:     slot.asset_tag     || '',
-      outlet_count:        slot.outlet_count         ?? '',
-      outlet_type:         slot.outlet_type          || '',
+      outlet_groups:        Array.isArray(slot.outlet_groups) ? slot.outlet_groups : [],
       input_voltage:        slot.input_voltage        || '',
+      input_plug_type:      slot.input_plug_type       || '',
       capacity_va:          slot.capacity_va          ?? '',
+      capacity_value:       slot.capacity_value       ?? '',
+      capacity_unit:        slot.capacity_unit         || 'A',
       port_count:           slot.port_count           ?? '',
       bay_count:            slot.bay_count            ?? '',
       half_width:    !!slot.half_width,
@@ -68,7 +87,12 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
     });
     setError(null);
     setSavingToCatalog(false);
-  }, [slot]);
+    setTab('general');
+    // Deliberately keyed on the slot's id, not the slot object — every patch
+    // replaces `slot` with a fresh object from the server (same id), and
+    // resetting fields/tab on every one of those would snap the user back
+    // to the General tab and discard in-flight edits after each autosave.
+  }, [slot?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!slot || !fields) return null;
 
@@ -94,6 +118,11 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
   const setField = (key, val) => {
     setFields((f) => ({ ...f, [key]: val }));
     debouncePatch({ [key]: val });
+  };
+
+  const setFieldNow = (key, val) => {
+    setFields((f) => ({ ...f, [key]: val }));
+    patch({ [key]: val });
   };
 
   const adjustUSize = (delta) => {
@@ -203,6 +232,83 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
     ? (slot.hostname || slot.ip || `Device ${slot.device_id}`)
     : (slot.item_label || slot.custom_type || 'Device');
 
+  const pluggedIntoField = (
+    <PluggedIntoField
+      slot={slot}
+      rackSlots={rackSlots || []}
+      fields={fields}
+      onChange={(changes) => {
+        setFields((f) => ({ ...f, ...changes }));
+        patch(changes);
+      }}
+    />
+  );
+
+  const outletsSummary = (
+    <>
+      <div className="props-section-divider">
+        Outlets — {countOccupiedOutlets(slot, rackSlots || [])} of {getOutletCount(slot)} in use
+      </div>
+      {getOutletCount(slot) === 0 ? (
+        <p className="props-empty-note">No outlets defined for this device.</p>
+      ) : (
+        <PowerOutletList slot={slot} rackSlots={rackSlots || []} onSelectSlot={onSelectSlot} />
+      )}
+    </>
+  );
+
+  const actionsSection = (
+    <>
+      <div className="props-section-divider">Actions</div>
+      <div className="props-danger-zone">
+        {savingToCatalog ? (
+          <div className="props-save-catalog-row">
+            <input
+              className="props-input"
+              value={catalogName}
+              onChange={(e) => setCatalogName(e.target.value)}
+              placeholder="Name for this catalog entry"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Escape') setSavingToCatalog(false); }}
+            />
+            <button
+              type="button"
+              className="props-upload-btn"
+              onClick={() => {
+                const name = catalogName.trim();
+                if (!name) return;
+                onSaveToCatalog(slot, name);
+                setSavingToCatalog(false);
+              }}
+            >
+              Save
+            </button>
+            <button type="button" className="props-upload-btn" onClick={() => setSavingToCatalog(false)}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="props-upload-btn"
+            onClick={() => { setCatalogName(fields.item_label || 'Untitled device'); setSavingToCatalog(true); }}
+          >
+            <BookmarkPlus size={12} /> Save to Catalog
+          </button>
+        )}
+        <button type="button" className="props-upload-btn" onClick={() => onDuplicate(slot)}>
+          <Copy size={12} /> Duplicate Device
+        </button>
+        <button type="button" className="props-delete-btn" onClick={() => onDeleteRequest(slot)}>
+          <Trash2 size={12} /> Delete Device
+        </button>
+      </div>
+    </>
+  );
+
+  const showGeneral = !isPower || tab === 'general';
+  const showPower = isPower && tab === 'power';
+
   return (
     <div className="props-panel">
       <div className="props-panel-header">
@@ -212,354 +318,392 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
         </button>
       </div>
 
+      {isPower && (
+        <div className="props-tabs">
+          <button type="button" className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>General</button>
+          <button type="button" className={tab === 'power' ? 'active' : ''} onClick={() => setTab('power')}>Power</button>
+        </div>
+      )}
+
       {saving && <div className="props-panel-saving">Saving…</div>}
       {error && <div className="props-panel-error" onClick={() => setError(null)}>{error}</div>}
 
       <div className="props-panel-body">
-        {/* Label */}
-        <div className="props-field">
-          <label className="props-field-label">Label</label>
-          <input
-            className="props-input"
-            value={fields.item_label}
-            onChange={(e) => setField('item_label', e.target.value)}
-            placeholder="Device name..."
-          />
-        </div>
-
-        {/* U Height */}
-        <div className="props-field">
-          <label className="props-field-label">Height (U)</label>
-          <div className="props-stepper">
-            <button type="button" onClick={() => adjustUSize(-1)} disabled={fields.u_size <= 1}>
-              <ChevronDown size={13} />
-            </button>
-            <span className="props-stepper-val">{fields.u_size}U</span>
-            <button type="button" onClick={() => adjustUSize(1)}>
-              <ChevronUp size={13} />
-            </button>
-          </div>
-        </div>
-
-        {/* Position */}
-        <div className="props-field">
-          <label className="props-field-label">Position</label>
-          <div className="props-stepper">
-            <button type="button" onClick={() => adjustPosition(-1)} disabled={fields.u_position <= 1}>
-              <ChevronUp size={13} />
-            </button>
-            <span className="props-stepper-val">U{fields.u_position}</span>
-            <button type="button" onClick={() => adjustPosition(1)}>
-              <ChevronDown size={13} />
-            </button>
-          </div>
-        </div>
-
-        {/* Color */}
-        <div className="props-field">
-          <label className="props-field-label">Color</label>
-          <div className="props-swatches">
-            {COLOR_SWATCHES.map((c, i) => (
-              <button
-                key={i}
-                type="button"
-                className={`props-swatch${fields.color === c ? ' active' : ''}`}
-                style={c ? { background: c } : {}}
-                title={c || 'None'}
-                onClick={() => {
-                  setFields((f) => ({ ...f, color: c }));
-                  patch({ color: c });
-                }}
-              >
-                {!c && '✕'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {!isVerticalPdu && (
+        {showGeneral && (
           <>
-            {/* Width */}
+            {/* Label */}
             <div className="props-field">
-              <label className="props-field-label">Width</label>
-              <div className="props-face-btns">
-                <button
-                  type="button"
-                  className={`props-face-btn${!fields.half_width ? ' active' : ''}`}
-                  onClick={() => { setFields((f) => ({ ...f, half_width: false })); patch({ half_width: 0 }); }}
-                >
-                  Full
-                </button>
-                <button
-                  type="button"
-                  className={`props-face-btn${fields.half_width ? ' active' : ''}`}
-                  onClick={() => { setFields((f) => ({ ...f, half_width: true })); patch({ half_width: 1 }); }}
-                >
-                  Half
-                </button>
+              <label className="props-field-label">Label</label>
+              <input
+                className="props-input"
+                value={fields.item_label}
+                onChange={(e) => setField('item_label', e.target.value)}
+                placeholder="Device name..."
+              />
+            </div>
+
+            {!isVerticalPdu && (
+              <>
+                {/* U Height */}
+                <div className="props-field">
+                  <label className="props-field-label">Height (U)</label>
+                  <div className="props-stepper">
+                    <button type="button" onClick={() => adjustUSize(-1)} disabled={fields.u_size <= 1}>
+                      <ChevronDown size={13} />
+                    </button>
+                    <span className="props-stepper-val">{fields.u_size}U</span>
+                    <button type="button" onClick={() => adjustUSize(1)}>
+                      <ChevronUp size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Position */}
+                <div className="props-field">
+                  <label className="props-field-label">Position</label>
+                  <div className="props-stepper">
+                    <button type="button" onClick={() => adjustPosition(-1)} disabled={fields.u_position <= 1}>
+                      <ChevronUp size={13} />
+                    </button>
+                    <span className="props-stepper-val">U{fields.u_position}</span>
+                    <button type="button" onClick={() => adjustPosition(1)}>
+                      <ChevronDown size={13} />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Color */}
+            <div className="props-field">
+              <label className="props-field-label">Color</label>
+              <div className="props-swatches">
+                {COLOR_SWATCHES.map((c, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`props-swatch${fields.color === c ? ' active' : ''}`}
+                    style={c ? { background: c } : {}}
+                    title={c || 'None'}
+                    onClick={() => {
+                      setFields((f) => ({ ...f, color: c }));
+                      patch({ color: c });
+                    }}
+                  >
+                    {!c && '✕'}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Depth */}
+            {!isVerticalPdu && (
+              <>
+                {/* Width */}
+                <div className="props-field">
+                  <label className="props-field-label">Width</label>
+                  <div className="props-face-btns">
+                    <button
+                      type="button"
+                      className={`props-face-btn${!fields.half_width ? ' active' : ''}`}
+                      onClick={() => { setFields((f) => ({ ...f, half_width: false })); patch({ half_width: 0 }); }}
+                    >
+                      Full
+                    </button>
+                    <button
+                      type="button"
+                      className={`props-face-btn${fields.half_width ? ' active' : ''}`}
+                      onClick={() => { setFields((f) => ({ ...f, half_width: true })); patch({ half_width: 1 }); }}
+                    >
+                      Half
+                    </button>
+                  </div>
+                </div>
+
+                {/* Depth */}
+                <div className="props-field">
+                  <label className="props-field-label">Depth</label>
+                  <div className="props-face-btns">
+                    <button
+                      type="button"
+                      className={`props-face-btn${!fields.half_depth ? ' active' : ''}`}
+                      onClick={() => { setFields((f) => ({ ...f, half_depth: false })); patch({ half_depth: 0 }); }}
+                    >
+                      Full
+                    </button>
+                    <button
+                      type="button"
+                      className={`props-face-btn${fields.half_depth ? ' active' : ''}`}
+                      onClick={() => { setFields((f) => ({ ...f, half_depth: true })); patch({ half_depth: 1 }); }}
+                    >
+                      Half
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Mounted face (U-slot devices) / Mount side (vertical PDU) */}
             <div className="props-field">
-              <label className="props-field-label">Depth</label>
+              <label className="props-field-label">{isVerticalPdu ? 'Mount Side' : 'Mounted Face'}</label>
               <div className="props-face-btns">
-                <button
-                  type="button"
-                  className={`props-face-btn${!fields.half_depth ? ' active' : ''}`}
-                  onClick={() => { setFields((f) => ({ ...f, half_depth: false })); patch({ half_depth: 0 }); }}
-                >
-                  Full
-                </button>
-                <button
-                  type="button"
-                  className={`props-face-btn${fields.half_depth ? ' active' : ''}`}
-                  onClick={() => { setFields((f) => ({ ...f, half_depth: true })); patch({ half_depth: 1 }); }}
-                >
-                  Half
-                </button>
+                {(isVerticalPdu ? MOUNT_SIDE_OPTIONS : FACE_OPTIONS).map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    className={`props-face-btn${(isVerticalPdu ? fields.mount_side : fields.mounted_face) === f.value ? ' active' : ''}`}
+                    onClick={() => {
+                      const key = isVerticalPdu ? 'mount_side' : 'mounted_face';
+                      setFields((prev) => ({ ...prev, [key]: f.value }));
+                      patch({ [key]: f.value });
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
             </div>
+
+            {!isVerticalPdu && (
+              <>
+                {/* Front image */}
+                <div className="props-field">
+                  <label className="props-field-label">Front Image</label>
+                  <div className="props-image-row">
+                    {slot.front_image_url && (
+                      <img src={slot.front_image_url} alt="Front" className="props-image-thumb" />
+                    )}
+                    <button
+                      type="button"
+                      className="props-upload-btn"
+                      onClick={() => frontFileRef.current?.click()}
+                    >
+                      <Upload size={12} /> {slot.front_image_url ? 'Replace' : 'Upload'}
+                    </button>
+                    <input
+                      ref={frontFileRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      style={{ display: 'none' }}
+                      onChange={(e) => { if (e.target.files[0]) uploadImage('front', e.target.files[0]); }}
+                    />
+                  </div>
+                </div>
+
+                {/* Rear image */}
+                <div className="props-field">
+                  <label className="props-field-label">Rear Image</label>
+                  <div className="props-image-row">
+                    {slot.rear_image_url && (
+                      <img src={slot.rear_image_url} alt="Rear" className="props-image-thumb" />
+                    )}
+                    <button
+                      type="button"
+                      className="props-upload-btn"
+                      onClick={() => rearFileRef.current?.click()}
+                    >
+                      <Upload size={12} /> {slot.rear_image_url ? 'Replace' : 'Upload'}
+                    </button>
+                    <input
+                      ref={rearFileRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      style={{ display: 'none' }}
+                      onChange={(e) => { if (e.target.files[0]) uploadImage('rear', e.target.files[0]); }}
+                    />
+                  </div>
+                </div>
+
+                {/* Linked inventory device */}
+                {devices && (
+                  <div className="props-field">
+                    <label className="props-field-label">Linked Inventory Device</label>
+                    <select
+                      className="props-input"
+                      value={slot.device_id || ''}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        if (!id) return;
+                        actions.onSlotUpdate(slot, { device_id: Number(id), item_type: 'device' });
+                      }}
+                    >
+                      <option value="" disabled>Select a device…</option>
+                      {devices.map((d) => (
+                        <option key={d.id} value={d.id}>{d.hostname || d.ip || `Device ${d.id}`}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* IP Address */}
+            <div className="props-field">
+              <label className="props-field-label">IP Address</label>
+              <input
+                className="props-input"
+                value={fields.ip_address}
+                onChange={(e) => setField('ip_address', e.target.value)}
+                placeholder="e.g. 192.168.1.1"
+              />
+            </div>
+
+            {/* MAC Address — read-only from linked inventory device */}
+            {slot.device_mac && (
+              <div className="props-field">
+                <label className="props-field-label">MAC Address</label>
+                <div className="props-readonly">{slot.device_mac}</div>
+              </div>
+            )}
+
+            {/* Asset Tag */}
+            <div className="props-field">
+              <label className="props-field-label">Asset Tag</label>
+              <input
+                className="props-input"
+                value={fields.asset_tag}
+                onChange={(e) => setField('asset_tag', e.target.value)}
+                placeholder="e.g. ASSET-001"
+              />
+            </div>
+
+            {/* Serial Number */}
+            <div className="props-field">
+              <label className="props-field-label">Serial Number</label>
+              <input
+                className="props-input"
+                value={fields.serial_number}
+                onChange={(e) => setField('serial_number', e.target.value)}
+                placeholder="e.g. SN123456"
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="props-field">
+              <label className="props-field-label">Notes</label>
+              <textarea
+                className="props-input props-textarea"
+                value={fields.slot_notes}
+                onChange={(e) => setField('slot_notes', e.target.value)}
+                rows={3}
+                placeholder="Notes about this device..."
+              />
+            </div>
+
+            {configSchema.length > 0 && (
+              <>
+                <div className="props-section-divider">Configuration</div>
+                <DeviceConfigFields schema={configSchema} values={fields} onChange={setField} />
+              </>
+            )}
+
+            {/* Non-power devices keep a single panel — Power is tucked into a
+                collapsed-by-default accordion instead of a tab. */}
+            {!isPower && !passive && (
+              <CollapsibleSection title="Power">
+                {pluggedIntoField}
+              </CollapsibleSection>
+            )}
+
+            {actionsSection}
           </>
         )}
 
-        {/* Mounted face (U-slot devices) / Mount side (vertical PDU) */}
-        <div className="props-field">
-          <label className="props-field-label">{isVerticalPdu ? 'Mount Side' : 'Mounted Face'}</label>
-          <div className="props-face-btns">
-            {(isVerticalPdu ? MOUNT_SIDE_OPTIONS : FACE_OPTIONS).map((f) => (
-              <button
-                key={f.value}
-                type="button"
-                className={`props-face-btn${(isVerticalPdu ? fields.mount_side : fields.mounted_face) === f.value ? ' active' : ''}`}
-                onClick={() => {
-                  const key = isVerticalPdu ? 'mount_side' : 'mounted_face';
-                  setFields((prev) => ({ ...prev, [key]: f.value }));
-                  patch({ [key]: f.value });
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {!isVerticalPdu && (
+        {showPower && (
           <>
-            {/* Front image */}
+            {/* Input Plug Type */}
             <div className="props-field">
-              <label className="props-field-label">Front Image</label>
-              <div className="props-image-row">
-                {slot.front_image_url && (
-                  <img src={slot.front_image_url} alt="Front" className="props-image-thumb" />
-                )}
-                <button
-                  type="button"
-                  className="props-upload-btn"
-                  onClick={() => frontFileRef.current?.click()}
-                >
-                  <Upload size={12} /> {slot.front_image_url ? 'Replace' : 'Upload'}
-                </button>
+              <label className="props-field-label">Input Plug Type</label>
+              <TypeSelect
+                value={fields.input_plug_type}
+                presets={INPUT_PLUG_TYPES}
+                onChange={(v) => setFieldNow('input_plug_type', v)}
+                placeholder="Custom plug type"
+              />
+            </div>
+
+            {/* Input Voltage */}
+            <div className="props-field">
+              <label className="props-field-label">Input Voltage</label>
+              <select
+                className="props-input"
+                value={fields.input_voltage}
+                onChange={(e) => setFieldNow('input_voltage', e.target.value)}
+              >
+                <option value="">Unset</option>
+                {INPUT_VOLTAGES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Capacity — UPS keeps VA; PDU/PDU-vertical get a value + unit (A/W) */}
+            {isUpsSlot ? (
+              <div className="props-field">
+                <label className="props-field-label">Capacity (VA)</label>
                 <input
-                  ref={frontFileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  style={{ display: 'none' }}
-                  onChange={(e) => { if (e.target.files[0]) uploadImage('front', e.target.files[0]); }}
+                  className="props-input"
+                  type="number"
+                  min="0"
+                  value={fields.capacity_va}
+                  onChange={(e) => setField('capacity_va', e.target.value === '' ? null : Number(e.target.value))}
+                  placeholder="e.g. 1500"
                 />
               </div>
-            </div>
-
-            {/* Rear image */}
-            <div className="props-field">
-              <label className="props-field-label">Rear Image</label>
-              <div className="props-image-row">
-                {slot.rear_image_url && (
-                  <img src={slot.rear_image_url} alt="Rear" className="props-image-thumb" />
-                )}
-                <button
-                  type="button"
-                  className="props-upload-btn"
-                  onClick={() => rearFileRef.current?.click()}
-                >
-                  <Upload size={12} /> {slot.rear_image_url ? 'Replace' : 'Upload'}
-                </button>
-                <input
-                  ref={rearFileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  style={{ display: 'none' }}
-                  onChange={(e) => { if (e.target.files[0]) uploadImage('rear', e.target.files[0]); }}
-                />
+            ) : (
+              <div className="props-field">
+                <label className="props-field-label">Capacity</label>
+                <div className="props-capacity-row">
+                  <input
+                    className="props-input"
+                    type="number"
+                    min="0"
+                    value={fields.capacity_value}
+                    onChange={(e) => setField('capacity_value', e.target.value === '' ? null : Number(e.target.value))}
+                    placeholder="e.g. 30"
+                  />
+                  <select
+                    className="props-input props-capacity-unit"
+                    value={fields.capacity_unit}
+                    onChange={(e) => setFieldNow('capacity_unit', e.target.value)}
+                  >
+                    {CAPACITY_UNITS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-          </>
-        )}
+            )}
 
-        {/* Linked inventory device */}
-        {!isVerticalPdu && devices && (
-          <div className="props-field">
-            <label className="props-field-label">Linked Inventory Device</label>
-            <select
-              className="props-input"
-              value={slot.device_id || ''}
-              onChange={(e) => {
-                const id = e.target.value;
-                if (!id) return;
-                actions.onSlotUpdate(slot, { device_id: Number(id), item_type: 'device' });
-              }}
-            >
-              <option value="" disabled>Select a device…</option>
-              {devices.map((d) => (
-                <option key={d.id} value={d.id}>{d.hostname || d.ip || `Device ${d.id}`}</option>
-              ))}
-            </select>
-          </div>
-        )}
+            {!passive && (
+              <>
+                <div className="props-section-divider">Plugged Into</div>
+                {pluggedIntoField}
+              </>
+            )}
 
-        {/* IP Address */}
-        <div className="props-field">
-          <label className="props-field-label">IP Address</label>
-          <input
-            className="props-input"
-            value={fields.ip_address}
-            onChange={(e) => setField('ip_address', e.target.value)}
-            placeholder="e.g. 192.168.1.1"
-          />
-        </div>
-
-        {/* MAC Address — read-only from linked inventory device */}
-        {slot.device_mac && (
-          <div className="props-field">
-            <label className="props-field-label">MAC Address</label>
-            <div className="props-readonly">{slot.device_mac}</div>
-          </div>
-        )}
-
-        {/* Asset Tag */}
-        <div className="props-field">
-          <label className="props-field-label">Asset Tag</label>
-          <input
-            className="props-input"
-            value={fields.asset_tag}
-            onChange={(e) => setField('asset_tag', e.target.value)}
-            placeholder="e.g. ASSET-001"
-          />
-        </div>
-
-        {/* Serial Number */}
-        <div className="props-field">
-          <label className="props-field-label">Serial Number</label>
-          <input
-            className="props-input"
-            value={fields.serial_number}
-            onChange={(e) => setField('serial_number', e.target.value)}
-            placeholder="e.g. SN123456"
-          />
-        </div>
-
-        {/* Notes */}
-        <div className="props-field">
-          <label className="props-field-label">Notes</label>
-          <textarea
-            className="props-input props-textarea"
-            value={fields.slot_notes}
-            onChange={(e) => setField('slot_notes', e.target.value)}
-            rows={3}
-            placeholder="Notes about this device..."
-          />
-        </div>
-
-        {configSchema.length > 0 && (
-          <>
-            <div className="props-section-divider">Configuration</div>
-            <DeviceConfigFields schema={configSchema} values={fields} onChange={setField} />
-          </>
-        )}
-
-        {!passive && (
-          <>
-            <div className="props-section-divider">Power</div>
-            <PluggedIntoField
-              slot={slot}
-              rackSlots={rackSlots || []}
-              fields={fields}
-              onChange={(changes) => {
-                setFields((f) => ({ ...f, ...changes }));
-                patch(changes);
+            <div className="props-section-divider">Outlet Groups</div>
+            <OutletGroupsEditor
+              groups={fields.outlet_groups}
+              onChange={(groups) => {
+                setFields((f) => ({ ...f, outlet_groups: groups }));
+                patch({ outlet_groups: groups });
               }}
             />
-          </>
-        )}
 
-        {isPower && (
-          <>
-            <div className="props-section-divider">
-              Outlets — {countOccupiedOutlets(slot, rackSlots || [])} of {getOutletCount(slot)} in use
-            </div>
-            {getOutletCount(slot) === 0 ? (
-              <p className="props-empty-note">No outlets defined for this device.</p>
-            ) : (
-              <PowerOutletList slot={slot} rackSlots={rackSlots || []} onSelectSlot={onSelectSlot} />
+            {outletsSummary}
+
+            {isUpsSlot && (
+              <VerticalPduSection
+                ups={slot}
+                rackSlots={rackSlots || []}
+                userCatalogEntries={userCatalogEntries || []}
+                rackHeight={rackHeight}
+                actions={actions}
+                onSelectSlot={onSelectSlot}
+              />
             )}
           </>
         )}
-
-        {isUpsSlot && (
-          <VerticalPduSection
-            ups={slot}
-            rackSlots={rackSlots || []}
-            userCatalogEntries={userCatalogEntries || []}
-            rackHeight={rackHeight}
-            actions={actions}
-            onSelectSlot={onSelectSlot}
-          />
-        )}
-
-        <div className="props-section-divider">Actions</div>
-        <div className="props-danger-zone">
-          {savingToCatalog ? (
-            <div className="props-save-catalog-row">
-              <input
-                className="props-input"
-                value={catalogName}
-                onChange={(e) => setCatalogName(e.target.value)}
-                placeholder="Name for this catalog entry"
-                autoFocus
-                onKeyDown={(e) => { if (e.key === 'Escape') setSavingToCatalog(false); }}
-              />
-              <button
-                type="button"
-                className="props-upload-btn"
-                onClick={() => {
-                  const name = catalogName.trim();
-                  if (!name) return;
-                  onSaveToCatalog(slot, name);
-                  setSavingToCatalog(false);
-                }}
-              >
-                Save
-              </button>
-              <button type="button" className="props-upload-btn" onClick={() => setSavingToCatalog(false)}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="props-upload-btn"
-              onClick={() => { setCatalogName(fields.item_label || 'Untitled device'); setSavingToCatalog(true); }}
-            >
-              <BookmarkPlus size={12} /> Save to Catalog
-            </button>
-          )}
-          <button type="button" className="props-upload-btn" onClick={() => onDuplicate(slot)}>
-            <Copy size={12} /> Duplicate Device
-          </button>
-          <button type="button" className="props-delete-btn" onClick={() => onDeleteRequest(slot)}>
-            <Trash2 size={12} /> Delete Device
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -641,11 +785,11 @@ function PluggedIntoField({ slot, rackSlots, fields, onChange }) {
           onChange={(e) => handleOutletChange(Number(e.target.value))}
         >
           <option value="" disabled>Select outlet…</option>
-          {selectedSourceEntry.outlets.map(({ n, occupant }) => {
+          {selectedSourceEntry.outlets.map(({ n, type, indexInGroup, occupant }) => {
             const occupiedByOther = occupant && occupant.id !== slot.id;
             return (
               <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
-                Outlet {n}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
+                {type} — Outlet {indexInGroup}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
               </option>
             );
           })}
@@ -710,8 +854,7 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
         item_label: entry.name,
         catalog_id: entry.id,
         custom_type: entry.renderType,
-        outlet_count: entry.outletCount,
-        outlet_type: entry.outletType,
+        outlet_groups: entry.outletCount ? [{ type: entry.outletType || 'Other', count: entry.outletCount }] : [],
         input_voltage: entry.inputVoltage,
       };
     } else {
@@ -720,8 +863,7 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
       payload = {
         item_label: custom.name,
         custom_type: custom.render_type,
-        outlet_count: custom.outlet_count,
-        outlet_type: custom.outlet_type,
+        outlet_groups: Array.isArray(custom.outlet_groups) ? custom.outlet_groups : [],
         input_voltage: custom.input_voltage,
       };
     }
