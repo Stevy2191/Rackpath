@@ -86,14 +86,19 @@ router.put('/:id', async (req, res, next) => {
 
     const resolvedHeight = u_height || 42;
 
+    const [[currentRack]] = await pool.query(
+      'SELECT u_height FROM racks WHERE id = ? AND project_id = ?',
+      [req.params.id, req.projectId]
+    );
+    if (!currentRack) return res.status(404).json({ error: 'Rack not found' });
+    const shift = currentRack.u_height - resolvedHeight;
+
     // Shrinking the rack only fails if the devices genuinely don't fit —
     // i.e. the total number of distinct U rows they occupy exceeds the new
-    // height. If they do fit but some are positioned above the new height,
-    // reflow (compact) everything downward to close the gaps rather than
-    // blocking the resize outright. Vertical PDUs are 0U floating elements,
-    // not real U-grid occupants, so they're excluded from both the fit
-    // check and the reflow — their u_size is kept in sync with the rack
-    // height below instead.
+    // height. Vertical PDUs are 0U floating elements, not real U-grid
+    // occupants, so they're excluded from both the fit check and the
+    // reflow — their u_size is kept in sync with the rack height below
+    // instead.
     const [slots] = await pool.query(
       `SELECT id, u_position, u_size FROM rack_slots
        WHERE rack_id = ? AND project_id = ? AND item_type != 'vertical-pdu'`,
@@ -113,23 +118,54 @@ router.put('/:id', async (req, res, next) => {
       });
     }
 
-    // Only reflow when something would otherwise land above the new
-    // height — a shrink that already fits, or a grow, leaves positions
-    // untouched. Mapping each occupied row to its rank among occupied rows
-    // (ascending) packs everything down from U1 with no gaps, while
-    // preserving relative order and keeping co-located slots (half-width
-    // pairs sharing a row, or a device spanning multiple contiguous rows)
-    // aligned, since they share the same row numbers before and after.
-    const needsReflow = slots.some((s) => s.u_position + s.u_size - 1 > resolvedHeight);
-    if (needsReflow) {
-      const sortedRows = Array.from(occupied).sort((a, b) => a - b);
-      const rank = new Map();
-      sortedRows.forEach((row, i) => rank.set(row, i + 1));
+    // Shrinking shifts every device down by the same amount (old height -
+    // new height) so each one keeps its distance from the TOP of the rack
+    // — a device at the old top stays at the new top — rather than
+    // collapsing everything down to the floor. Growing (shift <= 0) never
+    // needs to move anything.
+    if (shift > 0) {
+      const updates = [];
+      const occupiedAfterShift = new Set();
+      const overflowGroups = new Map(); // old u_position -> slots sharing that row
+
       for (const s of slots) {
-        const newPosition = rank.get(s.u_position);
-        if (newPosition !== s.u_position) {
-          await pool.query('UPDATE rack_slots SET u_position = ? WHERE id = ?', [newPosition, s.id]);
+        const newPosition = s.u_position - shift;
+        if (newPosition >= 1) {
+          updates.push({ id: s.id, newPosition });
+          const top = newPosition + s.u_size - 1;
+          for (let u = newPosition; u <= top; u++) occupiedAfterShift.add(u);
+        } else {
+          if (!overflowGroups.has(s.u_position)) overflowGroups.set(s.u_position, []);
+          overflowGroups.get(s.u_position).push(s);
         }
+      }
+
+      // A device shifted below U1 only happens if it was near the bottom
+      // of the old rack and the shrink is large. As a last resort, stack
+      // these from the bottom (U1) upward into whatever room is left,
+      // lowest old position first — grouped by old position so co-located
+      // slots (e.g. half-width pairs sharing a row) land on the same row
+      // together, same as they were before.
+      const sortedOldPositions = Array.from(overflowGroups.keys()).sort((a, b) => a - b);
+      for (const oldPosition of sortedOldPositions) {
+        const group = overflowGroups.get(oldPosition);
+        const span = Math.max(...group.map((s) => s.u_size));
+        let pos = 1;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          let free = true;
+          for (let u = pos; u < pos + span; u++) {
+            if (occupiedAfterShift.has(u)) { free = false; break; }
+          }
+          if (free) break;
+          pos++;
+        }
+        for (let u = pos; u < pos + span; u++) occupiedAfterShift.add(u);
+        for (const s of group) updates.push({ id: s.id, newPosition: pos });
+      }
+
+      for (const u of updates) {
+        await pool.query('UPDATE rack_slots SET u_position = ? WHERE id = ?', [u.newPosition, u.id]);
       }
     }
 
