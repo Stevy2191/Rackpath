@@ -53,3 +53,32 @@ export function buildOccupiedSet(slots, rackId, face, excludeSlotId) {
   }
   return occupied;
 }
+
+// Counts how many distinct U rows are occupied by something on either face
+// of a rack (a U is "used" if anything sits on it at all). Vertical PDUs are
+// 0U floating elements alongside the frame, not real U-grid occupants, so
+// they're excluded — matching the backend's resize-fit check.
+export function countUsedU(slots, rackId) {
+  const used = new Set();
+  for (const s of slots) {
+    if (s.rack_id !== rackId) continue;
+    if (s.item_type === 'vertical-pdu') continue;
+    const top = s.u_position + s.u_size - 1;
+    for (let u = s.u_position; u <= top; u++) used.add(u);
+  }
+  return used.size;
+}
+
+// Returns the highest U number occupied by any non-floating item in the
+// rack, or 0 if the rack is empty. Used to tell the user exactly how small
+// they can shrink a rack before something would no longer fit.
+export function highestOccupiedU(slots, rackId) {
+  let highest = 0;
+  for (const s of slots) {
+    if (s.rack_id !== rackId) continue;
+    if (s.item_type === 'vertical-pdu') continue;
+    const top = s.u_position + s.u_size - 1;
+    if (top > highest) highest = top;
+  }
+  return highest;
+}

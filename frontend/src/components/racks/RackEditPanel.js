@@ -29,7 +29,7 @@ const ANNOTATION_FIELDS = [
   { value: 'manufacturer', label: 'Manufacturer' },
 ];
 
-export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
+export default function RackEditPanel({ rack, usedU = 0, highestOccupiedU = 0, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
   const [edits, setEdits] = useState({
     name:             rack.name,
     location:         rack.location         || '',
@@ -68,6 +68,8 @@ export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDe
     if (!window.confirm(`Delete "${rack.name}" and all its slots? This cannot be undone.`)) return;
     onDelete();
   };
+
+  const wontFit = highestOccupiedU > 0 && edits.u_height < highestOccupiedU;
 
   return (
     <div className="rack-edit-panel">
@@ -119,6 +121,7 @@ export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDe
 
           <div className="rep-field">
             <label className="rep-label">HEIGHT</label>
+            <div className="rep-u-usage">{usedU} of {rack.u_height}U used</div>
             <div className="rep-height-presets">
               {HEIGHT_PRESETS.map((h) => (
                 <button
@@ -141,6 +144,12 @@ export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDe
               />
               <span className="rep-slider-val">{edits.u_height}U</span>
             </div>
+            {wontFit && (
+              <div className="rep-warning">
+                Can't shrink to {edits.u_height}U — a device occupies up to U{highestOccupiedU}.
+                Remove or relocate it first.
+              </div>
+            )}
           </div>
 
           <div className="rep-field">
@@ -191,7 +200,7 @@ export default function RackEditPanel({ rack, onClose, onSave, onDuplicate, onDe
             </select>
           </div>
 
-          <button type="submit" className="rep-save-btn" disabled={saving}>
+          <button type="submit" className="rep-save-btn" disabled={saving || wontFit}>
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
         </form>

@@ -84,11 +84,43 @@ router.put('/:id', async (req, res, next) => {
     const validationError = validateRackFields(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
+    const resolvedHeight = u_height || 42;
+
+    // Shrinking the rack must not orphan existing devices above the new
+    // height — they'd simply stop rendering (since the U-grid only loops
+    // 1..u_height) while still occupying their old position in the DB,
+    // making them appear to vanish until the rack is grown back. Vertical
+    // PDUs are 0U floating elements, not real U-grid occupants, so they
+    // don't block a resize — their u_size is kept in sync with the rack
+    // height below instead.
+    const [conflicts] = await pool.query(
+      `SELECT item_label, custom_type, u_position, u_size FROM rack_slots
+       WHERE rack_id = ? AND project_id = ? AND item_type != 'vertical-pdu'
+         AND (u_position + u_size - 1) > ?
+       ORDER BY (u_position + u_size - 1) DESC`,
+      [req.params.id, req.projectId, resolvedHeight]
+    );
+    if (conflicts.length > 0) {
+      const top = conflicts[0];
+      const label = top.item_label || top.custom_type || 'A device';
+      const extra = conflicts.length > 1 ? ` (and ${conflicts.length - 1} other device${conflicts.length > 2 ? 's' : ''})` : '';
+      return res.status(400).json({
+        error: `Cannot resize to ${resolvedHeight}U — ${label} occupies U${top.u_position}-${top.u_position + top.u_size - 1}${extra}, above the new height. Remove or relocate it first.`,
+      });
+    }
+
     const [result] = await pool.query(
       'UPDATE racks SET name = ?, location = ?, u_height = ?, rack_type = ?, notes = ?, show_rear = ?, rack_width = ?, annotation_field = ?, show_annotations = ? WHERE id = ? AND project_id = ?',
-      [name, location || null, u_height || 42, rack_type || '4-post', notes || null, show_rear !== undefined ? show_rear : 1, rack_width || '19"', annotation_field || null, show_annotations ? 1 : 0, req.params.id, req.projectId]
+      [name, location || null, resolvedHeight, rack_type || '4-post', notes || null, show_rear !== undefined ? show_rear : 1, rack_width || '19"', annotation_field || null, show_annotations ? 1 : 0, req.params.id, req.projectId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack not found' });
+
+    // Keep floating vertical PDUs spanning the full (new) rack height.
+    await pool.query(
+      `UPDATE rack_slots SET u_size = ? WHERE rack_id = ? AND project_id = ? AND item_type = 'vertical-pdu'`,
+      [resolvedHeight, req.params.id, req.projectId]
+    );
+
     const [rows] = await pool.query('SELECT * FROM racks WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
   } catch (err) {

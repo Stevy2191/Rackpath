@@ -22,6 +22,20 @@
   letter-spacing: 0.03em;
 }
 
+/* ─── Used/free U counter (below the rack name) ────────────── */
+.rack-u-counter {
+  text-align: center;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #6b7280;
+  padding: 0 4px 8px;
+  white-space: nowrap;
+}
+
+.rack-u-counter-full { color: #f59e0b; }
+
 /* ─── Dual-panel frame ───────────────────────────────────── */
 .rack-dual-frame {
   display: flex;
@@ -426,6 +440,8 @@
 }
 .rack-capture-light .rack-panel-label { color: #5a6575; }
 .rack-capture-light .rack-name-label  { color: #4a5565; }
+.rack-capture-light .rack-u-counter   { color: #5a6575; }
+.rack-capture-light .rack-u-counter-full { color: #b45309; }
 .rack-capture-light .rack-top-blank,
 .rack-capture-light .rack-bottom-blank {
   background: linear-gradient(180deg, #b8c0cc 0%, #c8d0dc 100%);

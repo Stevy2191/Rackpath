@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
+import { countUsedU } from './rackPlacement';
 import './RackEnclosure.css';
 
 // Vertical PDU floating-strip layout (must match the offsets VerticalPdu.js
@@ -329,6 +330,8 @@ export default function RackEnclosure({
   onRenameCancel,
 }) {
   const uRows = Array.from({ length: rack.u_height }, (_, i) => rack.u_height - i);
+  const usedU = countUsedU(slots, rack.id);
+  const freeU = rack.u_height - usedU;
 
   // Vertical PDUs are floating elements alongside the frame, not part of the
   // front/rear U grid — keep them out of the U-occupancy maps entirely.
@@ -477,6 +480,9 @@ export default function RackEnclosure({
       ) : (
         <div className="rack-name-label">{rack.name}</div>
       )}
+      <div className={`rack-u-counter${freeU === 0 ? ' rack-u-counter-full' : ''}`}>
+        {usedU}U used &middot; {freeU}U free
+      </div>
       <div className="rack-dual-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
         <RackPanel
           face="front"
