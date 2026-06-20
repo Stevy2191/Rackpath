@@ -377,3 +377,32 @@
   border-color: #4adede;
   color: #4adede;
 }
+
+/* ─── Bottom actions (duplicate/delete) ───────────────────── */
+.props-danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.props-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px dashed rgba(239, 68, 68, 0.4);
+  border-radius: 4px;
+  background: transparent;
+  color: #ef4444;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.props-delete-btn:hover {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}

@@ -187,6 +187,57 @@ export default function RacksPage() {
         setError(err.response?.data?.error || err.message);
       }
     },
+    onSlotDuplicate: async (slot) => {
+      const rack = racks.find((r) => r.id === slot.rack_id);
+      if (!rack) return;
+      const face = slot.mounted_face || slot.front_back || 'front';
+      const occupied = new Set();
+      for (const s of allSlots) {
+        if (s.rack_id !== slot.rack_id) continue;
+        const sFace = s.mounted_face || s.front_back || 'front';
+        if (sFace !== 'both' && face !== 'both' && sFace !== face) continue;
+        for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) occupied.add(u);
+      }
+      let u_position = null;
+      for (let start = 1; start + slot.u_size - 1 <= rack.u_height; start++) {
+        let free = true;
+        for (let u = start; u <= start + slot.u_size - 1; u++) {
+          if (occupied.has(u)) { free = false; break; }
+        }
+        if (free) { u_position = start; break; }
+      }
+      if (u_position == null) {
+        setError('No free space in this rack to duplicate this device');
+        return;
+      }
+      try {
+        const res = await client.post('/rack-slots', {
+          rack_id: slot.rack_id,
+          // Don't carry over the inventory-device link — two slots
+          // shouldn't point at the same physical device.
+          item_type: slot.item_type === 'device' ? 'custom-device' : slot.item_type,
+          item_label: slot.item_label ? `${slot.item_label} (copy)` : null,
+          custom_type: slot.custom_type,
+          catalog_id: slot.catalog_id,
+          u_position,
+          u_size: slot.u_size,
+          mounted_face: face,
+          half_depth: slot.half_depth,
+          half_width: slot.half_width,
+          color: slot.color,
+          outlet_count: slot.outlet_count,
+          outlet_type: slot.outlet_type,
+          input_voltage: slot.input_voltage,
+          capacity_va: slot.capacity_va,
+          port_count: slot.port_count,
+          bay_count: slot.bay_count,
+        });
+        setAllSlots((cur) => [...cur, res.data]);
+        setSelectedSlotId(res.data.id);
+      } catch (err) {
+        setError(err.response?.data?.error || err.message);
+      }
+    },
     onRackSave: async (rackId, edits) => {
       try {
         await client.put(`/racks/${rackId}`, edits);
@@ -442,11 +493,14 @@ export default function RacksPage() {
       rackHeight={selectedSlotRack?.u_height || 42}
       rackSlots={allSlots.filter((s) => s.rack_id === selectedSlot.rack_id)}
       userCatalogEntries={userCatalogEntries}
+      devices={devices}
       actions={actions}
       onClose={() => setSelectedSlotId(null)}
       onUpdated={handleSlotUpdatedFromPanel}
       onSelectSlot={handleSelectSlot}
       onSaveToCatalog={saveSlotToCatalog}
+      onDeleteRequest={(slot) => setDeleteConfirmSlot(slot)}
+      onDuplicate={(slot) => actions.onSlotDuplicate(slot)}
     />
   ) : (focusedRack && rackEditOpen) ? (
     <RackEditPanel

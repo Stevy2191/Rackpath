@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
 import client from '../../api/client';
 import {
   isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel,
@@ -28,7 +28,7 @@ function outletValue(sourceSlotId, outlet) {
   return sourceSlotId ? `${sourceSlotId}:${outlet}` : WALL_DIRECT;
 }
 
-export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog }) {
+export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest, onDuplicate }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -65,6 +65,8 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
       capacity_va:          slot.capacity_va          ?? '',
       port_count:           slot.port_count           ?? '',
       bay_count:            slot.bay_count            ?? '',
+      half_width:    !!slot.half_width,
+      half_depth:    !!slot.half_depth,
       power_source_slot_id: slot.power_source_slot_id || null,
       power_source_outlet:  slot.power_source_outlet  || null,
     });
@@ -318,6 +320,52 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
           </div>
         </div>
 
+        {!isVerticalPdu && (
+          <>
+            {/* Width */}
+            <div className="props-field">
+              <label className="props-field-label">Width</label>
+              <div className="props-face-btns">
+                <button
+                  type="button"
+                  className={`props-face-btn${!fields.half_width ? ' active' : ''}`}
+                  onClick={() => { setFields((f) => ({ ...f, half_width: false })); patch({ half_width: 0 }); }}
+                >
+                  Full
+                </button>
+                <button
+                  type="button"
+                  className={`props-face-btn${fields.half_width ? ' active' : ''}`}
+                  onClick={() => { setFields((f) => ({ ...f, half_width: true })); patch({ half_width: 1 }); }}
+                >
+                  Half
+                </button>
+              </div>
+            </div>
+
+            {/* Depth */}
+            <div className="props-field">
+              <label className="props-field-label">Depth</label>
+              <div className="props-face-btns">
+                <button
+                  type="button"
+                  className={`props-face-btn${!fields.half_depth ? ' active' : ''}`}
+                  onClick={() => { setFields((f) => ({ ...f, half_depth: false })); patch({ half_depth: 0 }); }}
+                >
+                  Full
+                </button>
+                <button
+                  type="button"
+                  className={`props-face-btn${fields.half_depth ? ' active' : ''}`}
+                  onClick={() => { setFields((f) => ({ ...f, half_depth: true })); patch({ half_depth: 1 }); }}
+                >
+                  Half
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         {/* Mounted face (U-slot devices) / Mount side (vertical PDU) */}
         <div className="props-field">
           <label className="props-field-label">{isVerticalPdu ? 'Mount Side' : 'Mounted Face'}</label>
@@ -389,6 +437,27 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
               </div>
             </div>
           </>
+        )}
+
+        {/* Linked inventory device */}
+        {!isVerticalPdu && devices && (
+          <div className="props-field">
+            <label className="props-field-label">Linked Inventory Device</label>
+            <select
+              className="props-input"
+              value={slot.device_id || ''}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (!id) return;
+                actions.onSlotUpdate(slot, { device_id: Number(id), item_type: 'device' });
+              }}
+            >
+              <option value="" disabled>Select a device…</option>
+              {devices.map((d) => (
+                <option key={d.id} value={d.id}>{d.hostname || d.ip || `Device ${d.id}`}</option>
+              ))}
+            </select>
+          </div>
         )}
 
         {/* IP Address */}
@@ -511,6 +580,16 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
             onSelectSlot={onSelectSlot}
           />
         )}
+
+        <div className="props-section-divider">Actions</div>
+        <div className="props-danger-zone">
+          <button type="button" className="props-upload-btn" onClick={() => onDuplicate(slot)}>
+            <Copy size={12} /> Duplicate Device
+          </button>
+          <button type="button" className="props-delete-btn" onClick={() => onDeleteRequest(slot)}>
+            <Trash2 size={12} /> Delete Device
+          </button>
+        </div>
       </div>
     </div>
   );

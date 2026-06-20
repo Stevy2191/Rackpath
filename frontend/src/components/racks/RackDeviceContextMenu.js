@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pencil, Link2, ArrowLeftRight, Trash2 } from 'lucide-react';
+import { Pencil, Link2, ArrowLeftRight, Copy, Trash2 } from 'lucide-react';
 import './RackDeviceContextMenu.css';
 
 export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, onDeleteRequest, actions }) {
   const ref = useRef(null);
   const [mode, setMode] = useState('menu');
   const [label, setLabel] = useState(slot.item_label || '');
-  const [vendor, setVendor] = useState(slot.vendor || '');
   const [uSize, setUSize] = useState(slot.u_size);
 
   useEffect(() => {
@@ -25,7 +24,7 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, on
   }, [onClose]);
 
   const saveEdit = () => {
-    actions.onSlotUpdate(slot, { item_label: label, vendor, u_size: uSize });
+    actions.onSlotUpdate(slot, { item_label: label, u_size: uSize });
     onClose();
   };
 
@@ -47,6 +46,11 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, on
     onDeleteRequest(slot);
   };
 
+  const handleDuplicate = () => {
+    onClose();
+    actions.onSlotDuplicate(slot);
+  };
+
   return (
     <div className="rack-context-menu" style={{ left: x, top: y }} ref={ref}>
       {mode === 'edit' && (
@@ -54,10 +58,6 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, on
           <label>
             Label
             <input value={label} onChange={(e) => setLabel(e.target.value)} autoFocus />
-          </label>
-          <label>
-            Vendor
-            <input value={vendor} onChange={(e) => setVendor(e.target.value)} />
           </label>
           <label>
             U Size
@@ -117,6 +117,11 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, on
           <li>
             <button type="button" onClick={toggleFrontBack}>
               <ArrowLeftRight size={13} /> Move to {(slot.mounted_face === 'rear' || slot.front_back === 'back' || slot.side === 'back') ? 'Front' : 'Rear'}
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={handleDuplicate}>
+              <Copy size={13} /> Duplicate
             </button>
           </li>
           <li>
