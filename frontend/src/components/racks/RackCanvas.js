@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from
 import { Plus, Minus, Maximize2, Settings } from 'lucide-react';
 import RackEnclosure from './RackEnclosure';
 import CableOverlay from './CableOverlay';
+import { clampUPosition } from './rackPlacement';
 import './RackCanvas.css';
 
 const SIMPLE_ITEM_TYPES = ['patch-panel', 'blank', 'cable-manager'];
@@ -198,7 +199,7 @@ export default function RackCanvas({
     });
   }, [applyVp]);
 
-  // ─── Drop handler (unchanged logic) ────────────────────────
+  // ─── Drop handler ───────────────────────────────────────────
   const handleDrop = (rackId, uPosition, face, e) => {
     e.preventDefault();
     setDraggingMeta(null);
@@ -207,12 +208,13 @@ export default function RackCanvas({
     const deviceId    = e.dataTransfer.getData('text/device-id');
     const catalogItem = e.dataTransfer.getData('text/catalog-item');
     const customDevId = e.dataTransfer.getData('text/custom-device-id');
+    const rack = racks.find((r) => r.id === rackId);
+    if (!rack) return;
 
     if (slotId) {
       const slot = allSlots.find((s) => String(s.id) === slotId);
       if (!slot) return;
-      const u_position = uPosition - slot.u_size + 1;
-      if (u_position < 1) return;
+      const u_position = clampUPosition(uPosition, slot.u_size, rack.u_height);
       const curFace = slot.mounted_face || slot.front_back || 'front';
       if (u_position === slot.u_position && slot.rack_id === rackId && curFace === face) return;
       actions.onSlotUpdate(slot, { rack_id: rackId, u_position, mounted_face: face });
@@ -224,7 +226,7 @@ export default function RackCanvas({
       const catalogMeta = catalogRaw ? JSON.parse(catalogRaw) : null;
       const u_size = catalogMeta?.uSize || 1;
       const mounted_face = catalogMeta?.mountedFace || face;
-      const u_position = Math.max(1, uPosition - u_size + 1);
+      const u_position = clampUPosition(uPosition, u_size, rack.u_height);
       actions.onSlotCreate({
         rack_id: rackId,
         device_id: Number(deviceId),
@@ -241,8 +243,7 @@ export default function RackCanvas({
     if (catalogItem) {
       const entry = JSON.parse(catalogItem);
       const itemType = SIMPLE_ITEM_TYPES.includes(entry.renderType) ? entry.renderType : 'custom-device';
-      const u_position = uPosition - entry.uSize + 1;
-      if (u_position < 1) return;
+      const u_position = clampUPosition(uPosition, entry.uSize, rack.u_height);
       actions.onSlotCreate({
         rack_id: rackId,
         item_type: itemType,
@@ -265,8 +266,7 @@ export default function RackCanvas({
     if (customDevId) {
       const custom = rackCustomDevices.find((c) => String(c.id) === customDevId);
       if (!custom) return;
-      const u_position = uPosition - custom.u_size + 1;
-      if (u_position < 1) return;
+      const u_position = clampUPosition(uPosition, custom.u_size, rack.u_height);
       actions.onSlotCreate({
         rack_id: rackId,
         item_type: 'custom-device',

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { clampUPosition } from './rackPlacement';
 
 // One empty rack-unit row: a drop target for devices/catalog items, with a
 // blue (ok) or red (collision) highlight while something is being dragged
 // over it.
-export default function RackUnitSlot({ u, band, is5th, draggingMeta, occupiedByU, onDrop }) {
+export default function RackUnitSlot({ u, band, is5th, draggingMeta, occupiedByU, rackUHeight, onDrop }) {
   const [dragOverState, setDragOverState] = useState(null); // null | 'ok' | 'collision'
 
   const handleDragOver = (e) => {
@@ -13,17 +14,14 @@ export default function RackUnitSlot({ u, band, is5th, draggingMeta, occupiedByU
       return;
     }
     const { uSize, excludeSlotId } = draggingMeta;
-    const uPosition = u - uSize + 1;
+    const uPosition = clampUPosition(u, uSize, rackUHeight);
+    const top = uPosition + uSize - 1;
     let state = 'ok';
-    if (uPosition < 1) {
-      state = 'collision';
-    } else {
-      for (let pos = uPosition; pos <= u; pos++) {
-        const owner = occupiedByU.get(pos);
-        if (owner !== undefined && owner !== excludeSlotId) {
-          state = 'collision';
-          break;
-        }
+    for (let pos = uPosition; pos <= top; pos++) {
+      const owner = occupiedByU.get(pos);
+      if (owner !== undefined && owner !== excludeSlotId) {
+        state = 'collision';
+        break;
       }
     }
     setDragOverState(state);

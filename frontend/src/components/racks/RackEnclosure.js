@@ -241,6 +241,7 @@ function RackPanel({
                     is5th={is5th}
                     draggingMeta={draggingMeta}
                     occupiedByU={occupiedByU}
+                    rackUHeight={rack.u_height}
                     onDrop={(uPos, e) => onDrop(rack.id, uPos, face, e)}
                   />
                 );
@@ -291,6 +292,7 @@ function RackPanel({
                 is5th={u % 5 === 0}
                 draggingMeta={draggingMeta}
                 occupiedByU={occupiedByU}
+                rackUHeight={rack.u_height}
                 onDrop={(uPos, e) => onDrop(rack.id, uPos, face, e)}
               />
             );
