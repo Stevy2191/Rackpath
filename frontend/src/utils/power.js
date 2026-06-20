@@ -44,23 +44,6 @@ export function listPowerSources(rackSlots, excludeSlotId) {
     }));
 }
 
-// Flat <option>-ready list for the "Plugged Into" dropdown.
-export function buildOutletOptions(rackSlots, excludeSlotId, currentSlotId) {
-  const options = [];
-  for (const { slot, outlets } of listPowerSources(rackSlots, excludeSlotId)) {
-    for (const { n, occupant } of outlets) {
-      const occupiedByOther = occupant && occupant.id !== currentSlotId;
-      options.push({
-        sourceSlotId: slot.id,
-        outlet: n,
-        label: `${getPowerLabel(slot)} — Outlet ${n}`,
-        disabled: Boolean(occupiedByOther),
-      });
-    }
-  }
-  return options;
-}
-
 // How many of a PDU/UPS's outlets currently have something plugged in.
 export function countOccupiedOutlets(slot, rackSlots) {
   let count = 0;

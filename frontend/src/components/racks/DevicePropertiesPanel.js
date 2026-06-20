@@ -3,7 +3,7 @@ import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus, Copy } f
 import client from '../../api/client';
 import {
   isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel,
-  buildOutletOptions, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet,
+  listPowerSources, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet,
 } from '../../utils/power';
 import { pduCatalogEntries } from './rackCatalog';
 import { COLOR_SWATCHES, getFieldSchema } from './deviceFieldSchemas';
@@ -23,10 +23,6 @@ const MOUNT_SIDE_OPTIONS = [
 ];
 
 const WALL_DIRECT = '';
-
-function outletValue(sourceSlotId, outlet) {
-  return sourceSlotId ? `${sourceSlotId}:${outlet}` : WALL_DIRECT;
-}
 
 export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest, onDuplicate }) {
   const [fields, setFields] = useState(null);
@@ -484,37 +480,15 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
         {!passive && (
           <>
             <div className="props-section-divider">Power</div>
-
-            {/* Plugged Into */}
-            <div className="props-field">
-              <label className="props-field-label">Plugged Into</label>
-              <select
-                className="props-input"
-                value={outletValue(fields.power_source_slot_id, fields.power_source_outlet)}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === WALL_DIRECT) {
-                    setFields((f) => ({ ...f, power_source_slot_id: null, power_source_outlet: null }));
-                    patch({ power_source_slot_id: null, power_source_outlet: null });
-                    return;
-                  }
-                  const [sourceId, outlet] = val.split(':').map(Number);
-                  setFields((f) => ({ ...f, power_source_slot_id: sourceId, power_source_outlet: outlet }));
-                  patch({ power_source_slot_id: sourceId, power_source_outlet: outlet });
-                }}
-              >
-                <option value={WALL_DIRECT}>Wall (Direct)</option>
-                {buildOutletOptions(rackSlots || [], slot.id, slot.id).map((opt) => (
-                  <option
-                    key={`${opt.sourceSlotId}:${opt.outlet}`}
-                    value={outletValue(opt.sourceSlotId, opt.outlet)}
-                    disabled={opt.disabled}
-                  >
-                    {opt.label}{opt.disabled ? ' (occupied)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <PluggedIntoField
+              slot={slot}
+              rackSlots={rackSlots || []}
+              fields={fields}
+              onChange={(changes) => {
+                setFields((f) => ({ ...f, ...changes }));
+                patch(changes);
+              }}
+            />
           </>
         )}
 
@@ -587,6 +561,98 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Two-step "Plugged Into" selector: pick the power device first, then one
+// of its outlets, instead of one flat dropdown listing every outlet across
+// every PDU/UPS in the rack. Once both steps are set, collapses to a
+// compact summary ("UPS → Outlet 3") with a button to reopen the selector.
+function PluggedIntoField({ slot, rackSlots, fields, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [pendingSourceId, setPendingSourceId] = useState(null);
+
+  const sources = listPowerSources(rackSlots, slot.id);
+  const currentSourceId = fields.power_source_slot_id;
+  const currentOutlet = fields.power_source_outlet;
+  const currentSourceSlot = currentSourceId ? rackSlots.find((s) => s.id === currentSourceId) : null;
+
+  const summary = currentSourceId
+    ? `${getPowerLabel(currentSourceSlot)} → Outlet ${currentOutlet}`
+    : 'Wall (Direct)';
+
+  const startEditing = () => {
+    setPendingSourceId(currentSourceId || null);
+    setEditing(true);
+  };
+
+  const handleSourceChange = (val) => {
+    if (val === WALL_DIRECT) {
+      onChange({ power_source_slot_id: null, power_source_outlet: null });
+      setEditing(false);
+      return;
+    }
+    // Selecting a different power device always clears the outlet step —
+    // re-picking the device that's already wired keeps showing its outlet.
+    setPendingSourceId(Number(val));
+  };
+
+  const handleOutletChange = (n) => {
+    onChange({ power_source_slot_id: pendingSourceId, power_source_outlet: n });
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <div className="props-field">
+        <label className="props-field-label">Plugged Into</label>
+        <div className="props-plugged-summary">
+          <span className="props-plugged-summary-text">{summary}</span>
+          <button type="button" className="props-upload-btn" onClick={startEditing}>Change</button>
+        </div>
+      </div>
+    );
+  }
+
+  const selectedSourceEntry = pendingSourceId != null ? sources.find((s) => s.slot.id === pendingSourceId) : null;
+  const outletValue = pendingSourceId === currentSourceId ? (currentOutlet || '') : '';
+
+  return (
+    <div className="props-field">
+      <label className="props-field-label">Plugged Into</label>
+      <select
+        className="props-input"
+        value={pendingSourceId == null ? WALL_DIRECT : String(pendingSourceId)}
+        onChange={(e) => handleSourceChange(e.target.value)}
+        autoFocus
+      >
+        <option value={WALL_DIRECT}>Wall (Direct)</option>
+        {sources.map(({ slot: sourceSlot }) => (
+          <option key={sourceSlot.id} value={sourceSlot.id}>{getPowerLabel(sourceSlot)}</option>
+        ))}
+      </select>
+
+      {selectedSourceEntry && (
+        <select
+          className="props-input"
+          style={{ marginTop: 6 }}
+          value={outletValue}
+          onChange={(e) => handleOutletChange(Number(e.target.value))}
+        >
+          <option value="" disabled>Select outlet…</option>
+          {selectedSourceEntry.outlets.map(({ n, occupant }) => {
+            const occupiedByOther = occupant && occupant.id !== slot.id;
+            return (
+              <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
+                Outlet {n}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
+              </option>
+            );
+          })}
+        </select>
+      )}
+
+      <button type="button" className="props-upload-btn" style={{ marginTop: 6 }} onClick={() => setEditing(false)}>Cancel</button>
     </div>
   );
 }

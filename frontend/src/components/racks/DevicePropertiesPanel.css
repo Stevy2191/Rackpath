@@ -234,6 +234,22 @@
 .props-save-catalog-row .props-input { flex: 1; min-width: 0; }
 .props-save-catalog-row .props-upload-btn { flex-shrink: 0; white-space: nowrap; }
 
+/* ─── Plugged Into (collapsed summary) ────────────────────── */
+.props-plugged-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.props-plugged-summary-text {
+  font-size: 0.8rem;
+  color: #e6e9f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ─── Image upload ───────────────────────────────────────── */
 .props-image-row {
   display: flex;
