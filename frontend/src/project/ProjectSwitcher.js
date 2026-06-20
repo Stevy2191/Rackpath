@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { useProject, DEFAULT_PROJECT_ID } from './ProjectContext';
 import client from '../api/client';
 import TemplatePicker from '../components/TemplatePicker';
@@ -28,6 +28,7 @@ export default function ProjectSwitcher() {
   const [error, setError] = useState(null);
   const containerRef = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Close the dropdown when clicking outside it.
   useEffect(() => {
@@ -63,6 +64,18 @@ export default function ProjectSwitcher() {
     setModal(null);
     setError(null);
     setSaving(false);
+  };
+
+  // Switching projects updates context immediately. If we're on a route that
+  // pins a project id into the URL (the dashboard), the URL must move with
+  // it — otherwise the Dashboard's own URL-sync effect sees the stale id on
+  // remount and switches straight back to the old project.
+  const handleSwitch = (project) => {
+    switchProject(project.id);
+    if (matchPath('/projects/:id', location.pathname)) {
+      navigate(`/projects/${project.id}`);
+    }
+    setOpen(false);
   };
 
   const handleSave = async (e) => {
@@ -160,10 +173,7 @@ export default function ProjectSwitcher() {
                 <button
                   type="button"
                   className="project-switcher-item-name"
-                  onClick={() => {
-                    switchProject(project.id);
-                    setOpen(false);
-                  }}
+                  onClick={() => handleSwitch(project)}
                 >
                   {project.name}
                 </button>
