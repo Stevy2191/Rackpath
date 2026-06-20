@@ -42,6 +42,7 @@ export default function RackCanvas({
   onFocusRack,
   onSelectSlot,
   onEditRack,
+  onOpenRackEdit,
   rackEditOpen,
   fitRackRequest,
   renamingRackId,
@@ -292,6 +293,7 @@ export default function RackCanvas({
             setDraggingMeta={setDraggingMeta}
             onDrop={handleDrop}
             onFocus={() => onFocusRack(rack.id)}
+            onEditRackRequest={() => onOpenRackEdit(rack.id)}
             isFocused={focusedRackId === rack.id}
             uHeight={U_HEIGHT}
             onSelectSlot={onSelectSlot}

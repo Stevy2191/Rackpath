@@ -322,6 +322,7 @@ export default function RackEnclosure({
   setDraggingMeta,
   onDrop,
   onFocus,
+  onEditRackRequest,
   isFocused,
   uHeight,
   onSelectSlot,
@@ -483,7 +484,13 @@ export default function RackEnclosure({
       <div className={`rack-u-counter${freeU === 0 ? ' rack-u-counter-full' : ''}`}>
         {usedU}U used &middot; {freeU}U free
       </div>
-      <div className="rack-dual-frame" ref={frameRef} style={{ '--u-height': `${uHeight}px` }} onClick={onFocus}>
+      <div
+        className="rack-dual-frame"
+        ref={frameRef}
+        style={{ '--u-height': `${uHeight}px` }}
+        onClick={onFocus}
+        onDoubleClick={onEditRackRequest}
+      >
         <RackPanel
           face="front"
           showLeftRail

@@ -78,8 +78,10 @@ export default function DeviceBlock({
       onMouseLeave={handleMouseLeave}
       onClick={(e) => {
         if (e.defaultPrevented) return;
+        e.stopPropagation();
         onSelect && onSelect(slot.id);
       }}
+      onDoubleClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();

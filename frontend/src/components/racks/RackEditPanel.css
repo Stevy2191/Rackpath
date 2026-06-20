@@ -64,6 +64,14 @@
   gap: 5px;
 }
 
+/* Visually separates the start of a new grouped section (e.g. Annotation
+   Field) from the unrelated field above it, instead of running together. */
+.rep-field-section-start {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #2a2e38;
+}
+
 .rep-label {
   font-size: 0.65rem;
   font-weight: 700;

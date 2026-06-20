@@ -396,6 +396,9 @@ export default function RacksPage() {
   };
 
   const handleSelectSlot = (slotId) => {
+    // Selecting (or deselecting) a device always closes rack settings —
+    // the two right-side panels never show at the same time.
+    setRackEditOpen(false);
     setSelectedSlotId((cur) => (cur === slotId ? null : slotId));
   };
 
@@ -572,9 +575,26 @@ export default function RacksPage() {
           onRequestPlacement={requestPlacement}
           cableViewEnabled={cableViewEnabled}
           focusedRackId={focusedRackId}
-          onFocusRack={setFocusedRackId}
+          onFocusRack={(rackId) => {
+            // Single click on the rack frame / empty rack space: select that
+            // rack for click-to-add, deselect any device, and never pop
+            // open rack settings — that's reserved for a double click.
+            setSelectedSlotId(null);
+            setRackEditOpen(false);
+            setFocusedRackId(rackId);
+          }}
           onSelectSlot={handleSelectSlot}
-          onEditRack={() => setRackEditOpen((v) => !v)}
+          onEditRack={() => {
+            setSelectedSlotId(null);
+            setRackEditOpen((v) => !v);
+          }}
+          onOpenRackEdit={(rackId) => {
+            // Double click on the rack frame: open rack settings, closing
+            // the device panel first so only one panel is ever visible.
+            setSelectedSlotId(null);
+            setFocusedRackId(rackId);
+            setRackEditOpen(true);
+          }}
           rackEditOpen={rackEditOpen}
           fitRackRequest={fitRackRequest}
           renamingRackId={renamingRackId}
@@ -592,10 +612,13 @@ export default function RacksPage() {
           onClose={() => setRackContextMenu(null)}
           onExport={() => openExportModal([ctxRack])}
           onFocus={() => {
+            setSelectedSlotId(null);
+            setRackEditOpen(false);
             setFocusedRackId(ctxRack.id);
             setFitRackRequest({ id: ctxRack.id, t: Date.now() });
           }}
           onEditRack={() => {
+            setSelectedSlotId(null);
             setFocusedRackId(ctxRack.id);
             setRackEditOpen(true);
           }}

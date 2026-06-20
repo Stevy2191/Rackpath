@@ -187,7 +187,7 @@ export default function RackEditPanel({ rack, usedU = 0, highestOccupiedU = 0, o
             </label>
           </div>
 
-          <div className="rep-field">
+          <div className="rep-field rep-field-section-start">
             <label className="rep-label">ANNOTATION FIELD</label>
             <select
               className="rep-input"

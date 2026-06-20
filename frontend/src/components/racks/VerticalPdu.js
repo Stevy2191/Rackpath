@@ -25,6 +25,7 @@ export default function VerticalPdu({ slot, rack, uHeight, offsetPx, isSelected,
         e.stopPropagation();
         onSelect && onSelect(slot.id);
       }}
+      onDoubleClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();

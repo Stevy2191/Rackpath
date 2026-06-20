@@ -253,9 +253,8 @@
   flex-direction: column;
   flex-shrink: 0;
   width: 150px;
+  margin-left: 14px;
   border-left: 1px solid rgba(255, 255, 255, 0.07);
-  /* No padding here — the header spans full width for centering;
-     left indent is applied to the body only. */
 }
 
 .rack-annotation-header {
@@ -289,7 +288,6 @@
 .rack-annotation-body {
   display: flex;
   flex-direction: column;
-  padding-left: 8px;
 }
 
 .rack-annotation-cell {
@@ -297,9 +295,10 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
+  justify-content: center;
   overflow: hidden;
   border-bottom: 1px dotted rgba(255, 255, 255, 0.05);
-  padding-right: 4px;
+  padding: 0 4px;
 }
 
 .rack-annotation-text {
@@ -310,6 +309,7 @@
   word-break: break-word;
   overflow: hidden;
   max-width: 100%;
+  text-align: center;
 }
 
 /* ─── Vertical PDU (floating strip alongside the frame) ──── */
