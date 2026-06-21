@@ -291,8 +291,11 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
     </>
   );
 
-  const showGeneral = tab === 'general';
-  const showPower = tab === 'power';
+  // Passive items (patch panels, shelves, cable management, etc.) have no
+  // power cord at all, so they get no Power tab — just the General fields.
+  const showPowerTab = !passive;
+  const showGeneral = !showPowerTab || tab === 'general';
+  const showPower = showPowerTab && tab === 'power';
   const powerSources = listPowerSources(rackSlots || [], slot.id);
 
   return (
@@ -304,10 +307,12 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
         </button>
       </div>
 
-      <div className="props-tabs">
-        <button type="button" className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>General</button>
-        <button type="button" className={tab === 'power' ? 'active' : ''} onClick={() => setTab('power')}>Power</button>
-      </div>
+      {showPowerTab && (
+        <div className="props-tabs">
+          <button type="button" className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>General</button>
+          <button type="button" className={tab === 'power' ? 'active' : ''} onClick={() => setTab('power')}>Power</button>
+        </div>
+      )}
 
       {saving && <div className="props-panel-saving">Saving…</div>}
       {error && <div className="props-panel-error" onClick={() => setError(null)}>{error}</div>}
