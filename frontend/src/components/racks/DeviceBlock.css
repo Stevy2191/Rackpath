@@ -6,6 +6,7 @@
   padding: 0 6px 0 4px;
   /* background set via inline style (the category color) */
   border-bottom: 1px solid rgba(0, 0, 0, 0.38);
+  border-radius: 7px;
   cursor: grab;
   position: relative;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
@@ -89,7 +90,22 @@
 }
 
 /* ─── Half-depth crosshatch (opposite panel) ────────────────── */
+/* One segment per U row, stacked with a small gap so a multi-U no-go
+   zone reads as separate blocked rows instead of one merged block. */
+.device-block-halfdepth-stripe-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .device-block-halfdepth-stripe {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 7px;
   background-color: rgba(55, 6, 6, 0.95);
   background-image:
     repeating-linear-gradient(
