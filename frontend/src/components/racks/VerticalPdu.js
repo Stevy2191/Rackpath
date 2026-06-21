@@ -2,14 +2,13 @@ import React from 'react';
 import { getOutletCount } from '../../utils/power';
 
 // Floating strip rendered alongside the rack frame, representing a PDU/UPS
-// mounted vertically (not occupying U columns). Reuses u_position/u_size as
-// the vertical start U / span U, same as horizontal slots. `leftPx` and
-// `side` are both computed by the parent (RackEnclosure), which is also
-// what draws the power cord to this strip — keeping the position math in
-// one place means the strip and its cord can never disagree.
-export default function VerticalPdu({ slot, rack, uHeight, leftPx, side, isSelected, highlighted, onSelect, actions }) {
-  const top = 16 + (rack.u_height - (slot.u_position + slot.u_size - 1)) * uHeight;
-  const height = slot.u_size * uHeight;
+// mounted vertically (not occupying U columns). Unlike a horizontal slot,
+// its size is NOT derived from u_position/u_size — `top`/`height`/`leftPx`/
+// `side` are all computed by the parent (RackEnclosure) as a fraction of
+// the rack's own rendered height (see verticalPduLayout.pduBox), which is
+// also what draws the power cord to this strip — keeping the position math
+// in one place means the strip and its cord can never disagree.
+export default function VerticalPdu({ slot, leftPx, top, height, side, isSelected, highlighted, onSelect, actions }) {
   const outletCount = getOutletCount(slot);
   // Same pattern as DeviceBlock's rack-mounted devices: a chosen color
   // overrides the default look entirely. Previously this prop was just

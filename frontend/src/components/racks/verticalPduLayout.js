@@ -18,6 +18,13 @@ export const DEFAULT_U_HEIGHT = 40;
 // ~28px of clear space on either side of the (9px-wide) strip rather than
 // crowding it against either panel's edge.
 export const PANEL_GAP = 65;
+// A vertical PDU's floating strip is sized off the rack's own rendered
+// height, not whatever u_size happens to be stored on its slot — a real
+// vertical PDU spans most (not all) of the rack regardless of how tall the
+// rack is, so this is what makes a 42U rack's strip taller than an 8U
+// rack's while both still read as "the same kind of object" relative to
+// their own frame. Centered vertically in the remaining 1 - ratio gap.
+export const PDU_HEIGHT_RATIO = 0.65;
 
 export function resolveFace(s) {
   if (s.mounted_face) return s.mounted_face;
@@ -29,6 +36,39 @@ export function resolveFace(s) {
 function bottomY(rack, uHeight, u_position, u_size) {
   const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
   return top + u_size * uHeight;
+}
+
+// Vertical PDU strip's own top/height, centered within the rack's
+// rendered pixel height (frameHeight — same local, untransformed
+// coordinate space frameSize.height is measured in, so this scales
+// correctly with canvas zoom along with everything else under the same
+// transform instead of needing its own zoom correction).
+export function pduBox(frameHeight) {
+  const height = frameHeight * PDU_HEIGHT_RATIO;
+  const top = (frameHeight - height) / 2;
+  return { top, height };
+}
+
+// Bezier control points scaled to the actual distance between the cord's
+// two anchors. Previously these were fixed pixel offsets (+16/+24 of sag,
+// 18-36px of horizontal reach) regardless of how far apart the anchors
+// actually were — fine for the long, U-position-driven gaps that used to
+// be typical, but a short cord (now common since the PDU's own bottom tip
+// no longer depends on its slot's u_size) would sag/bow by more than the
+// gap itself, reading as the curve overshooting past either end. Scaling
+// both by the anchors' own distance keeps the bow proportional at any
+// length: short cord → tight curve, long cord → a wider bow.
+function buildCordCurve(upsX, upsY, pduX, pduY, outward) {
+  const dist = Math.hypot(pduX - upsX, pduY - upsY);
+  const reach = Math.max(10, Math.min(40, dist * 0.3));
+  const sag = Math.max(6, Math.min(28, dist * 0.18));
+
+  const c1x = upsX + outward * reach * 0.45;
+  const c1y = upsY + sag * 0.6;
+  const c2x = pduX + outward * reach;
+  const c2y = pduY + sag;
+
+  return { upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY };
 }
 
 // Turns an assigned slot ({side, stack} from computeVerticalPduPositions)
@@ -57,19 +97,22 @@ export function pduLeftPx({ side, stack }, frameWidth) {
   return halfWidth + PANEL_GAP / 2 - STRIP_WIDTH / 2;
 }
 
-// Full layout for every vertical PDU in a rack: where its strip floats and
-// (if it's plugged into a UPS that's also in `uSlots`) the bezier control
-// points for its power cord. `hasMiddleGap` should be true only when both
-// Front and Rear are actually present in whatever's being laid out (live
-// rendering with Rear shown, or a Side-by-Side export capture) — false for
-// Rear hidden live, or a Front Only/Rear Only single-column capture.
+// Full layout for every vertical PDU in a rack: where its strip floats
+// (left/top/height) and (if it's plugged into a UPS that's also in
+// `uSlots`) the bezier control points for its power cord. `hasMiddleGap`
+// should be true only when both Front and Rear are actually present in
+// whatever's being laid out (live rendering with Rear shown, or a
+// Side-by-Side export capture) — false for Rear hidden live, or a Front
+// Only/Rear Only single-column capture.
 //
-// Returns Map<pduId, { side, stack, leftPx, cord: null | {
+// Returns Map<pduId, { side, stack, leftPx, top, height, cord: null | {
 //   upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY
 // } }>.
-export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameWidth, hasMiddleGap }) {
+export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameWidth, frameHeight, hasMiddleGap }) {
   const assigned = computeVerticalPduPositions(verticalPdus);
   const rightSideCount = [...assigned.values()].filter((p) => p.side === 'right').length;
+  const { top, height } = pduBox(frameHeight);
+  const pduBottomY = top + height;
 
   const result = new Map();
   for (const pdu of verticalPdus) {
@@ -80,8 +123,11 @@ export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameW
     let cord = null;
     const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
     if (ups) {
+      // Bottom edge, not vertical center, for both ends — the cord plugs
+      // in at the strip's own bottom tip and the UPS's own cord-exit
+      // point, which reads as the bottom of its device block.
       const pduX = leftPx + STRIP_WIDTH / 2;
-      const pduY = bottomY(rack, uHeight, pdu.u_position, pdu.u_size);
+      const pduY = pduBottomY;
 
       // Left/right cords always enter from that outer edge of the frame
       // being laid out. A middle cord has no outer edge to default to, so
@@ -98,25 +144,12 @@ export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameW
         upsX = upsOnRear ? halfWidth + PANEL_GAP : halfWidth;
         outward = upsOnRear ? -1 : 1;
       }
-      // Bottom edge, not vertical center, for both ends — the cord plugs
-      // in at the UPS's own cord-exit point and the strip's own bottom tip.
       const upsY = bottomY(rack, uHeight, ups.u_position, ups.u_size);
 
-      // Control points pull the curve out away from the rack and let it
-      // sag below a straight line before rising into the PDU's bottom —
-      // the look of a loosely hanging cable rather than a taut geometric
-      // connector. Deliberately uneven (different outward distance, sag
-      // only on the second) so the curve reads as organic, not mirrored.
-      const reach = Math.max(18, Math.min(36, Math.abs(pduX - upsX) * 0.5));
-      const c1x = upsX + outward * reach * 0.45;
-      const c1y = upsY + 16;
-      const c2x = pduX + outward * reach;
-      const c2y = pduY + 24;
-
-      cord = { upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY };
+      cord = buildCordCurve(upsX, upsY, pduX, pduY, outward);
     }
 
-    result.set(pdu.id, { side: resolved.side, stack: resolved.stack, leftPx, cord });
+    result.set(pdu.id, { side: resolved.side, stack: resolved.stack, leftPx, top, height, cord });
   }
   return result;
 }

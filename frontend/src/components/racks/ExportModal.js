@@ -116,9 +116,10 @@ function relayoutPdusForSingleColumn(clone, rack, verticalPdus, uSlots) {
   const frame = clone.querySelector('.rack-dual-frame');
   if (!frame) return;
   const frameWidth = frame.offsetWidth;
+  const frameHeight = frame.offsetHeight;
 
   const layout = layoutVerticalPdus({
-    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frameWidth, hasMiddleGap: false,
+    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frameWidth, frameHeight, hasMiddleGap: false,
   });
   const byId = new Map([...layout].map(([id, v]) => [String(id), v]));
 
@@ -126,6 +127,8 @@ function relayoutPdusForSingleColumn(clone, rack, verticalPdus, uSlots) {
     const entry = byId.get(el.dataset.pduId);
     if (!entry) continue;
     el.style.left = `${entry.leftPx}px`;
+    el.style.top = `${entry.top}px`;
+    el.style.height = `${entry.height}px`;
     el.classList.remove('rack-vertical-pdu-left', 'rack-vertical-pdu-middle', 'rack-vertical-pdu-right');
     el.classList.add(`rack-vertical-pdu-${entry.side}`);
   }

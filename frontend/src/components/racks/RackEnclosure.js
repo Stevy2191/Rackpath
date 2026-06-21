@@ -381,6 +381,7 @@ export default function RackEnclosure({
     rack,
     uHeight,
     frameWidth: frameSize.width,
+    frameHeight: frameSize.height,
     hasMiddleGap: showRear,
   });
 
@@ -646,15 +647,15 @@ export default function RackEnclosure({
         )}
 
         {verticalPdus.map((pdu) => {
-          const { side, leftPx } = pduLayout.get(pdu.id);
+          const { side, leftPx, top, height } = pduLayout.get(pdu.id);
           return (
             <VerticalPdu
               key={pdu.id}
               slot={pdu}
-              rack={rack}
-              uHeight={uHeight}
               side={side}
               leftPx={leftPx}
+              top={top}
+              height={height}
               isSelected={pdu.id === selectedSlotId}
               highlighted={pdu.id === highlightedSlotId}
               onSelect={onSelectSlot}
