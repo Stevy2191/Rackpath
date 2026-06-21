@@ -11,15 +11,23 @@ export function isPassiveItem(slot) {
   return PASSIVE_RENDER_TYPES.has(resolveRenderType(slot));
 }
 
-// PDU/UPS: provides outlets that other devices can be plugged into.
+// PDU/UPS/ATS: provides outlets that other devices can be plugged into.
 export function isPowerDevice(slot) {
   const type = resolveRenderType(slot);
-  return type === 'ups' || type === 'pdu' || type === 'pdu-vertical';
+  return type === 'ups' || type === 'pdu' || type === 'pdu-vertical' || type === 'ats';
 }
 
 // UPS specifically — the only device type that can host vertical PDUs.
 export function isUps(slot) {
   return resolveRenderType(slot) === 'ups';
+}
+
+// ATS (Automatic Transfer Switch) — draws from two independent upstream
+// sources (Input A/B, reusing the same PSU1/PSU2 columns any consumer
+// device's two power cords use) and feeds exactly one downstream device
+// from its single outlet, unlike a PDU/UPS's bank of several.
+export function isAts(slot) {
+  return resolveRenderType(slot) === 'ats';
 }
 
 // A device's outlets are modeled as groups of same-typed outlets, e.g.
@@ -88,7 +96,7 @@ function claims(candidate, sourceSlotId, n) {
 // `sourceSlotId`, across the whole project — a PDU/UPS's outlets are
 // occupied by whichever device claims them, regardless of which rack that
 // device physically sits in. Returns { slot, psu: 'psu1'|'psu2' } or null.
-function findOccupant(allSlots, sourceSlotId, n) {
+export function findOccupant(allSlots, sourceSlotId, n) {
   for (const s of allSlots) {
     if (s.power_source_slot_id === sourceSlotId && s.power_source_outlet === n) return { slot: s, psu: 'psu1' };
     if (s.psu2_source_slot_id === sourceSlotId && s.psu2_source_outlet === n) return { slot: s, psu: 'psu2' };

@@ -21,6 +21,11 @@ export const OUTLET_TYPES = ['NEMA 5-15R', 'NEMA 5-20R', 'NEMA L5-30R', 'NEMA L6
 export const INPUT_PLUG_TYPES = ['NEMA 5-15P', 'NEMA 5-20P', 'NEMA L5-30P', 'NEMA L6-20P', 'NEMA L6-30P', 'IEC C14', 'IEC C20'];
 export const INPUT_VOLTAGES = ['120V', '208V', '240V'];
 export const CAPACITY_UNITS = ['A', 'W'];
+// ATS inlet/outlet are a narrower curated list than the general
+// INPUT_PLUG_TYPES/OUTLET_TYPES above — an ATS is a smaller, simpler
+// single-circuit device, not a multi-outlet PDU/UPS.
+export const ATS_INLET_TYPES = ['NEMA 5-15P', 'NEMA L5-30P', 'IEC C14', 'IEC C20'];
+export const ATS_OUTLET_TYPES = ['NEMA 5-15R', 'NEMA 5-20R', 'IEC C13', 'IEC C19'];
 
 // kind: 'select' (options + allowCustom) | 'number'
 // UPS/PDU/PDU-vertical have no entries here — their power fields (input

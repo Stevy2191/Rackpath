@@ -63,6 +63,12 @@ export const RACK_CATALOG = [
   e('pdu-vertical', 'PDU - Vertical / 0U', 'POWER', 'pdu-vertical', 0, {
     outletCount: 8, outletType: 'IEC C13', floating: true,
   }),
+  // Rack-mounted like a normal device (occupies U slots), not a floating
+  // 0U strip — single outlet (count: 1) since it only ever feeds one
+  // downstream device, unlike a PDU's bank of several.
+  e('ats', 'ATS - Automatic Transfer Switch', 'POWER', 'ats', 1, {
+    outletCount: 1, outletType: 'NEMA 5-15R',
+  }),
 
   // ─── STORAGE ────────────────────────────────────────────────────────────────
   e('nas-storage-array', 'NAS / Storage Array', 'STORAGE', 'storage', 2, { bayCount: 12 }),

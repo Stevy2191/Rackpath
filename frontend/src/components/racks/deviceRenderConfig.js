@@ -1,7 +1,7 @@
 import {
   Server, Network, Shield, HardDrive, Zap, Plug, Cable, Monitor, Wifi, Box, Minus,
   ServerCog, Scale, Archive, Shuffle, CircleDot, Terminal, MonitorCog, Volume2,
-  PlayCircle, MonitorPlay, Inbox, PackageOpen,
+  PlayCircle, MonitorPlay, Inbox, PackageOpen, ArrowLeftRight,
 } from 'lucide-react';
 
 export const CATEGORY_CONFIG = {
@@ -15,6 +15,7 @@ export const CATEGORY_CONFIG = {
   ups:                    '#EA580C',
   pdu:                    '#D97706',
   'pdu-vertical':         '#D97706',
+  ats:                    '#C2410C',
   'patch-panel':          '#7C3AED',
   'patch-panel-copper':   '#7C3AED',
   'patch-panel-fiber':    '#9333EA',
@@ -46,6 +47,7 @@ export const CATEGORY_ICONS = {
   ups:                    Zap,
   pdu:                    Plug,
   'pdu-vertical':         Plug,
+  ats:                    ArrowLeftRight,
   'patch-panel':          Cable,
   'patch-panel-copper':   Cable,
   'patch-panel-fiber':    Cable,
@@ -67,6 +69,9 @@ export const CATEGORY_ICONS = {
 };
 
 const KEYWORD_RULES = [
+  // Checked before the generic /switch/i rule below, so "Automatic
+  // Transfer Switch"/"ATS" doesn't get misclassified as a network switch.
+  [/\bats\b|transfer switch/i, 'ats'],
   [/firewall|fortigate|palo ?alto|fortinet|udm|router/i, 'firewall'],
   [/switch/i, 'switch'],
   [/poweredge|proliant|thinksystem|superserver|^server$/i, 'server'],

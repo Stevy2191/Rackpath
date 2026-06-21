@@ -3,11 +3,14 @@ import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus } from 'l
 import { useScrollOverflow } from './useScrollOverflow';
 import client from '../../api/client';
 import {
-  isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel, getPowerSourceLabel,
-  groupPowerSourcesByRack, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet,
+  isPassiveItem, isPowerDevice, isUps, isAts, getOutletCount, getPowerLabel, getPowerSourceLabel,
+  groupPowerSourcesByRack, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet, findOccupant,
 } from '../../utils/power';
 import { pduCatalogEntries } from './rackCatalog';
-import { COLOR_SWATCHES, getFieldSchema, INPUT_VOLTAGES, INPUT_PLUG_TYPES, CAPACITY_UNITS } from './deviceFieldSchemas';
+import {
+  COLOR_SWATCHES, getFieldSchema, INPUT_VOLTAGES, INPUT_PLUG_TYPES, CAPACITY_UNITS,
+  ATS_INLET_TYPES, ATS_OUTLET_TYPES,
+} from './deviceFieldSchemas';
 import DeviceConfigFields from './DeviceConfigFields';
 import OutletGroupsEditor, { TypeSelect } from './OutletGroupsEditor';
 import { resolveRenderType } from './deviceRenderConfig';
@@ -34,12 +37,19 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
   const [savingToCatalog, setSavingToCatalog] = useState(false);
   const [catalogName, setCatalogName] = useState('');
   const [tab, setTab] = useState('general');
+  // PSU 2 is optional and hidden by default — only shown once the user
+  // explicitly adds it, or it already has a value (don't hide existing
+  // data just because the UI default changed). Reset alongside the rest
+  // of the form whenever the slot being edited changes (see the effect
+  // below).
+  const [showPsu2, setShowPsu2] = useState(Boolean(slot?.psu2_source_slot_id));
   const frontFileRef = useRef(null);
   const rearFileRef = useRef(null);
   const saveTimer = useRef(null);
   const [setBodyEl, setBodyContentEl, hasMoreBelow] = useScrollOverflow();
 
   const isVerticalPdu = slot?.item_type === 'vertical-pdu';
+  const isAtsSlot = slot ? isAts(slot) : false;
   // Position (Left/Right) is assigned rack-wide by creation order — see
   // computeVerticalPduPositions — so it has to be derived from every
   // vertical PDU in the rack, not just this one: 1st PDU added is Left,
@@ -85,6 +95,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     setError(null);
     setSavingToCatalog(false);
     setTab('general');
+    setShowPsu2(Boolean(slot.psu2_source_slot_id));
     // Deliberately keyed on the slot's id, not the slot object — every patch
     // replaces `slot` with a fresh object from the server (same id), and
     // resetting fields/tab on every one of those would snap the user back
@@ -238,12 +249,20 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     patch(changes);
   };
 
+  const removePsu2 = () => {
+    setShowPsu2(false);
+    onPsuChange({ psu2_source_slot_id: null, psu2_source_outlet: null });
+  };
+
   // Vertical PDUs only ever have the one connection (to their owning UPS,
   // set automatically when they're attached — see VerticalPduSection), so
   // they keep the single "Plugged Into" field rather than gaining a PSU2
-  // that wouldn't mean anything for them. Every other non-passive item
-  // (regular devices, and a horizontal PDU/UPS chained to an upstream
-  // source) gets independent PSU 1 / PSU 2 selectors.
+  // that wouldn't mean anything for them. ATS has its own Input A/Input B
+  // pair rendered separately below (always both shown — that's the whole
+  // point of an ATS), not this generic PSU1/PSU2 pair. Every other
+  // non-passive item (regular devices, and a horizontal PDU/UPS chained
+  // to an upstream source) gets independent PSU 1 / PSU 2 selectors, with
+  // PSU 2 optional and hidden until added.
   const psu1Field = (
     <PsuField
       key={`${slot.id}-psu1`}
@@ -257,16 +276,27 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     />
   );
   const psu2Field = !isVerticalPdu && (
-    <PsuField
-      key={`${slot.id}-psu2`}
-      slot={slot}
-      allSlots={allSlots || []}
-      racks={racks || []}
-      fieldPrefix="psu2"
-      label="PSU 2"
-      fields={fields}
-      onChange={onPsuChange}
-    />
+    showPsu2 ? (
+      <>
+        <PsuField
+          key={`${slot.id}-psu2`}
+          slot={slot}
+          allSlots={allSlots || []}
+          racks={racks || []}
+          fieldPrefix="psu2"
+          label="PSU 2"
+          fields={fields}
+          onChange={onPsuChange}
+        />
+        <button type="button" className="props-upload-btn" style={{ marginTop: 6 }} onClick={removePsu2}>
+          <X size={11} /> Remove PSU 2
+        </button>
+      </>
+    ) : (
+      <button type="button" className="props-upload-btn" onClick={() => setShowPsu2(true)}>
+        <Plus size={11} /> Add PSU 2
+      </button>
+    )
   );
   const pluggedIntoFields = <>{psu1Field}{psu2Field}</>;
 
@@ -652,7 +682,63 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
           </>
         )}
 
-        {showPower && isPower && (
+        {showPower && isAtsSlot && (
+          <>
+            {/* Inlet Type */}
+            <div className="props-field">
+              <label className="props-field-label">Inlet Type</label>
+              <TypeSelect
+                value={fields.input_plug_type}
+                presets={ATS_INLET_TYPES}
+                onChange={(v) => setFieldNow('input_plug_type', v)}
+                placeholder="Custom inlet type"
+              />
+            </div>
+
+            {/* Outlet Type — always exactly one outlet (an ATS feeds one
+                downstream device), so this writes outlet_groups directly
+                rather than going through the multi-group editor PDU/UPS
+                use. */}
+            <div className="props-field">
+              <label className="props-field-label">Outlet Type</label>
+              <TypeSelect
+                value={fields.outlet_groups[0]?.type || ''}
+                presets={ATS_OUTLET_TYPES}
+                onChange={(v) => {
+                  const groups = [{ type: v, count: 1 }];
+                  setFields((f) => ({ ...f, outlet_groups: groups }));
+                  patch({ outlet_groups: groups });
+                }}
+                placeholder="Custom outlet type"
+              />
+            </div>
+
+            <div className="props-section-divider">Power Sources</div>
+            <PsuField
+              slot={slot}
+              allSlots={allSlots || []}
+              racks={racks || []}
+              fieldPrefix="psu1"
+              label="Input A"
+              fields={fields}
+              onChange={onPsuChange}
+            />
+            <PsuField
+              slot={slot}
+              allSlots={allSlots || []}
+              racks={racks || []}
+              fieldPrefix="psu2"
+              label="Input B"
+              fields={fields}
+              onChange={onPsuChange}
+            />
+
+            <div className="props-section-divider">Output</div>
+            <AtsOutputField ats={slot} allSlots={allSlots || []} actions={actions} onSelectSlot={onSelectSlot} />
+          </>
+        )}
+
+        {showPower && isPower && !isAtsSlot && (
           <>
             {/* Input Plug Type */}
             <div className="props-field">
@@ -871,6 +957,60 @@ function PsuField({ slot, allSlots, racks, fieldPrefix, label, fields, onChange 
       )}
 
       <button type="button" className="props-upload-btn" style={{ marginTop: 6 }} onClick={() => setEditing(false)}>Cancel</button>
+    </div>
+  );
+}
+
+// Picks which device is plugged into this ATS's single outlet — the
+// reverse direction of every other "Plugged Into" editing in this panel
+// (which always edits the *consuming* device's own power_source_slot_id).
+// An ATS only has the one outlet, so rather than making the user go find
+// the downstream device and edit *its* Plugged Into field, this writes
+// power_source_slot_id/outlet=1 directly onto whichever device is picked
+// here — clearing the previously-assigned one first, since only one
+// device can occupy that single outlet at a time.
+function AtsOutputField({ ats, allSlots, actions, onSelectSlot }) {
+  const candidates = allSlots.filter((s) =>
+    s.id !== ats.id && !isPassiveItem(s) && !isPowerDevice(s) && s.item_type !== 'vertical-pdu'
+  );
+  // The ATS has exactly one outlet — whichever device's PSU1 or PSU2
+  // claims it (checking both, since a dual-PSU device could have the
+  // ATS on either cord) is the current Output.
+  const occupant = findOccupant(allSlots, ats.id, 1);
+  const current = occupant?.slot || null;
+  const currentField = occupant?.psu === 'psu2' ? { id: 'psu2_source_slot_id', outlet: 'psu2_source_outlet' } : { id: 'power_source_slot_id', outlet: 'power_source_outlet' };
+
+  const handleChange = async (e) => {
+    const newId = e.target.value ? Number(e.target.value) : null;
+    if (newId === (current?.id ?? null)) return;
+    if (current) {
+      await actions.onSlotUpdate(current, { [currentField.id]: null, [currentField.outlet]: null });
+    }
+    if (newId) {
+      const target = candidates.find((c) => c.id === newId);
+      if (target) await actions.onSlotUpdate(target, { power_source_slot_id: ats.id, power_source_outlet: 1 });
+    }
+  };
+
+  return (
+    <div className="props-field">
+      <label className="props-field-label">Output</label>
+      <select className="props-input" value={current?.id || ''} onChange={handleChange}>
+        <option value="">Not connected</option>
+        {candidates.map((c) => (
+          <option key={c.id} value={c.id}>{getPowerLabel(c)}</option>
+        ))}
+      </select>
+      {current && (
+        <button
+          type="button"
+          className="props-upload-btn"
+          style={{ marginTop: 6 }}
+          onClick={() => onSelectSlot && onSelectSlot(current.id)}
+        >
+          Jump to {getPowerLabel(current)}
+        </button>
+      )}
     </div>
   );
 }
