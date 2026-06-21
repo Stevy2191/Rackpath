@@ -398,14 +398,25 @@ export default function RackEnclosure({
 
   // Measure the dual-frame's intrinsic (untransformed) size so the cord
   // overlay's coordinates stay correct regardless of the canvas pan/zoom —
-  // offsetWidth/Height are unaffected by ancestor CSS transforms.
+  // offsetWidth/Height are unaffected by ancestor CSS transforms. A
+  // ResizeObserver (rather than a useLayoutEffect keyed on the props that
+  // *should* affect frame size) means this also picks up size changes
+  // React never triggered in the first place — e.g. the export modal
+  // temporarily hiding one panel via a plain CSS class for a Front/Rear-
+  // only capture, which previously left this stale at the full two-panel
+  // width and threw off every left/right-edge PDU position computed from
+  // it during that capture.
   const frameRef = useRef(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
-    if (frameRef.current) {
-      setFrameSize({ width: frameRef.current.offsetWidth, height: frameRef.current.offsetHeight });
-    }
-  }, [rack.show_rear, rack.show_annotations, rack.annotation_field, rack.u_height, uHeight]);
+    const el = frameRef.current;
+    if (!el) return;
+    const measure = () => setFrameSize({ width: el.offsetWidth, height: el.offsetHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Stop rendering the cords' traveling pulse while this rack is scrolled
   // out of the viewport, so off-screen racks don't keep animating for

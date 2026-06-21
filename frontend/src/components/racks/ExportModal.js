@@ -39,6 +39,18 @@ function loadImage(src) {
   });
 }
 
+// Toggling a CSS class that hides a panel (Front/Rear-only export views)
+// changes the dual-frame's actual layout size, which RackEnclosure picks
+// up via a ResizeObserver and feeds back into React state to recompute
+// every PDU position from. Both of those steps are asynchronous (the
+// observer callback, then React's re-render), so reading the DOM/style
+// immediately after adding the class would still see the pre-resize
+// values. A double rAF reliably waits out both — one frame for the
+// observer to fire, one more for the resulting re-render to commit.
+function waitForLayout() {
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -145,6 +157,11 @@ async function captureEnclosure(rackId, capFn, { backgroundColor, pixelRatio }) 
   if (!enclosure) return null;
   const frame = enclosure.querySelector('.rack-dual-frame');
   if (!frame) return null;
+
+  // Any view-specific class (front-only/rear-only) was already added by
+  // the caller before this runs — wait for RackEnclosure's frameSize to
+  // catch up with that before measuring/capturing anything.
+  await waitForLayout();
 
   const { left, right } = measurePduOverflow(frame);
   const prevMargin = frame.style.marginLeft;

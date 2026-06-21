@@ -449,6 +449,20 @@
   display: none;
 }
 
+/* A Front Only export only makes sense showing the PDU(s) that float on
+   the left (Front's own side); a Rear Only export, only the one(s) on
+   the right (Rear's side). Otherwise every export looked like it had the
+   same pair of PDUs regardless of which single column was selected. */
+.rack-capture-front-only .rack-vertical-pdu-right,
+.rack-capture-front-only .rack-power-cord-right {
+  display: none;
+}
+
+.rack-capture-rear-only .rack-vertical-pdu-left,
+.rack-capture-rear-only .rack-power-cord-left {
+  display: none;
+}
+
 /* ─── Export capture: light theme ────────────────────────── */
 .rack-capture-light .rack-panel-frame {
   background: linear-gradient(135deg, #dde1ea 0%, #e8ecf4 50%, #edf0f7 100%);
