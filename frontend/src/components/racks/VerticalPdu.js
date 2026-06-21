@@ -11,6 +11,11 @@ export default function VerticalPdu({ slot, rack, uHeight, leftPx, side, isSelec
   const top = 16 + (rack.u_height - (slot.u_position + slot.u_size - 1)) * uHeight;
   const height = slot.u_size * uHeight;
   const outletCount = getOutletCount(slot);
+  // Same pattern as DeviceBlock's rack-mounted devices: a chosen color
+  // overrides the default look entirely. Previously this prop was just
+  // never read here, so picking a color in the properties panel saved
+  // correctly but had no visible effect on the floating strip.
+  const customStyle = slot.color ? { background: slot.color } : null;
 
   return (
     <div
@@ -20,7 +25,7 @@ export default function VerticalPdu({ slot, rack, uHeight, leftPx, side, isSelec
         isSelected ? 'rack-vertical-pdu-selected' : '',
         highlighted ? 'rack-vertical-pdu-highlighted' : '',
       ].filter(Boolean).join(' ')}
-      style={{ top, height, left: leftPx }}
+      style={{ top, height, left: leftPx, ...customStyle }}
       title={`${slot.item_label || 'PDU'} (${outletCount} outlets)`}
       onClick={(e) => {
         e.stopPropagation();

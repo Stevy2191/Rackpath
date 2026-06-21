@@ -438,13 +438,9 @@ export default function RackEnclosure({
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  function verticalCenterY(u_position, u_size) {
-    const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
-    return top + (u_size * uHeight) / 2;
-  }
-
-  // Bottom edge of a vertical span — used for the PDU end of its power
-  // cord, which plugs in at the strip's bottom rather than its middle.
+  // Bottom edge of a vertical span — both ends of a PDU's power cord plug
+  // in at a bottom edge (the UPS's own cord-exit point, and the strip's
+  // bottom), not a vertical center.
   function bottomY(u_position, u_size) {
     const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
     return top + u_size * uHeight;
@@ -478,7 +474,11 @@ export default function RackEnclosure({
       upsX = upsOnRear ? halfWidth + PANEL_GAP : halfWidth;
       outward = upsOnRear ? -1 : 1;
     }
-    const upsY = verticalCenterY(ups.u_position, ups.u_size);
+    // Bottom edge, not vertical center — the cord plugs in at the UPS's
+    // own power outlet/cord-exit point, which reads as the bottom of the
+    // device block, the same way the PDU end already anchors to its strip's
+    // bottom rather than its middle.
+    const upsY = bottomY(ups.u_position, ups.u_size);
 
     // Control points pull the curve out away from the rack and let it sag
     // below a straight line before rising into the PDU's bottom — the look

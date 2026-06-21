@@ -897,11 +897,18 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
       };
     }
 
+    // Half the rack's height, anchored at the top, rather than the full
+    // height — a real 0U strip doesn't span floor-to-ceiling, and leaving
+    // the bottom half open gives the power cord's curve down to the UPS
+    // (wherever it's mounted) room to actually read as a curve.
+    const pduSize = Math.max(1, Math.round(rackHeight * 0.5));
+    const pduPosition = rackHeight - pduSize + 1;
+
     actions.onSlotCreate({
       rack_id: ups.rack_id,
       item_type: 'vertical-pdu',
-      u_position: 1,
-      u_size: rackHeight,
+      u_position: pduPosition,
+      u_size: pduSize,
       power_source_slot_id: ups.id,
       power_source_outlet: outlet,
       ...payload,
