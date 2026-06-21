@@ -91,12 +91,78 @@ function downloadUrl(url, filename) {
   a.click();
 }
 
-function makePdf(dataUrl, physW, physH, filename) {
-  const pdfW = (physW / PDF_DPI) * 72;
-  const pdfH = (physH / PDF_DPI) * 72;
+// Page size is derived from the diagram's *unscaled* CSS dimensions at a
+// fixed reference density (PDF_DPI), not from how many actual pixels the
+// capture has — sizing the page off the scaled pixel count would make the
+// page itself grow with `scale` while the dots-per-inch stayed pinned at
+// PDF_DPI no matter what, silently throwing away the extra resolution from
+// a higher capture pixelRatio. Keeping the page pinned to the diagram's
+// natural size means a higher-resolution capture packs more image pixels
+// into the same page area instead, which is what actually makes text look
+// sharper at 100% zoom in a PDF viewer.
+function makePdf(dataUrl, cssW, cssH, filename) {
+  const pdfW = (cssW / PDF_DPI) * 72;
+  const pdfH = (cssH / PDF_DPI) * 72;
   const pdf = new jsPDF({ orientation: pdfW >= pdfH ? 'landscape' : 'portrait', unit: 'pt', format: [pdfW, pdfH] });
   pdf.addImage(dataUrl, 'PNG', 0, 0, pdfW, pdfH);
   pdf.save(filename);
+}
+
+// Vertical PDUs float outside the dual-frame's own box (negative `left`,
+// or beyond its right edge — see computeVerticalPduPositions). offsetLeft/
+// offsetWidth are used instead of getBoundingClientRect because they're
+// unaffected by the canvas's pan/zoom transform.
+function measurePduOverflow(frame) {
+  let left = 0;
+  let right = 0;
+  for (const el of frame.querySelectorAll('.rack-vertical-pdu')) {
+    if (el.offsetParent !== frame) continue;
+    left = Math.max(left, -el.offsetLeft);
+    right = Math.max(right, el.offsetLeft + el.offsetWidth - frame.offsetWidth);
+  }
+  return { left: Math.max(0, Math.ceil(left)), right: Math.max(0, Math.ceil(right)) };
+}
+
+// Captures the rack, expanding the output bounds to include any floating
+// vertical PDU strip that overflows the dual-frame's own box.
+//
+// html-to-image's explicit width/height option doesn't just size the
+// output — it's also written directly onto the *captured node's own*
+// inline style before cloning. Passing a bigger width straight to
+// .rack-dual-frame would force it to that width, and since its two panels
+// are flex:1, they'd stretch to fill the new space rather than leaving it
+// empty for the overflow to land in.
+//
+// Capturing one level up at .rack-enclosure (hiding the name/U-counter
+// labels that live there too) avoids that: .rack-dual-frame gets a real,
+// live margin-left plus align-self:flex-start — set directly on the node
+// pre-capture, not via html-to-image's clone-time style hack — which
+// shifts it (and its absolutely-positioned PDU children) right without
+// stretching it, leaving the extra width as genuine empty space the
+// right-side overflow can render into instead of being clipped.
+async function captureEnclosure(rackId, capFn, { backgroundColor, pixelRatio }) {
+  const enclosure = document.getElementById(`rack-${rackId}`);
+  if (!enclosure) return null;
+  const frame = enclosure.querySelector('.rack-dual-frame');
+  if (!frame) return null;
+
+  const { left, right } = measurePduOverflow(frame);
+  const prevMargin = frame.style.marginLeft;
+  const prevAlignSelf = frame.style.alignSelf;
+
+  return withClasses(enclosure, ['rack-capture-pdu-bleed'], async () => {
+    frame.style.marginLeft = left ? `${left}px` : '';
+    frame.style.alignSelf = 'flex-start';
+    try {
+      const w = enclosure.offsetWidth + right;
+      const h = enclosure.offsetHeight;
+      const dataUrl = await capFn(enclosure, { backgroundColor, pixelRatio, width: w, height: h });
+      return { dataUrl, cssW: w, cssH: h };
+    } finally {
+      frame.style.marginLeft = prevMargin;
+      frame.style.alignSelf = prevAlignSelf;
+    }
+  });
 }
 
 // ─── Capture a single rack in the requested view/theme ────────────────────────
@@ -104,27 +170,19 @@ function makePdf(dataUrl, physW, physH, filename) {
 async function captureSingle(rackId, { format, view, theme, scale }) {
   const enclosure = document.getElementById(`rack-${rackId}`);
   if (!enclosure) return null;
-  const frame = enclosure.querySelector('.rack-dual-frame');
-  if (!frame) return null;
 
   const themeClass = theme === 'light' ? ['rack-capture-light'] : [];
   const capFn = captureFnFor(format);
   const bg = bgFor(theme);
 
   if (view === 'stacked') {
-    const frontResult = await withClasses(enclosure, ['rack-capture-front-only', ...themeClass], async () => {
-      const w = frame.offsetWidth;
-      const h = frame.offsetHeight;
-      const dataUrl = await toPng(frame, { backgroundColor: bg, pixelRatio: scale, width: w, height: h });
-      return { dataUrl, cssW: w, cssH: h };
-    });
+    const frontResult = await withClasses(enclosure, ['rack-capture-front-only', ...themeClass], () => (
+      captureEnclosure(rackId, toPng, { backgroundColor: bg, pixelRatio: scale })
+    ));
 
-    const rearResult = await withClasses(enclosure, ['rack-capture-rear-only', ...themeClass], async () => {
-      const w = frame.offsetWidth;
-      const h = frame.offsetHeight;
-      const dataUrl = await toPng(frame, { backgroundColor: bg, pixelRatio: scale, width: w, height: h });
-      return { dataUrl, cssW: w, cssH: h };
-    });
+    const rearResult = await withClasses(enclosure, ['rack-capture-rear-only', ...themeClass], () => (
+      captureEnclosure(rackId, toPng, { backgroundColor: bg, pixelRatio: scale })
+    ));
 
     const STACK_GAP = Math.round(16 * scale);
     const totalW = Math.max(frontResult.cssW, rearResult.cssW) * scale;
@@ -149,12 +207,9 @@ async function captureSingle(rackId, { format, view, theme, scale }) {
     view === 'front-only' ? ['rack-capture-front-only'] :
     view === 'rear-only'  ? ['rack-capture-rear-only']  : [];
 
-  return withClasses(enclosure, [...viewClass, ...themeClass], async () => {
-    const w = frame.offsetWidth;
-    const h = frame.offsetHeight;
-    const dataUrl = await capFn(frame, { backgroundColor: bg, pixelRatio: scale, width: w, height: h });
-    return { dataUrl, cssW: w, cssH: h };
-  });
+  return withClasses(enclosure, [...viewClass, ...themeClass], () => (
+    captureEnclosure(rackId, capFn, { backgroundColor: bg, pixelRatio: scale })
+  ));
 }
 
 // ─── Composite multiple rack captures side-by-side ────────────────────────────
@@ -586,7 +641,7 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
     : 'racks-export';
 
   if (format === 'pdf') {
-    makePdf(dataUrl, cssW * scale, cssH * scale, `${filename}.pdf`);
+    makePdf(dataUrl, cssW, cssH, `${filename}.pdf`);
   } else if (format === 'svg') {
     const base64 = dataUrl.split(',')[1];
     const blob = new Blob([atob(base64)], { type: 'image/svg+xml' });

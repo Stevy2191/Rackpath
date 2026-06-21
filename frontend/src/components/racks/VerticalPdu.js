@@ -3,13 +3,14 @@ import { getOutletCount } from '../../utils/power';
 
 // Floating strip rendered alongside the rack frame, representing a PDU/UPS
 // mounted vertically (not occupying U columns). Reuses u_position/u_size as
-// the vertical start U / span U, same as horizontal slots.
-export default function VerticalPdu({ slot, rack, uHeight, offsetPx, isSelected, highlighted, onSelect, actions }) {
+// the vertical start U / span U, same as horizontal slots. `leftPx` and
+// `side` are both computed by the parent (RackEnclosure), which is also
+// what draws the power cord to this strip — keeping the position math in
+// one place means the strip and its cord can never disagree.
+export default function VerticalPdu({ slot, rack, uHeight, leftPx, side, isSelected, highlighted, onSelect, actions }) {
   const top = 16 + (rack.u_height - (slot.u_position + slot.u_size - 1)) * uHeight;
   const height = slot.u_size * uHeight;
-  const side = slot.mount_side === 'right' ? 'right' : 'left';
   const outletCount = getOutletCount(slot);
-  const sideStyle = side === 'left' ? { left: -offsetPx } : { right: -offsetPx };
 
   return (
     <div
@@ -19,7 +20,7 @@ export default function VerticalPdu({ slot, rack, uHeight, offsetPx, isSelected,
         isSelected ? 'rack-vertical-pdu-selected' : '',
         highlighted ? 'rack-vertical-pdu-highlighted' : '',
       ].filter(Boolean).join(' ')}
-      style={{ top, height, ...sideStyle }}
+      style={{ top, height, left: leftPx }}
       title={`${slot.item_label || 'PDU'} (${outletCount} outlets)`}
       onClick={(e) => {
         e.stopPropagation();

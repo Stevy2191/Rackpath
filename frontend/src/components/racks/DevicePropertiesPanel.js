@@ -11,6 +11,7 @@ import { COLOR_SWATCHES, getFieldSchema, INPUT_VOLTAGES, INPUT_PLUG_TYPES, CAPAC
 import DeviceConfigFields from './DeviceConfigFields';
 import OutletGroupsEditor, { TypeSelect } from './OutletGroupsEditor';
 import { resolveRenderType } from './deviceRenderConfig';
+import { computeVerticalPduPositions } from './rackPlacement';
 import './DevicePropertiesPanel.css';
 
 const FACE_OPTIONS = [
@@ -19,10 +20,11 @@ const FACE_OPTIONS = [
   { value: 'both',  label: 'Both' },
 ];
 
-const MOUNT_SIDE_OPTIONS = [
-  { value: 'left',  label: 'Left' },
-  { value: 'right', label: 'Right' },
-];
+const VERTICAL_PDU_POSITION_LABELS = {
+  left:   'Left of Front',
+  middle: 'Middle (between Front and Rear)',
+  right:  'Right of Rear',
+};
 
 const WALL_DIRECT = '';
 
@@ -39,6 +41,12 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
   const [setBodyEl, setBodyContentEl, hasMoreBelow] = useScrollOverflow();
 
   const isVerticalPdu = slot?.item_type === 'vertical-pdu';
+  // Position is assigned rack-wide by creation order — see
+  // computeVerticalPduPositions — so it has to be derived from every
+  // vertical PDU in the rack, not just this one.
+  const verticalPduPosition = isVerticalPdu
+    ? computeVerticalPduPositions((rackSlots || []).filter((s) => s.item_type === 'vertical-pdu')).get(slot.id)
+    : null;
   const passive = slot ? isPassiveItem(slot) : false;
   const isPower = slot ? isPowerDevice(slot) : false;
   const isUpsSlot = slot ? isUps(slot) : false;
@@ -53,7 +61,6 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
       u_position:    slot.u_position    || 1,
       color:         slot.color         || null,
       mounted_face:  slot.mounted_face  || 'front',
-      mount_side:    slot.mount_side    || 'left',
       // Pre-fill from linked inventory device when the slot doesn't have its own value
       ip_address:    slot.ip_address    || slot.ip                     || '',
       serial_number: slot.serial_number || slot.device_serial_number   || '',
@@ -432,26 +439,40 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
               </>
             )}
 
-            {/* Mounted face (U-slot devices) / Mount side (vertical PDU) */}
-            <div className="props-field">
-              <label className="props-field-label">{isVerticalPdu ? 'Mount Side' : 'Mounted Face'}</label>
-              <div className="props-face-btns">
-                {(isVerticalPdu ? MOUNT_SIDE_OPTIONS : FACE_OPTIONS).map((f) => (
-                  <button
-                    key={f.value}
-                    type="button"
-                    className={`props-face-btn${(isVerticalPdu ? fields.mount_side : fields.mounted_face) === f.value ? ' active' : ''}`}
-                    onClick={() => {
-                      const key = isVerticalPdu ? 'mount_side' : 'mounted_face';
-                      setFields((prev) => ({ ...prev, [key]: f.value }));
-                      patch({ [key]: f.value });
-                    }}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+            {/* Mounted face (U-slot devices) */}
+            {!isVerticalPdu && (
+              <div className="props-field">
+                <label className="props-field-label">Mounted Face</label>
+                <div className="props-face-btns">
+                  {FACE_OPTIONS.map((f) => (
+                    <button
+                      key={f.value}
+                      type="button"
+                      className={`props-face-btn${fields.mounted_face === f.value ? ' active' : ''}`}
+                      onClick={() => {
+                        setFields((prev) => ({ ...prev, mounted_face: f.value }));
+                        patch({ mounted_face: f.value });
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Vertical PDU position — automatic, by creation order (1st
+                left of Front, 2nd in the middle gap, then alternating
+                further out) rather than user-chosen, so it's shown
+                read-only here instead of as a selectable control. */}
+            {isVerticalPdu && (
+              <div className="props-field">
+                <label className="props-field-label">Position</label>
+                <div className="props-readonly">
+                  {VERTICAL_PDU_POSITION_LABELS[verticalPduPosition?.side] || 'Left of Front'}
+                </div>
+              </div>
+            )}
 
             {!isVerticalPdu && (
               <>
@@ -832,6 +853,10 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
   const [sourceKey, setSourceKey] = useState('');
 
   const attached = verticalPdusForUps(rackSlots, ups.id);
+  // Position is assigned rack-wide (by creation order across *all* vertical
+  // PDUs in the rack, not just this UPS's), matching RackEnclosure's layout.
+  const allRackPdus = rackSlots.filter((s) => s.item_type === 'vertical-pdu');
+  const pduPositions = computeVerticalPduPositions(allRackPdus);
 
   const openAdd = () => {
     setSourceKey(catalogEntries[0] ? `catalog:${catalogEntries[0].id}` : (customPdus[0] ? `custom:${customPdus[0].id}` : ''));
@@ -867,13 +892,9 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
       };
     }
 
-    // Alternate sides: 1st left, 2nd right, 3rd left (offset further out), etc.
-    const mount_side = attached.length % 2 === 0 ? 'left' : 'right';
-
     actions.onSlotCreate({
       rack_id: ups.rack_id,
       item_type: 'vertical-pdu',
-      mount_side,
       u_position: 1,
       u_size: rackHeight,
       power_source_slot_id: ups.id,
@@ -899,7 +920,7 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
         <div className="props-outlet-list">
           {attached.map((pdu) => (
             <div key={pdu.id} className="props-outlet-row has-occupant" onClick={() => onSelectSlot && onSelectSlot(pdu.id)}>
-              <span className="props-outlet-name">{pdu.item_label || 'PDU'} ({pdu.mount_side || 'left'})</span>
+              <span className="props-outlet-name">{pdu.item_label || 'PDU'} ({pduPositions.get(pdu.id)?.side || 'left'})</span>
               <button
                 type="button"
                 className="props-outlet-remove"

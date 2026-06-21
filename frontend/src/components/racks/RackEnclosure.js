@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
-import { countUsedU } from './rackPlacement';
+import { countUsedU, computeVerticalPduPositions } from './rackPlacement';
 import './RackEnclosure.css';
 
 // Vertical PDU floating-strip layout (must match the offsets VerticalPdu.js
@@ -14,6 +14,9 @@ import './RackEnclosure.css';
 const STRIP_WIDTH = 14;
 const STRIP_OFFSET_BASE = 40;
 const STRIP_STACK_GAP = 24;
+// Must match .rack-dual-frame's CSS `gap` — the middle vertical PDU slot is
+// centered in this gap between the Front and Rear panels.
+const PANEL_GAP = 20;
 
 const ANNOTATION_LABELS = {
   name:         'Name',
@@ -355,14 +358,22 @@ export default function RackEnclosure({
   const verticalPdus = slots.filter((s) => s.item_type === 'vertical-pdu');
   const uSlots = slots.filter((s) => s.item_type !== 'vertical-pdu');
 
-  // Stack index per side: 1st PDU on a side sits closest to the frame,
-  // each later one on the same side floats further out.
-  const stackIndexById = new Map();
-  for (const side of ['left', 'right']) {
-    verticalPdus
-      .filter((p) => (p.mount_side === 'right' ? 'right' : 'left') === side)
-      .sort((a, b) => a.id - b.id)
-      .forEach((p, i) => stackIndexById.set(p.id, i));
+  // left/middle/right + stack-out-from-the-frame assignment, by creation
+  // order — see computeVerticalPduPositions for the exact scheme.
+  const pduPositions = computeVerticalPduPositions(verticalPdus);
+
+  // Absolute left-edge offset (from the dual-frame's own left edge) for a
+  // given side/stack — the single source of truth both the floating strip
+  // and its power cord's endpoint are computed from, so they always agree.
+  function pduLeftPx(side, stack) {
+    const offsetPx = STRIP_OFFSET_BASE + stack * STRIP_STACK_GAP;
+    if (side === 'left') return -offsetPx;
+    if (side === 'right') return frameSize.width + offsetPx - STRIP_WIDTH;
+    // Middle: centered in the gap between the Front and Rear panels — the
+    // only spot a real centerline PDU could physically occupy, so (unlike
+    // left/right) it never stacks multiple strips.
+    const halfWidth = (frameSize.width - PANEL_GAP) / 2;
+    return halfWidth + PANEL_GAP / 2 - STRIP_WIDTH / 2;
   }
 
   // Measure the dual-frame's intrinsic (untransformed) size so the cord
@@ -403,14 +414,38 @@ export default function RackEnclosure({
   for (const pdu of verticalPdus) {
     const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
     if (!ups) continue;
-    const side = pdu.mount_side === 'right' ? 'right' : 'left';
-    const offsetPx = STRIP_OFFSET_BASE + (stackIndexById.get(pdu.id) || 0) * STRIP_STACK_GAP;
-    const pduX = side === 'left' ? -offsetPx + STRIP_WIDTH / 2 : frameSize.width + offsetPx - STRIP_WIDTH / 2;
+    const { side, stack } = pduPositions.get(pdu.id);
+    const leftPx = pduLeftPx(side, stack);
+    const pduX = leftPx + STRIP_WIDTH / 2;
     const pduY = verticalCenterY(pdu.u_position, pdu.u_size);
-    const upsX = side === 'left' ? 0 : frameSize.width;
+    // Left/right cords always enter from that outer edge of the whole
+    // frame. A middle cord has no outer edge to default to, so it attaches
+    // to whichever panel the UPS actually lives on, on the edge facing the
+    // gap — the only edge that makes physical sense for a centerline PDU.
+    let upsX;
+    if (side === 'left') upsX = 0;
+    else if (side === 'right') upsX = frameSize.width;
+    else {
+      const halfWidth = (frameSize.width - PANEL_GAP) / 2;
+      upsX = resolveface(ups) === 'rear' ? halfWidth + PANEL_GAP : halfWidth;
+    }
     const upsY = verticalCenterY(ups.u_position, ups.u_size);
     cords.push({ key: pdu.id, x1: upsX, y1: upsY, x2: pduX, y2: pduY });
   }
+
+  // The SVG itself has to actually span any cord endpoint that falls
+  // outside the frame's own [0, frameSize.width] range — `overflow:
+  // visible` looks fine live, but a left/right-positioned PDU's cord
+  // endpoint sits outside the svg's own width, and nested-svg overflow
+  // doesn't reliably survive being rasterized through html-to-image's
+  // serialize-then-redraw-as-an-<img> pipeline (export capture), so the
+  // cord silently disappeared from exports despite rendering fine on
+  // screen. Shifting the svg's own origin (and every coordinate in it) to
+  // the leftmost point in use keeps everything within its declared bounds
+  // instead of relying on overflow to paint outside them.
+  const cordXs = cords.flatMap((c) => [c.x1, c.x2]);
+  const cordsSvgLeft  = Math.min(0, ...cordXs);
+  const cordsSvgWidth = Math.max(frameSize.width, ...cordXs) - cordsSvgLeft;
 
   const frontMap = buildUMap(uSlots, 'front');
   const rearMap  = buildUMap(uSlots, 'rear');
@@ -578,28 +613,53 @@ export default function RackEnclosure({
         {cords.length > 0 && (
           <svg
             className={`rack-power-cords${cordsInView ? '' : ' rack-power-cords-paused'}`}
-            width={frameSize.width}
+            style={{ left: cordsSvgLeft }}
+            width={cordsSvgWidth}
             height={frameSize.height}
           >
             {cords.map((c) => (
-              <line key={c.key} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} className="rack-power-cord-line" />
+              <line
+                key={c.key}
+                x1={c.x1 - cordsSvgLeft}
+                y1={c.y1}
+                x2={c.x2 - cordsSvgLeft}
+                y2={c.y2}
+                className="rack-power-cord-line"
+                // Same look as the .rack-power-cord-line CSS rule, set as
+                // literal attributes too: html-to-image's export capture
+                // clones the DOM and re-inlines computed styles before
+                // serializing, and that step doesn't reliably carry over
+                // external-stylesheet styling for nested SVG content —
+                // the cord otherwise silently vanished from PNG/PDF
+                // exports despite rendering fine live. Attributes survive
+                // cloneNode verbatim regardless, so this is the fallback
+                // that makes it actually show up in the export.
+                stroke="#f59e0b"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                fill="none"
+              />
             ))}
           </svg>
         )}
 
-        {verticalPdus.map((pdu) => (
-          <VerticalPdu
-            key={pdu.id}
-            slot={pdu}
-            rack={rack}
-            uHeight={uHeight}
-            offsetPx={STRIP_OFFSET_BASE + (stackIndexById.get(pdu.id) || 0) * STRIP_STACK_GAP}
-            isSelected={pdu.id === selectedSlotId}
-            highlighted={pdu.id === highlightedSlotId}
-            onSelect={onSelectSlot}
-            actions={actions}
-          />
-        ))}
+        {verticalPdus.map((pdu) => {
+          const { side, stack } = pduPositions.get(pdu.id);
+          return (
+            <VerticalPdu
+              key={pdu.id}
+              slot={pdu}
+              rack={rack}
+              uHeight={uHeight}
+              side={side}
+              leftPx={pduLeftPx(side, stack)}
+              isSelected={pdu.id === selectedSlotId}
+              highlighted={pdu.id === highlightedSlotId}
+              onSelect={onSelectSlot}
+              actions={actions}
+            />
+          );
+        })}
       </div>
     </div>
   );

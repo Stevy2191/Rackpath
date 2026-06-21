@@ -394,6 +394,20 @@
   .rack-power-cord-line { animation: none; }
 }
 
+/* ─── Export capture: include floating vertical PDUs ─────────
+   Capturing .rack-dual-frame alone clips any vertical PDU strip that
+   floats outside its box (left/right of the whole rack), since html-to-
+   image's explicit width/height bounds the render to exactly that node's
+   own box. The capture root is bumped up to .rack-enclosure instead (wide
+   enough to include the overflow once given an explicit width), with its
+   name/U-counter hidden so the captured image still shows only the rack
+   diagram, same as before. */
+.rack-capture-pdu-bleed .rack-name-label,
+.rack-capture-pdu-bleed .rack-name-input,
+.rack-capture-pdu-bleed .rack-u-counter {
+  display: none;
+}
+
 /* ─── Export capture: front-only view ────────────────────── */
 .rack-capture-front-only .rack-panel-frame-rear { display: none; }
 .rack-capture-front-only .rack-units { flex: 0 0 308px; width: 308px; }

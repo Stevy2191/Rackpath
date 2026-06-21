@@ -68,3 +68,31 @@ export function countUsedU(slots, rackId) {
   }
   return used.size;
 }
+
+// Assigns each vertical PDU in a rack to one of three floating positions —
+// left of the Front column, the middle gap between Front and Rear, or right
+// of the Rear column — by creation order (lowest id first). Only one PDU
+// ever lands in the middle: it's the actual physical centerline of the
+// rack, just wide enough for one strip, so every PDU after the 2nd
+// alternates further out on the left/right instead of trying to share it.
+// Returns Map<pduId, { side: 'left'|'middle'|'right', stack: number }>,
+// where `stack` is how many other PDUs on that same side sit between this
+// one and the frame (0 = closest).
+export function computeVerticalPduPositions(verticalPdus) {
+  const sorted = [...verticalPdus].sort((a, b) => a.id - b.id);
+  const positions = new Map();
+  sorted.forEach((pdu, index) => {
+    let side;
+    let stack;
+    if (index === 0)      { side = 'left';   stack = 0; }
+    else if (index === 1) { side = 'middle'; stack = 0; }
+    else if (index === 2) { side = 'right';  stack = 0; }
+    else {
+      const rest = index - 3;
+      side = rest % 2 === 0 ? 'left' : 'right';
+      stack = 1 + Math.floor(rest / 2);
+    }
+    positions.set(pdu.id, { side, stack });
+  });
+  return positions;
+}
