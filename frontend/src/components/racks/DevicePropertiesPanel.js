@@ -234,6 +234,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
 
   const pluggedIntoField = (
     <PluggedIntoField
+      key={slot.id}
       slot={slot}
       rackSlots={rackSlots || []}
       fields={fields}
@@ -597,9 +598,17 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
             )}
 
             {/* Non-power devices keep a single panel — Power is tucked into a
-                collapsed-by-default accordion instead of a tab. */}
-            {!isPower && !passive && (
-              <CollapsibleSection title="Power">
+                collapsed-by-default accordion instead of a tab. Shown for
+                every non-power device, including passive items (patch
+                panels, shelves, etc.) — anything can be wired to a PDU/UPS
+                outlet or left on Wall (Direct), so the selector belongs
+                here regardless of whether the device itself draws power. */}
+            {!isPower && (
+              // Keyed on the slot so switching devices always resets it
+              // collapsed, instead of inheriting the previous device's
+              // expanded/collapsed state (React would otherwise reuse the
+              // same component instance here across selections).
+              <CollapsibleSection key={slot.id} title="Power">
                 {pluggedIntoField}
               </CollapsibleSection>
             )}
