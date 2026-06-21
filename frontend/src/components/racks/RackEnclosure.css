@@ -46,7 +46,7 @@
 .rack-dual-frame {
   display: flex;
   align-items: stretch;
-  gap: 44px;
+  gap: 65px;
   position: relative;
   cursor: pointer;
 }

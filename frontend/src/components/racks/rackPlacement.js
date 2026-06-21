@@ -76,15 +76,20 @@ export function countUsedU(slots, rackId) {
 // rack, just wide enough for one strip, so every PDU after the 2nd
 // alternates further out on the left/right instead of trying to share it.
 //
-// `hasMiddle` should be false when Rear is hidden — there's no gap to
-// float a middle PDU in once Rear's column disappears and Front expands
-// to fill the space, so whichever PDU would've been 2nd (middle) instead
-// stacks on the left, same as any other left-side PDU.
+// This assignment is deliberately independent of whether Rear is actually
+// showing right now — a PDU's logical slot (1st = left, 2nd = middle, 3rd =
+// right, ...) is a property of how many PDUs exist and in what order they
+// were created, not of the current Front/Rear toggle. Whether a 'middle'
+// PDU can actually *render* in a gap that may not currently exist is a
+// presentation concern, handled separately by whatever's turning this into
+// pixel coordinates (see RackEnclosure's pduLeftPx) — keeping it out of this
+// function means toggling Rear can never reshuffle anyone's assigned slot,
+// only how the 'middle' slot happens to be drawn.
 //
 // Returns Map<pduId, { side: 'left'|'middle'|'right', stack: number }>,
 // where `stack` is how many other PDUs on that same side sit between this
 // one and the frame (0 = closest).
-export function computeVerticalPduPositions(verticalPdus, { hasMiddle = true } = {}) {
+export function computeVerticalPduPositions(verticalPdus) {
   const sorted = [...verticalPdus].sort((a, b) => a.id - b.id);
   const positions = new Map();
   let leftCount = 0;
@@ -93,11 +98,8 @@ export function computeVerticalPduPositions(verticalPdus, { hasMiddle = true } =
   sorted.forEach((pdu, index) => {
     let side;
     if (index === 0) side = 'left';
-    else if (index === 1) side = hasMiddle ? 'middle' : 'left';
+    else if (index === 1) side = 'middle';
     else if (index === 2) side = 'right';
-    // From the 4th PDU on, alternate left/right regardless of hasMiddle —
-    // this matches the with-middle scheme exactly (index 3 -> left, 4 ->
-    // right, ...) since index is odd/even in the same pattern either way.
     else side = index % 2 === 1 ? 'left' : 'right';
 
     if (side === 'middle') {

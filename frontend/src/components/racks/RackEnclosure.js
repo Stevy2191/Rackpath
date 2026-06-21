@@ -16,9 +16,9 @@ const STRIP_OFFSET_BASE = 40;
 const STRIP_STACK_GAP = 24;
 // Must match .rack-dual-frame's CSS `gap` — the middle vertical PDU slot is
 // centered in this gap between the Front and Rear panels. Sized to leave
-// ~17px of clear space on either side of the (9px-wide) strip rather than
+// ~28px of clear space on either side of the (9px-wide) strip rather than
 // crowding it against either panel's edge.
-const PANEL_GAP = 44;
+const PANEL_GAP = 65;
 
 const ANNOTATION_LABELS = {
   name:         'Name',
@@ -362,19 +362,33 @@ export default function RackEnclosure({
   const uSlots = slots.filter((s) => s.item_type !== 'vertical-pdu');
 
   // left/middle/right + stack-out-from-the-frame assignment, by creation
-  // order — see computeVerticalPduPositions for the exact scheme. The
-  // middle slot only exists when Rear is actually showing (it's the gap
-  // between Front and Rear) — with Rear hidden there's no gap to float a
-  // PDU in, so it falls back to stacking on the left instead.
-  const pduPositions = computeVerticalPduPositions(verticalPdus, { hasMiddle: showRear });
+  // order — see computeVerticalPduPositions for the exact scheme. This
+  // assignment never changes when Rear is toggled (a PDU's logical slot is
+  // about PDU count/order, not the current view) — only how a 'middle' slot
+  // gets turned into pixels does, in resolvePduPosition below.
+  const pduPositions = computeVerticalPduPositions(verticalPdus);
+  const rightSideCount = [...pduPositions.values()].filter((p) => p.side === 'right').length;
+
+  // Turns an assigned slot into the side/stack actually used for layout.
+  // 'middle' only has a gap to float in while Rear is showing — with Rear
+  // hidden there's no gap, so it renders beside Front's own right edge
+  // instead (the side nearest to where the gap used to be, so the strip
+  // doesn't jump across the whole rack to the left just because Rear's
+  // column disappeared). Parked one stack beyond every *real* right-side
+  // PDU so it can't land on top of one.
+  function resolvePduPosition(side, stack) {
+    if (side === 'middle' && !showRear) return { side: 'right', stack: rightSideCount };
+    return { side, stack };
+  }
 
   // Absolute left-edge offset (from the dual-frame's own left edge) for a
   // given side/stack — the single source of truth both the floating strip
   // and its power cord's endpoint are computed from, so they always agree.
   function pduLeftPx(side, stack) {
-    const offsetPx = STRIP_OFFSET_BASE + stack * STRIP_STACK_GAP;
-    if (side === 'left') return -offsetPx;
-    if (side === 'right') return frameSize.width + offsetPx - STRIP_WIDTH;
+    const resolved = resolvePduPosition(side, stack);
+    const offsetPx = STRIP_OFFSET_BASE + resolved.stack * STRIP_STACK_GAP;
+    if (resolved.side === 'left') return -offsetPx;
+    if (resolved.side === 'right') return frameSize.width + offsetPx - STRIP_WIDTH;
     // Middle: centered in the gap between the Front and Rear panels — the
     // only spot a real centerline PDU could physically occupy, so (unlike
     // left/right) it never stacks multiple strips.
@@ -446,6 +460,7 @@ export default function RackEnclosure({
     const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
     if (!ups) continue;
     const { side, stack } = pduPositions.get(pdu.id);
+    const resolved = resolvePduPosition(side, stack);
     const leftPx = pduLeftPx(side, stack);
     const pduX = leftPx + STRIP_WIDTH / 2;
     const pduY = bottomY(pdu.u_position, pdu.u_size);
@@ -455,8 +470,8 @@ export default function RackEnclosure({
     // gap — the only edge that makes physical sense for a centerline PDU.
     let upsX;
     let outward; // which way "away from the rack" is, for the curve's bow
-    if (side === 'left') { upsX = 0; outward = -1; }
-    else if (side === 'right') { upsX = frameSize.width; outward = 1; }
+    if (resolved.side === 'left') { upsX = 0; outward = -1; }
+    else if (resolved.side === 'right') { upsX = frameSize.width; outward = 1; }
     else {
       const halfWidth = (frameSize.width - PANEL_GAP) / 2;
       const upsOnRear = resolveface(ups) === 'rear';
@@ -702,13 +717,14 @@ export default function RackEnclosure({
 
         {verticalPdus.map((pdu) => {
           const { side, stack } = pduPositions.get(pdu.id);
+          const resolved = resolvePduPosition(side, stack);
           return (
             <VerticalPdu
               key={pdu.id}
               slot={pdu}
               rack={rack}
               uHeight={uHeight}
-              side={side}
+              side={resolved.side}
               leftPx={pduLeftPx(side, stack)}
               isSelected={pdu.id === selectedSlotId}
               highlighted={pdu.id === highlightedSlotId}
