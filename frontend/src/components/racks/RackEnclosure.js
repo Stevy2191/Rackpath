@@ -11,7 +11,7 @@ import './RackEnclosure.css';
 // from the rendered border ends up a little larger than STRIP_OFFSET_BASE -
 // STRIP_WIDTH (border + padding add a few more px) — tuned to land in the
 // 24-40px "floating, not attached" range the strip is meant to read as.
-const STRIP_WIDTH = 14;
+const STRIP_WIDTH = 9;
 const STRIP_OFFSET_BASE = 40;
 const STRIP_STACK_GAP = 24;
 // Must match .rack-dual-frame's CSS `gap` — the middle vertical PDU slot is
@@ -387,8 +387,11 @@ export default function RackEnclosure({
     }
   }, [rack.show_rear, rack.show_annotations, rack.annotation_field, rack.u_height, uHeight]);
 
-  // Pause the cord "flow" animation while this rack is scrolled out of the
-  // viewport, so off-screen racks don't keep animating for nothing.
+  // Stop rendering the cords' traveling pulse while this rack is scrolled
+  // out of the viewport, so off-screen racks don't keep animating for
+  // nothing. Unlike the old CSS-keyframe dash march, animateMotion (SMIL)
+  // can't be paused via the animation-play-state trick, so this gates
+  // whether the pulse element is rendered at all rather than its play state.
   const [cordsInView, setCordsInView] = useState(true);
   useEffect(() => {
     const el = frameRef.current;
@@ -401,15 +404,37 @@ export default function RackEnclosure({
     return () => observer.disconnect();
   }, []);
 
+  // Same reasoning as cordsInView — prefers-reduced-motion can't disable a
+  // SMIL animation via CSS the way it could the old @keyframes animation,
+  // so it's checked in JS and used to skip rendering the pulse instead.
+  const [reduceMotion, setReduceMotion] = useState(
+    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!mq) return;
+    const onChange = (e) => setReduceMotion(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
   function verticalCenterY(u_position, u_size) {
     const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
     return top + (u_size * uHeight) / 2;
   }
 
-  // One cord per vertical PDU that's plugged into a UPS in this rack.
-  // Endpoints are ordered UPS → PDU (the actual direction power flows,
-  // since the PDU is plugged into the UPS) so the flow animation's
-  // direction matches reality.
+  // Bottom edge of a vertical span — used for the PDU end of its power
+  // cord, which plugs in at the strip's bottom rather than its middle.
+  function bottomY(u_position, u_size) {
+    const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
+    return top + u_size * uHeight;
+  }
+
+  // One cord per vertical PDU that's plugged into a UPS in this rack, drawn
+  // as a cubic bezier rather than a straight line so it reads as a real
+  // cable with some slack in it instead of a schematic connector line.
+  // Endpoints go UPS → PDU (the actual direction power flows) so the
+  // traveling-pulse animation's direction matches reality.
   const cords = [];
   for (const pdu of verticalPdus) {
     const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
@@ -417,33 +442,48 @@ export default function RackEnclosure({
     const { side, stack } = pduPositions.get(pdu.id);
     const leftPx = pduLeftPx(side, stack);
     const pduX = leftPx + STRIP_WIDTH / 2;
-    const pduY = verticalCenterY(pdu.u_position, pdu.u_size);
+    const pduY = bottomY(pdu.u_position, pdu.u_size);
     // Left/right cords always enter from that outer edge of the whole
     // frame. A middle cord has no outer edge to default to, so it attaches
     // to whichever panel the UPS actually lives on, on the edge facing the
     // gap — the only edge that makes physical sense for a centerline PDU.
     let upsX;
-    if (side === 'left') upsX = 0;
-    else if (side === 'right') upsX = frameSize.width;
+    let outward; // which way "away from the rack" is, for the curve's bow
+    if (side === 'left') { upsX = 0; outward = -1; }
+    else if (side === 'right') { upsX = frameSize.width; outward = 1; }
     else {
       const halfWidth = (frameSize.width - PANEL_GAP) / 2;
-      upsX = resolveface(ups) === 'rear' ? halfWidth + PANEL_GAP : halfWidth;
+      const upsOnRear = resolveface(ups) === 'rear';
+      upsX = upsOnRear ? halfWidth + PANEL_GAP : halfWidth;
+      outward = upsOnRear ? -1 : 1;
     }
     const upsY = verticalCenterY(ups.u_position, ups.u_size);
-    cords.push({ key: pdu.id, x1: upsX, y1: upsY, x2: pduX, y2: pduY });
+
+    // Control points pull the curve out away from the rack and let it sag
+    // below a straight line before rising into the PDU's bottom — the look
+    // of a loosely hanging cable rather than a taut geometric connector.
+    // The two points are deliberately uneven (different outward distance,
+    // sag only on the second) so the curve reads as organic, not mirrored.
+    const reach = Math.max(18, Math.min(36, Math.abs(pduX - upsX) * 0.5));
+    const c1x = upsX + outward * reach * 0.45;
+    const c1y = upsY + 16;
+    const c2x = pduX + outward * reach;
+    const c2y = pduY + 24;
+
+    cords.push({ key: pdu.id, upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY });
   }
 
-  // The SVG itself has to actually span any cord endpoint that falls
-  // outside the frame's own [0, frameSize.width] range — `overflow:
-  // visible` looks fine live, but a left/right-positioned PDU's cord
-  // endpoint sits outside the svg's own width, and nested-svg overflow
-  // doesn't reliably survive being rasterized through html-to-image's
-  // serialize-then-redraw-as-an-<img> pipeline (export capture), so the
-  // cord silently disappeared from exports despite rendering fine on
-  // screen. Shifting the svg's own origin (and every coordinate in it) to
-  // the leftmost point in use keeps everything within its declared bounds
-  // instead of relying on overflow to paint outside them.
-  const cordXs = cords.flatMap((c) => [c.x1, c.x2]);
+  // The SVG itself has to actually span every point any cord touches —
+  // `overflow: visible` looks fine live, but a left/right-positioned PDU's
+  // curve (including its outward-bowing control points) sits outside the
+  // svg's own [0, frameSize.width] box, and nested-svg overflow doesn't
+  // reliably survive being rasterized through html-to-image's serialize-
+  // then-redraw-as-an-<img> pipeline (export capture), so the cord silently
+  // disappeared from exports despite rendering fine on screen. Shifting the
+  // svg's own origin (and every coordinate in it) to the leftmost point in
+  // use keeps everything within its declared bounds instead of relying on
+  // overflow to paint outside them.
+  const cordXs = cords.flatMap((c) => [c.upsX, c.c1x, c.c2x, c.pduX]);
   const cordsSvgLeft  = Math.min(0, ...cordXs);
   const cordsSvgWidth = Math.max(frameSize.width, ...cordXs) - cordsSvgLeft;
 
@@ -612,34 +652,46 @@ export default function RackEnclosure({
 
         {cords.length > 0 && (
           <svg
-            className={`rack-power-cords${cordsInView ? '' : ' rack-power-cords-paused'}`}
+            className="rack-power-cords"
             style={{ left: cordsSvgLeft }}
             width={cordsSvgWidth}
             height={frameSize.height}
           >
-            {cords.map((c) => (
-              <line
-                key={c.key}
-                x1={c.x1 - cordsSvgLeft}
-                y1={c.y1}
-                x2={c.x2 - cordsSvgLeft}
-                y2={c.y2}
-                className="rack-power-cord-line"
-                // Same look as the .rack-power-cord-line CSS rule, set as
-                // literal attributes too: html-to-image's export capture
-                // clones the DOM and re-inlines computed styles before
-                // serializing, and that step doesn't reliably carry over
-                // external-stylesheet styling for nested SVG content —
-                // the cord otherwise silently vanished from PNG/PDF
-                // exports despite rendering fine live. Attributes survive
-                // cloneNode verbatim regardless, so this is the fallback
-                // that makes it actually show up in the export.
-                stroke="#f59e0b"
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-                fill="none"
-              />
-            ))}
+            {cords.map((c) => {
+              const d = `M ${c.upsX - cordsSvgLeft} ${c.upsY} `
+                + `C ${c.c1x - cordsSvgLeft} ${c.c1y}, `
+                + `${c.c2x - cordsSvgLeft} ${c.c2y}, `
+                + `${c.pduX - cordsSvgLeft} ${c.pduY}`;
+              return (
+                <g key={c.key}>
+                  {/* Soft outer glow: a wider, near-transparent stroke
+                      behind the crisp line, rather than an SVG blur filter
+                      — filters are another thing that doesn't reliably
+                      survive the export capture's clone/serialize step. */}
+                  <path d={d} className="rack-power-cord-glow" stroke="#f59e0b" strokeWidth={5} fill="none" opacity={0.18} />
+                  {/* The cord itself: a thin solid (no longer dashed) warm
+                      line. Attributes are set literally, not just via the
+                      CSS class, so the export capture (which re-inlines
+                      computed styles when cloning, but doesn't reliably
+                      carry over *external-stylesheet* styling for nested
+                      svg content) still shows it. */}
+                  <path d={d} className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={1.4} fill="none" />
+                  {/* Traveling pulse: only rendered while the rack is in
+                      view, since SMIL/animateMotion can't be paused via
+                      the CSS animation-play-state trick used for the old
+                      marching-dashes animation — omitting the element
+                      entirely is what actually stops it from spending
+                      render cycles off-screen. */}
+                  {cordsInView && !reduceMotion && (
+                    <g className="rack-power-cord-pulse">
+                      <animateMotion dur="2.4s" repeatCount="indefinite" path={d} />
+                      <circle r={3.2} className="rack-power-cord-pulse-glow" fill="#fbbf24" opacity={0.35} />
+                      <circle r={1.3} className="rack-power-cord-pulse-core" fill="#ffe3a3" />
+                    </g>
+                  )}
+                </g>
+              );
+            })}
           </svg>
         )}
 

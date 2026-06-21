@@ -300,15 +300,27 @@
 }
 
 /* ─── Vertical PDU (floating strip alongside the frame) ──── */
+/* Slim 0U strip — narrow enough to read as a real vertical PDU rail
+   rather than a sidebar block. The diagonal highlight layered under the
+   vertical gradient gives it a faint brushed-metal texture so it doesn't
+   look like a flat color swatch. */
 .rack-vertical-pdu {
   position: absolute;
-  width: 14px;
+  width: 9px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: linear-gradient(180deg, #3a2f1f 0%, #261d12 100%);
+  background:
+    repeating-linear-gradient(
+      125deg,
+      rgba(255, 255, 255, 0.05) 0px,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    linear-gradient(180deg, #3a2f1f 0%, #261d12 100%);
   border: 1px solid #5a4520;
-  border-radius: 3px;
+  border-radius: 2px;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   user-select: none;
@@ -336,14 +348,15 @@
   flex-direction: column;
   justify-content: space-evenly;
   align-items: center;
-  padding: 6px 0;
+  padding: 5px 0;
 }
 
 .rack-vertical-pdu-tick {
-  width: 6px;
-  height: 2px;
+  width: 4px;
+  height: 1.5px;
   background: #d97706;
   border-radius: 1px;
+  opacity: 0.85;
 }
 
 .rack-vertical-pdu-label {
@@ -353,10 +366,10 @@
   transform: translate(-50%, -50%) rotate(-90deg);
   white-space: nowrap;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: #d97706;
+  font-size: 6.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(217, 119, 6, 0.75);
   pointer-events: none;
   text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 }
@@ -371,27 +384,30 @@
   z-index: 1;
 }
 
+/* Wide, near-transparent stroke sitting under the crisp line — a cheap
+   stand-in for a glow filter that's cheaper to render and, unlike an SVG
+   blur filter, survives the export capture's clone/serialize step. */
+.rack-power-cord-glow {
+  stroke: #f59e0b;
+  stroke-linecap: round;
+}
+
+/* Thin solid cable — no dash/march animation; the traveling pulse dot
+   (.rack-power-cord-pulse) is what now reads as "power flowing". */
 .rack-power-cord-line {
   stroke: #f59e0b;
-  stroke-width: 1.5;
-  stroke-dasharray: 4 3;
+  stroke-width: 1.4;
+  stroke-linecap: round;
   fill: none;
-  animation: rack-power-cord-flow 0.7s linear infinite;
 }
 
-/* Off-screen racks stop animating — no point spending cycles on them. */
-.rack-power-cords-paused .rack-power-cord-line {
-  animation-play-state: paused;
+.rack-power-cord-pulse-glow {
+  fill: #fbbf24;
+  filter: blur(1px);
 }
 
-/* Dash pattern marches from the UPS end toward the PDU end (the direction
-   power actually flows, since the PDU is plugged into the UPS). */
-@keyframes rack-power-cord-flow {
-  to { stroke-dashoffset: -7; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rack-power-cord-line { animation: none; }
+.rack-power-cord-pulse-core {
+  fill: #ffe3a3;
 }
 
 /* ─── Export capture: include floating vertical PDUs ─────────
