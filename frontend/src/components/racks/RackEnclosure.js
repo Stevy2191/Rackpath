@@ -510,7 +510,7 @@ export default function RackEnclosure({
         <RackPanel
           face="front"
           showLeftRail
-          showRightRail={!showRear}
+          showRightRail
           fullByTop={frontMap.fullByTop}
           hwAtU={frontMap.hwAtU}
           hwRenderU={frontMap.hwRenderU}
@@ -522,23 +522,20 @@ export default function RackEnclosure({
           {...panelProps}
         />
         {showRear && (
-          <>
-            <div className="rack-panel-divider" />
-            <RackPanel
-              face="rear"
-              showLeftRail={false}
-              showRightRail
-              fullByTop={rearMap.fullByTop}
-              hwAtU={rearMap.hwAtU}
-              hwRenderU={rearMap.hwRenderU}
-              covered={rearMap.covered}
-              occupiedByU={rearMap.occupiedByU}
-              fullStripes={rearStripes.fullStripes}
-              hwStripesLeft={rearStripes.hwStripesLeft}
-              hwStripesRight={rearStripes.hwStripesRight}
-              {...panelProps}
-            />
-          </>
+          <RackPanel
+            face="rear"
+            showLeftRail
+            showRightRail
+            fullByTop={rearMap.fullByTop}
+            hwAtU={rearMap.hwAtU}
+            hwRenderU={rearMap.hwRenderU}
+            covered={rearMap.covered}
+            occupiedByU={rearMap.occupiedByU}
+            fullStripes={rearStripes.fullStripes}
+            hwStripesLeft={rearStripes.hwStripesLeft}
+            hwStripesRight={rearStripes.hwStripesRight}
+            {...panelProps}
+          />
         )}
 
         {showAnnotations && (

@@ -36,12 +36,27 @@
 
 .rack-u-counter-full { color: #f59e0b; }
 
-/* ─── Dual-panel frame ───────────────────────────────────── */
+/* ─── Dual-panel layout ──────────────────────────────────────
+   Just a flex row + gap now — each panel below carries its own full
+   frame, so Front and Rear read as two separate rack enclosures
+   sitting side by side rather than one box split down the middle. */
 .rack-dual-frame {
   display: flex;
   align-items: stretch;
+  gap: 20px;
   position: relative;
   cursor: pointer;
+}
+
+/* ─── Individual panel (front / rear) ────────────────────── */
+/* Each panel is a fully self-contained enclosure: its own border on all
+   four sides, its own rounded corners, its own background/shadow — not
+   a half of a shared frame. */
+.rack-panel-frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   background: linear-gradient(135deg, #2c2f36 0%, #1a1c22 50%, #15161b 100%);
   border: 2px solid #060708;
   border-radius: 8px;
@@ -55,28 +70,12 @@
   transition: box-shadow 0.2s ease;
 }
 
-.rack-enclosure-focused .rack-dual-frame {
+.rack-enclosure-focused .rack-panel-frame {
   box-shadow:
     inset 0 2px 6px rgba(0,0,0,0.6),
     inset 0 -2px 6px rgba(0,0,0,0.6),
     0 0 0 2px #4adede,
     0 0 30px rgba(74,222,222,0.35);
-}
-
-.rack-panel-divider {
-  width: 18px;
-  flex-shrink: 0;
-  background: linear-gradient(90deg, #0c0d11 0%, #141620 50%, #0c0d11 100%);
-  border-left: 1px solid #060708;
-  border-right: 1px solid #060708;
-}
-
-/* ─── Individual panel (front / rear) ────────────────────── */
-.rack-panel-frame {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
 }
 
 .rack-panel-label {
@@ -94,6 +93,7 @@
   height: 12px;
   background: linear-gradient(180deg, #3a3f48 0%, #20232a 100%);
   border: 1px solid #060708;
+  border-radius: 4px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
@@ -103,19 +103,6 @@
 }
 
 .rack-top-blank { margin-bottom: 4px; }
-
-/* Per-column border-radius: round only the outer edge of each panel's bars */
-.rack-panel-frame-front .rack-top-blank    { border-radius: 4px 0 0 4px; border-right: none; }
-.rack-panel-frame-front .rack-bottom-blank { border-radius: 4px 0 0 4px; border-right: none; }
-.rack-panel-frame-rear  .rack-top-blank    { border-radius: 0 4px 4px 0; border-left: none; }
-.rack-panel-frame-rear  .rack-bottom-blank { border-radius: 0 4px 4px 0; border-left: none; }
-
-/* Single-column mode: front panel gets full border-radius on both sides */
-.rack-enclosure-single .rack-panel-frame-front .rack-top-blank,
-.rack-enclosure-single .rack-panel-frame-front .rack-bottom-blank {
-  border-radius: 4px;
-  border-right: 1px solid #060708;
-}
 
 .rack-body {
   display: flex;
@@ -408,35 +395,19 @@
 }
 
 /* ─── Export capture: front-only view ────────────────────── */
-.rack-capture-front-only .rack-panel-frame-rear,
-.rack-capture-front-only .rack-panel-divider { display: none; }
+.rack-capture-front-only .rack-panel-frame-rear { display: none; }
 .rack-capture-front-only .rack-units { flex: 0 0 308px; width: 308px; }
-.rack-capture-front-only .rack-panel-frame-front .rack-top-blank,
-.rack-capture-front-only .rack-panel-frame-front .rack-bottom-blank {
-  border-radius: 4px;
-  border-right: 1px solid #060708;
-}
 
 /* ─── Export capture: rear-only view ─────────────────────── */
-.rack-capture-rear-only .rack-panel-frame-front,
-.rack-capture-rear-only .rack-panel-divider { display: none; }
+.rack-capture-rear-only .rack-panel-frame-front { display: none; }
 .rack-capture-rear-only .rack-units { flex: 0 0 308px; width: 308px; }
-.rack-capture-rear-only .rack-panel-frame-rear .rack-top-blank,
-.rack-capture-rear-only .rack-panel-frame-rear .rack-bottom-blank {
-  border-radius: 4px;
-  border-left: 1px solid #060708;
-}
 
 /* ─── Export capture: light theme ────────────────────────── */
-.rack-capture-light .rack-dual-frame {
+.rack-capture-light .rack-panel-frame {
   background: linear-gradient(135deg, #dde1ea 0%, #e8ecf4 50%, #edf0f7 100%);
   border-color: #b8c0cc;
   box-shadow: inset 0 2px 6px rgba(0,0,0,0.08), inset 0 -2px 6px rgba(0,0,0,0.08),
               0 8px 24px rgba(0,0,0,0.12);
-}
-.rack-capture-light .rack-panel-divider {
-  background: linear-gradient(90deg, #b8c0cc 0%, #c8d0dc 50%, #b8c0cc 100%);
-  border-color: #a8b4c2;
 }
 .rack-capture-light .rack-panel-label { color: #5a6575; }
 .rack-capture-light .rack-name-label  { color: #4a5565; }
