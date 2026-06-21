@@ -2,9 +2,10 @@ import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from
 import { Plus, Minus, Maximize2, Settings } from 'lucide-react';
 import RackEnclosure from './RackEnclosure';
 import { resolveUPosition, isSpanFree, buildOccupiedSet } from './rackPlacement';
+import { DEFAULT_U_HEIGHT } from './verticalPduLayout';
 import './RackCanvas.css';
 
-const U_HEIGHT    = 40;
+const U_HEIGHT    = DEFAULT_U_HEIGHT;
 const MIN_ZOOM    = 0.25;
 const MAX_ZOOM    = 2.0;
 const ZOOM_STEP   = 1.2;   // 20 % per button click / wheel tick

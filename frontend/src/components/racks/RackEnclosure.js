@@ -2,23 +2,9 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
-import { countUsedU, computeVerticalPduPositions } from './rackPlacement';
+import { countUsedU } from './rackPlacement';
+import { layoutVerticalPdus, cordPathD } from './verticalPduLayout';
 import './RackEnclosure.css';
-
-// Vertical PDU floating-strip layout (must match the offsets VerticalPdu.js
-// renders with — kept in JS so the cord overlay can use the same numbers).
-// Offset is measured from the dual-frame's padding edge, so the visible gap
-// from the rendered border ends up a little larger than STRIP_OFFSET_BASE -
-// STRIP_WIDTH (border + padding add a few more px) — tuned to land in the
-// 24-40px "floating, not attached" range the strip is meant to read as.
-const STRIP_WIDTH = 9;
-const STRIP_OFFSET_BASE = 40;
-const STRIP_STACK_GAP = 24;
-// Must match .rack-dual-frame's CSS `gap` — the middle vertical PDU slot is
-// centered in this gap between the Front and Rear panels. Sized to leave
-// ~28px of clear space on either side of the (9px-wide) strip rather than
-// crowding it against either panel's edge.
-const PANEL_GAP = 65;
 
 const ANNOTATION_LABELS = {
   name:         'Name',
@@ -361,41 +347,6 @@ export default function RackEnclosure({
   const verticalPdus = slots.filter((s) => s.item_type === 'vertical-pdu');
   const uSlots = slots.filter((s) => s.item_type !== 'vertical-pdu');
 
-  // left/middle/right + stack-out-from-the-frame assignment, by creation
-  // order — see computeVerticalPduPositions for the exact scheme. This
-  // assignment never changes when Rear is toggled (a PDU's logical slot is
-  // about PDU count/order, not the current view) — only how a 'middle' slot
-  // gets turned into pixels does, in resolvePduPosition below.
-  const pduPositions = computeVerticalPduPositions(verticalPdus);
-  const rightSideCount = [...pduPositions.values()].filter((p) => p.side === 'right').length;
-
-  // Turns an assigned slot into the side/stack actually used for layout.
-  // 'middle' only has a gap to float in while Rear is showing — with Rear
-  // hidden there's no gap, so it renders beside Front's own right edge
-  // instead (the side nearest to where the gap used to be, so the strip
-  // doesn't jump across the whole rack to the left just because Rear's
-  // column disappeared). Parked one stack beyond every *real* right-side
-  // PDU so it can't land on top of one.
-  function resolvePduPosition(side, stack) {
-    if (side === 'middle' && !showRear) return { side: 'right', stack: rightSideCount };
-    return { side, stack };
-  }
-
-  // Absolute left-edge offset (from the dual-frame's own left edge) for a
-  // given side/stack — the single source of truth both the floating strip
-  // and its power cord's endpoint are computed from, so they always agree.
-  function pduLeftPx(side, stack) {
-    const resolved = resolvePduPosition(side, stack);
-    const offsetPx = STRIP_OFFSET_BASE + resolved.stack * STRIP_STACK_GAP;
-    if (resolved.side === 'left') return -offsetPx;
-    if (resolved.side === 'right') return frameSize.width + offsetPx - STRIP_WIDTH;
-    // Middle: centered in the gap between the Front and Rear panels — the
-    // only spot a real centerline PDU could physically occupy, so (unlike
-    // left/right) it never stacks multiple strips.
-    const halfWidth = (frameSize.width - PANEL_GAP) / 2;
-    return halfWidth + PANEL_GAP / 2 - STRIP_WIDTH / 2;
-  }
-
   // Measure the dual-frame's intrinsic (untransformed) size so the cord
   // overlay's coordinates stay correct regardless of the canvas pan/zoom —
   // offsetWidth/Height are unaffected by ancestor CSS transforms. A
@@ -417,6 +368,21 @@ export default function RackEnclosure({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // left/middle/right + stack-out-from-the-frame assignment, position math,
+  // and (for any PDU plugged into a UPS in this rack) its power cord's
+  // bezier endpoints — all computed by the shared layout helper so the
+  // export capture's off-screen single-column renders use the exact same
+  // formulas live rendering does. 'middle' only has a gap to float in while
+  // Rear is showing, hence hasMiddleGap: showRear.
+  const pduLayout = layoutVerticalPdus({
+    verticalPdus,
+    uSlots,
+    rack,
+    uHeight,
+    frameWidth: frameSize.width,
+    hasMiddleGap: showRear,
+  });
 
   // Stop rendering the cords' traveling pulse while this rack is scrolled
   // out of the viewport, so off-screen racks don't keep animating for
@@ -449,14 +415,6 @@ export default function RackEnclosure({
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  // Bottom edge of a vertical span — both ends of a PDU's power cord plug
-  // in at a bottom edge (the UPS's own cord-exit point, and the strip's
-  // bottom), not a vertical center.
-  function bottomY(u_position, u_size) {
-    const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
-    return top + u_size * uHeight;
-  }
-
   // One cord per vertical PDU that's plugged into a UPS in this rack, drawn
   // as a cubic bezier rather than a straight line so it reads as a real
   // cable with some slack in it instead of a schematic connector line.
@@ -464,45 +422,9 @@ export default function RackEnclosure({
   // traveling-pulse animation's direction matches reality.
   const cords = [];
   for (const pdu of verticalPdus) {
-    const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
-    if (!ups) continue;
-    const { side, stack } = pduPositions.get(pdu.id);
-    const resolved = resolvePduPosition(side, stack);
-    const leftPx = pduLeftPx(side, stack);
-    const pduX = leftPx + STRIP_WIDTH / 2;
-    const pduY = bottomY(pdu.u_position, pdu.u_size);
-    // Left/right cords always enter from that outer edge of the whole
-    // frame. A middle cord has no outer edge to default to, so it attaches
-    // to whichever panel the UPS actually lives on, on the edge facing the
-    // gap — the only edge that makes physical sense for a centerline PDU.
-    let upsX;
-    let outward; // which way "away from the rack" is, for the curve's bow
-    if (resolved.side === 'left') { upsX = 0; outward = -1; }
-    else if (resolved.side === 'right') { upsX = frameSize.width; outward = 1; }
-    else {
-      const halfWidth = (frameSize.width - PANEL_GAP) / 2;
-      const upsOnRear = resolveface(ups) === 'rear';
-      upsX = upsOnRear ? halfWidth + PANEL_GAP : halfWidth;
-      outward = upsOnRear ? -1 : 1;
-    }
-    // Bottom edge, not vertical center — the cord plugs in at the UPS's
-    // own power outlet/cord-exit point, which reads as the bottom of the
-    // device block, the same way the PDU end already anchors to its strip's
-    // bottom rather than its middle.
-    const upsY = bottomY(ups.u_position, ups.u_size);
-
-    // Control points pull the curve out away from the rack and let it sag
-    // below a straight line before rising into the PDU's bottom — the look
-    // of a loosely hanging cable rather than a taut geometric connector.
-    // The two points are deliberately uneven (different outward distance,
-    // sag only on the second) so the curve reads as organic, not mirrored.
-    const reach = Math.max(18, Math.min(36, Math.abs(pduX - upsX) * 0.5));
-    const c1x = upsX + outward * reach * 0.45;
-    const c1y = upsY + 16;
-    const c2x = pduX + outward * reach;
-    const c2y = pduY + 24;
-
-    cords.push({ key: pdu.id, resolvedSide: resolved.side, upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY });
+    const { side, cord } = pduLayout.get(pdu.id);
+    if (!cord) continue;
+    cords.push({ key: pdu.id, resolvedSide: side, ...cord });
   }
 
   // The SVG itself has to actually span every point any cord touches —
@@ -689,12 +611,9 @@ export default function RackEnclosure({
             height={frameSize.height}
           >
             {cords.map((c) => {
-              const d = `M ${c.upsX - cordsSvgLeft} ${c.upsY} `
-                + `C ${c.c1x - cordsSvgLeft} ${c.c1y}, `
-                + `${c.c2x - cordsSvgLeft} ${c.c2y}, `
-                + `${c.pduX - cordsSvgLeft} ${c.pduY}`;
+              const d = cordPathD(c, cordsSvgLeft);
               return (
-                <g key={c.key} className={`rack-power-cord rack-power-cord-${c.resolvedSide}`}>
+                <g key={c.key} className={`rack-power-cord rack-power-cord-${c.resolvedSide}`} data-pdu-id={c.key}>
                   {/* Soft outer glow: a wider, near-transparent stroke
                       behind the crisp line, rather than an SVG blur filter
                       — filters are another thing that doesn't reliably
@@ -727,16 +646,15 @@ export default function RackEnclosure({
         )}
 
         {verticalPdus.map((pdu) => {
-          const { side, stack } = pduPositions.get(pdu.id);
-          const resolved = resolvePduPosition(side, stack);
+          const { side, leftPx } = pduLayout.get(pdu.id);
           return (
             <VerticalPdu
               key={pdu.id}
               slot={pdu}
               rack={rack}
               uHeight={uHeight}
-              side={resolved.side}
-              leftPx={pduLeftPx(side, stack)}
+              side={side}
+              leftPx={leftPx}
               isSelected={pdu.id === selectedSlotId}
               highlighted={pdu.id === highlightedSlotId}
               onSelect={onSelectSlot}

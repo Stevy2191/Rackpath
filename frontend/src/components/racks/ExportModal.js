@@ -5,12 +5,13 @@ import { CATEGORY_CONFIG, resolveRenderType } from './deviceRenderConfig';
 import {
   isPowerDevice, isPassiveItem, isUps, getPowerLabel, flattenOutlets, verticalPdusForUps, listPowerSources,
 } from '../../utils/power';
+import { layoutVerticalPdus, cordPathD, DEFAULT_U_HEIGHT } from './verticalPduLayout';
 import './ExportModal.css';
 
 const EXPORT_SCALE = Math.max(window.devicePixelRatio || 1, 3);
 const PREVIEW_SCALE = 1;
 const PDF_DPI = 150;
-const PREVIEW_DEBOUNCE = 350;
+const PREVIEW_DEBOUNCE = 150;
 
 // Human-readable names for each device type key
 const TYPE_LABELS = {
@@ -39,18 +40,6 @@ function loadImage(src) {
   });
 }
 
-// Toggling a CSS class that hides a panel (Front/Rear-only export views)
-// changes the dual-frame's actual layout size, which RackEnclosure picks
-// up via a ResizeObserver and feeds back into React state to recompute
-// every PDU position from. Both of those steps are asynchronous (the
-// observer callback, then React's re-render), so reading the DOM/style
-// immediately after adding the class would still see the pre-resize
-// values. A double rAF reliably waits out both — one frame for the
-// observer to fire, one more for the resulting re-render to commit.
-function waitForLayout() {
-  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-}
-
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -71,15 +60,6 @@ function truncateToWidth(ctx, text, maxWidthPx) {
   while (result.length > 1 && ctx.measureText(result).width > maxWidthPx) result = result.slice(0, -1);
   if (result !== text) result = `${result.slice(0, -1)}…`;
   return result;
-}
-
-async function withClasses(el, classes, fn) {
-  classes.forEach((c) => el.classList.add(c));
-  try {
-    return await fn();
-  } finally {
-    classes.forEach((c) => el.classList.remove(c));
-  }
 }
 
 function captureFnFor(format) {
@@ -120,6 +100,65 @@ function makePdf(dataUrl, cssW, cssH, filename) {
   pdf.save(filename);
 }
 
+// Rewrites every floating vertical-PDU strip and its power cord in an
+// off-screen single-column clone (Front Only / Rear Only) to the position
+// it belongs at given the clone's own (now much narrower) frame width.
+// The clone still has whatever pixel positions got baked in from the live,
+// two-panel render at clone time, which is wrong the instant a whole panel
+// + the gap to it has been removed from a *copy* with no React/observer
+// of its own to ever recompute them. Reuses the exact same layout formula
+// live rendering uses (see verticalPduLayout) so a PDU lands in the same
+// place an export would show it living on the canvas, were the rack
+// permanently in this single-column mode. Every PDU is included — a
+// vertical PDU is bolted to the rack's own frame rail, visible from
+// whichever face you're looking at it from, not "inside" just one of them.
+function relayoutPdusForSingleColumn(clone, rack, verticalPdus, uSlots) {
+  const frame = clone.querySelector('.rack-dual-frame');
+  if (!frame) return;
+  const frameWidth = frame.offsetWidth;
+
+  const layout = layoutVerticalPdus({
+    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frameWidth, hasMiddleGap: false,
+  });
+  const byId = new Map([...layout].map(([id, v]) => [String(id), v]));
+
+  for (const el of clone.querySelectorAll('.rack-vertical-pdu[data-pdu-id]')) {
+    const entry = byId.get(el.dataset.pduId);
+    if (!entry) continue;
+    el.style.left = `${entry.leftPx}px`;
+    el.classList.remove('rack-vertical-pdu-left', 'rack-vertical-pdu-middle', 'rack-vertical-pdu-right');
+    el.classList.add(`rack-vertical-pdu-${entry.side}`);
+  }
+
+  const svg = clone.querySelector('.rack-power-cords');
+  if (!svg) return;
+
+  const cords = [];
+  for (const g of svg.querySelectorAll('g[data-pdu-id]')) {
+    const entry = byId.get(g.dataset.pduId);
+    if (!entry || !entry.cord) { g.remove(); continue; }
+    cords.push({ g, side: entry.side, cord: entry.cord });
+  }
+  if (cords.length === 0) { svg.remove(); return; }
+
+  // Re-derive the svg's own bounding box for the new coordinates — see the
+  // matching comment in RackEnclosure.js for why this has to stay within
+  // its declared [left, left+width] box rather than relying on overflow.
+  const xs = cords.flatMap(({ cord }) => [cord.upsX, cord.c1x, cord.c2x, cord.pduX]);
+  const svgLeft = Math.min(0, ...xs);
+  const svgWidth = Math.max(frameWidth, ...xs) - svgLeft;
+  svg.style.left = `${svgLeft}px`;
+  svg.setAttribute('width', svgWidth);
+
+  for (const { g, side, cord } of cords) {
+    g.setAttribute('class', `rack-power-cord rack-power-cord-${side}`);
+    const d = cordPathD(cord, svgLeft);
+    g.querySelectorAll('path').forEach((p) => p.setAttribute('d', d));
+    const anim = g.querySelector('animateMotion');
+    if (anim) anim.setAttribute('path', d);
+  }
+}
+
 // Vertical PDUs float outside the dual-frame's own box (negative `left`,
 // or beyond its right edge — see computeVerticalPduPositions). offsetLeft/
 // offsetWidth are used instead of getBoundingClientRect because they're
@@ -135,70 +174,86 @@ function measurePduOverflow(frame) {
   return { left: Math.max(0, Math.ceil(left)), right: Math.max(0, Math.ceil(right)) };
 }
 
-// Captures the rack, expanding the output bounds to include any floating
-// vertical PDU strip that overflows the dual-frame's own box.
-//
-// html-to-image's explicit width/height option doesn't just size the
-// output — it's also written directly onto the *captured node's own*
-// inline style before cloning. Passing a bigger width straight to
-// .rack-dual-frame would force it to that width, and since its two panels
-// are flex:1, they'd stretch to fill the new space rather than leaving it
-// empty for the overflow to land in.
-//
-// Capturing one level up at .rack-enclosure (hiding the name/U-counter
-// labels that live there too) avoids that: .rack-dual-frame gets a real,
-// live margin-left plus align-self:flex-start — set directly on the node
-// pre-capture, not via html-to-image's clone-time style hack — which
-// shifts it (and its absolutely-positioned PDU children) right without
-// stretching it, leaving the extra width as genuine empty space the
-// right-side overflow can render into instead of being clipped.
-async function captureEnclosure(rackId, capFn, { backgroundColor, pixelRatio }) {
-  const enclosure = document.getElementById(`rack-${rackId}`);
-  if (!enclosure) return null;
-  const frame = enclosure.querySelector('.rack-dual-frame');
+// Builds a detached, off-screen clone of the rack matching exactly the
+// requested view — Front Only and Rear Only physically remove the other
+// panel from the *clone* (not hide it via CSS on the live, on-screen rack),
+// so the result is naturally sized to only the surviving column with no
+// leftover blank space where the other one used to be, and the live canvas
+// is never touched at all. The clone is appended to the document (off-
+// screen) so it actually lays out/renders — a detached node has no box to
+// measure or capture. Caller must remove `wrapper` from the DOM once done.
+function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
+  const live = document.getElementById(`rack-${rackId}`);
+  if (!live) return null;
+
+  const clone = live.cloneNode(true);
+  clone.removeAttribute('id');
+  // Exports show only the rack diagram — the name/U-counter live above
+  // the frame on screen but have no place in a cropped export image.
+  clone.querySelectorAll('.rack-name-label, .rack-name-input, .rack-u-counter').forEach((el) => el.remove());
+  if (theme === 'light') clone.classList.add('rack-capture-light');
+
+  const frame = clone.querySelector('.rack-dual-frame');
   if (!frame) return null;
 
-  // Any view-specific class (front-only/rear-only) was already added by
-  // the caller before this runs — wait for RackEnclosure's frameSize to
-  // catch up with that before measuring/capturing anything.
-  await waitForLayout();
+  if (view !== 'side-by-side') {
+    const deadFace = view === 'front-only' ? 'rear' : 'front';
+    const deadPanel = frame.querySelector(`.rack-panel-frame-${deadFace}`);
+    if (deadPanel) deadPanel.remove();
+    // Matches the live single-column rack mode's own wider unit column
+    // (Rear permanently hidden) rather than a one-off magic width.
+    clone.classList.add('rack-enclosure-single');
+  }
 
+  // A detached node tree has no layout box at all — offsetWidth/offsetLeft/
+  // offsetParent are all 0/null until it's actually attached to the
+  // document, so every measurement below (the single-column PDU relayout,
+  // and the overflow-bleed sizing) has to happen *after* this, not before.
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'fixed';
+  wrapper.style.left = '-100000px';
+  wrapper.style.top = '0';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+
+  if (view !== 'side-by-side') {
+    const verticalPdus = allSlots.filter((s) => s.rack_id === rack.id && s.item_type === 'vertical-pdu');
+    const uSlots = allSlots.filter((s) => s.rack_id === rack.id && s.item_type !== 'vertical-pdu');
+    relayoutPdusForSingleColumn(clone, rack, verticalPdus, uSlots);
+  }
+
+  // Expand the clone's own box (not .rack-dual-frame's — see below) to fit
+  // any vertical PDU strip floating outside the frame's normal bounds.
+  // align-self:flex-start decouples the frame from .rack-enclosure's
+  // flex-column stretch, so widening the *enclosure* leaves the extra
+  // space empty to its right instead of stretching the frame's own panels
+  // (which are flex:1) to fill it.
   const { left, right } = measurePduOverflow(frame);
-  const prevMargin = frame.style.marginLeft;
-  const prevAlignSelf = frame.style.alignSelf;
+  if (left > 0) frame.style.marginLeft = `${left}px`;
+  frame.style.alignSelf = 'flex-start';
+  if (right > 0) clone.style.width = `${clone.offsetWidth + right}px`;
 
-  return withClasses(enclosure, ['rack-capture-pdu-bleed'], async () => {
-    frame.style.marginLeft = left ? `${left}px` : '';
-    frame.style.alignSelf = 'flex-start';
-    try {
-      const w = enclosure.offsetWidth + right;
-      const h = enclosure.offsetHeight;
-      const dataUrl = await capFn(enclosure, { backgroundColor, pixelRatio, width: w, height: h });
-      return { dataUrl, cssW: w, cssH: h };
-    } finally {
-      frame.style.marginLeft = prevMargin;
-      frame.style.alignSelf = prevAlignSelf;
-    }
-  });
+  return wrapper;
 }
 
 // ─── Capture a single rack in the requested view/theme ────────────────────────
 // Returns { dataUrl, cssW, cssH }
-async function captureSingle(rackId, { format, view, theme, scale }) {
-  const enclosure = document.getElementById(`rack-${rackId}`);
-  if (!enclosure) return null;
+async function captureSingle(rackId, rack, allSlots, { format, view, theme, scale }) {
+  const wrapper = buildOffscreenRack(rackId, rack, allSlots, view, theme);
+  if (!wrapper) return null;
 
-  const themeClass = theme === 'light' ? ['rack-capture-light'] : [];
-  const capFn = captureFnFor(format);
-  const bg = bgFor(theme);
-
-  const viewClass =
-    view === 'front-only' ? ['rack-capture-front-only'] :
-    view === 'rear-only'  ? ['rack-capture-rear-only']  : [];
-
-  return withClasses(enclosure, [...viewClass, ...themeClass], () => (
-    captureEnclosure(rackId, capFn, { backgroundColor: bg, pixelRatio: scale })
-  ));
+  try {
+    const clone = wrapper.firstChild;
+    const capFn = captureFnFor(format);
+    const bg = bgFor(theme);
+    const w = clone.offsetWidth;
+    const h = clone.offsetHeight;
+    const dataUrl = await capFn(clone, { backgroundColor: bg, pixelRatio: scale });
+    return { dataUrl, cssW: w, cssH: h };
+  } finally {
+    wrapper.remove();
+  }
 }
 
 // ─── Composite multiple rack captures side-by-side ────────────────────────────
@@ -602,10 +657,10 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
   let result;
 
   if (targetRacks.length === 1) {
-    result = await captureSingle(targetRacks[0].id, { format, view, theme, scale });
+    result = await captureSingle(targetRacks[0].id, targetRacks[0], allSlots, { format, view, theme, scale });
   } else {
     const singles = await Promise.all(
-      targetRacks.map((r) => captureSingle(r.id, { format, view, theme, scale }))
+      targetRacks.map((r) => captureSingle(r.id, r, allSlots, { format, view, theme, scale }))
     );
     result = await compositeRacks(singles, { theme, scale, format });
   }
@@ -664,10 +719,10 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
       const previewFormat = f === 'svg' ? 'svg' : 'png';
       let result;
       if (targetRacks.length === 1) {
-        result = await captureSingle(targetRacks[0].id, { format: previewFormat, view: v, theme: t, scale: PREVIEW_SCALE });
+        result = await captureSingle(targetRacks[0].id, targetRacks[0], allSlots, { format: previewFormat, view: v, theme: t, scale: PREVIEW_SCALE });
       } else {
         const singles = await Promise.all(
-          targetRacks.map((r) => captureSingle(r.id, { format: previewFormat, view: v, theme: t, scale: PREVIEW_SCALE }))
+          targetRacks.map((r) => captureSingle(r.id, r, allSlots, { format: previewFormat, view: v, theme: t, scale: PREVIEW_SCALE }))
         );
         result = await compositeRacks(singles, { theme: t, scale: PREVIEW_SCALE, format: previewFormat });
       }

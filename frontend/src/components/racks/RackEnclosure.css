@@ -413,56 +413,6 @@
   fill: #ffe3a3;
 }
 
-/* ─── Export capture: include floating vertical PDUs ─────────
-   Capturing .rack-dual-frame alone clips any vertical PDU strip that
-   floats outside its box (left/right of the whole rack), since html-to-
-   image's explicit width/height bounds the render to exactly that node's
-   own box. The capture root is bumped up to .rack-enclosure instead (wide
-   enough to include the overflow once given an explicit width), with its
-   name/U-counter hidden so the captured image still shows only the rack
-   diagram, same as before. */
-.rack-capture-pdu-bleed .rack-name-label,
-.rack-capture-pdu-bleed .rack-name-input,
-.rack-capture-pdu-bleed .rack-u-counter {
-  display: none;
-}
-
-/* ─── Export capture: front-only view ────────────────────── */
-.rack-capture-front-only .rack-panel-frame-rear { display: none; }
-.rack-capture-front-only .rack-units { flex: 0 0 308px; width: 308px; }
-
-/* ─── Export capture: rear-only view ─────────────────────── */
-.rack-capture-rear-only .rack-panel-frame-front { display: none; }
-.rack-capture-rear-only .rack-units { flex: 0 0 308px; width: 308px; }
-
-/* A middle-gap PDU's pixel position is computed from the live dual-frame
-   width, which these single-panel export views don't actually change (they
-   only hide one panel via CSS) — so without this, it'd render at a
-   leftover "centered in a gap that isn't shown" position, landing in the
-   middle of whichever single panel IS visible instead. "Between Front and
-   Rear" has no sensible place to be when only one of them is in the
-   image, so it (and its cord) are hidden rather than redrawn elsewhere. */
-.rack-capture-front-only .rack-vertical-pdu-middle,
-.rack-capture-rear-only .rack-vertical-pdu-middle,
-.rack-capture-front-only .rack-power-cord-middle,
-.rack-capture-rear-only .rack-power-cord-middle {
-  display: none;
-}
-
-/* A Front Only export only makes sense showing the PDU(s) that float on
-   the left (Front's own side); a Rear Only export, only the one(s) on
-   the right (Rear's side). Otherwise every export looked like it had the
-   same pair of PDUs regardless of which single column was selected. */
-.rack-capture-front-only .rack-vertical-pdu-right,
-.rack-capture-front-only .rack-power-cord-right {
-  display: none;
-}
-
-.rack-capture-rear-only .rack-vertical-pdu-left,
-.rack-capture-rear-only .rack-power-cord-left {
-  display: none;
-}
-
 /* ─── Export capture: light theme ────────────────────────── */
 .rack-capture-light .rack-panel-frame {
   background: linear-gradient(135deg, #dde1ea 0%, #e8ecf4 50%, #edf0f7 100%);

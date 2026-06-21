@@ -26,6 +26,7 @@ export default function VerticalPdu({ slot, rack, uHeight, leftPx, side, isSelec
         highlighted ? 'rack-vertical-pdu-highlighted' : '',
       ].filter(Boolean).join(' ')}
       style={{ top, height, left: leftPx, ...customStyle }}
+      data-pdu-id={slot.id}
       title={`${slot.item_label || 'PDU'} (${outletCount} outlets)`}
       onClick={(e) => {
         e.stopPropagation();
