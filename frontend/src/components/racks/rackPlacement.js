@@ -39,11 +39,15 @@ export function isSpanFree(pos, uSize, occupied) {
 // client-side collision heuristic. This intentionally ignores half-width
 // nuances (two half-width devices can share U rows on opposite halves) —
 // the backend remains the authoritative collision check; this is only used
-// to pick which anchor direction to try first.
+// to pick which anchor direction to try first. Vertical PDUs are 0U
+// floating elements alongside the frame, not real U-grid occupants — they
+// still carry a u_position/u_size in storage, but that range must never
+// count as occupying real rows (matching the backend's collision check).
 export function buildOccupiedSet(slots, rackId, face, excludeSlotId) {
   const occupied = new Set();
   for (const s of slots) {
     if (s.rack_id !== rackId) continue;
+    if (s.item_type === 'vertical-pdu') continue;
     if (excludeSlotId != null && String(s.id) === String(excludeSlotId)) continue;
     const mountedFace = s.mounted_face || s.front_back || 'front';
     const matches = face === 'both' || mountedFace === 'both' || mountedFace === face;

@@ -45,7 +45,13 @@ function mountedFaceToLegacy(mounted_face) {
 }
 
 async function findCollision(rackId, projectId, uPosition, uSize, side, excludeId, halfWidth, halfPosition) {
-  let query = 'SELECT id, u_position, u_size, side, half_width, half_position FROM rack_slots WHERE rack_id = ? AND project_id = ?';
+  // Vertical PDUs are 0U floating elements alongside the frame, not real
+  // U-grid occupants — they still carry a u_position/u_size in storage
+  // (so a PDU strip has a slot to draw its cord from), but that range
+  // must never block a real device from being placed over it. Excluded
+  // here the same way the rack resize-fit check already excludes them.
+  let query = `SELECT id, u_position, u_size, side, half_width, half_position FROM rack_slots
+               WHERE rack_id = ? AND project_id = ? AND item_type != 'vertical-pdu'`;
   const params = [rackId, projectId];
   if (excludeId) {
     query += ' AND id != ?';

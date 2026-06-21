@@ -155,6 +155,10 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     const occupied = new Set();
     for (const s of (rackSlots || [])) {
       if (s.id === slot.id) continue;
+      // Vertical PDUs are 0U floating elements, not real U-grid occupants
+      // — their stored u_position/u_size must never block a real device's
+      // resize, same as the backend's own collision check.
+      if (s.item_type === 'vertical-pdu') continue;
       const sFace = s.mounted_face
         || ((s.front_back === 'back' || s.side === 'back') ? 'rear' : s.side === 'both' ? 'both' : 'front');
       // Skip slots on a non-overlapping face

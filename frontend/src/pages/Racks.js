@@ -201,6 +201,10 @@ export default function RacksPage() {
       const occupied = new Set();
       for (const s of allSlots) {
         if (s.rack_id !== slot.rack_id) continue;
+        // Vertical PDUs are 0U floating elements, not real U-grid
+        // occupants — their stored u_position/u_size must never block
+        // where a duplicated device can land.
+        if (s.item_type === 'vertical-pdu') continue;
         const sFace = s.mounted_face || s.front_back || 'front';
         if (sFace !== 'both' && face !== 'both' && sFace !== face) continue;
         for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) occupied.add(u);

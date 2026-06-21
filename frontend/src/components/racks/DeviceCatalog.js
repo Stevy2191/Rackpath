@@ -9,6 +9,10 @@ function findNextFreeU(rack, allSlots, uSize, mountedFace) {
   const occupied = new Set();
   for (const s of allSlots) {
     if (s.rack_id !== rack.id) continue;
+    // Vertical PDUs are 0U floating elements, not real U-grid occupants —
+    // their stored u_position/u_size must never block where a new device
+    // from the catalog can land.
+    if (s.item_type === 'vertical-pdu') continue;
     const face = s.mounted_face || s.front_back || 'front';
     const targetFace = mountedFace === 'rear' ? 'rear' : 'front';
     if (face !== 'both' && face !== targetFace) continue;
