@@ -20,7 +20,7 @@
   gap: 8px;
 }
 
-/* ─── General/Power tabs (UPS, PDU) ───────────────────────── */
+/* ─── General/Power tabs (all devices) ────────────────────── */
 .props-tabs {
   display: flex;
   border-bottom: 1px solid #2a2e38;
@@ -48,40 +48,6 @@
 .props-tabs button.active {
   color: #4adede;
   border-bottom-color: #4adede;
-}
-
-/* ─── Collapsible Power accordion (non-power devices) ─────── */
-.props-collapsible {
-  border: 1px solid #1e2128;
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.props-collapsible-header {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  padding: 7px 8px;
-  border: none;
-  background: #161820;
-  color: #8b91a1;
-  font-family: inherit;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.props-collapsible-header:hover { color: #d4d8e0; }
-
-.props-collapsible-body {
-  padding: 10px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 /* ─── Outlet groups editor ─────────────────────────────────── */

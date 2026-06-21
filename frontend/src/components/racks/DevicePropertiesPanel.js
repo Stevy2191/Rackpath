@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, ChevronUp, ChevronDown, ChevronRight, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
 import { useScrollOverflow } from './useScrollOverflow';
 import client from '../../api/client';
 import {
@@ -25,21 +25,6 @@ const MOUNT_SIDE_OPTIONS = [
 ];
 
 const WALL_DIRECT = '';
-
-// Collapsed-by-default accordion used to tuck the Power section out of the
-// way for plain (non-UPS/PDU) devices, which don't need tabs.
-function CollapsibleSection({ title, children }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="props-collapsible">
-      <button type="button" className="props-collapsible-header" onClick={() => setOpen((v) => !v)}>
-        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-        <span>{title}</span>
-      </button>
-      {open && <div className="props-collapsible-body">{children}</div>}
-    </div>
-  );
-}
 
 export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest, onDuplicate }) {
   const [fields, setFields] = useState(null);
@@ -309,8 +294,9 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
     </>
   );
 
-  const showGeneral = !isPower || tab === 'general';
-  const showPower = isPower && tab === 'power';
+  const showGeneral = tab === 'general';
+  const showPower = tab === 'power';
+  const powerSources = listPowerSources(rackSlots || [], slot.id);
 
   return (
     <div className="props-panel">
@@ -321,12 +307,10 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
         </button>
       </div>
 
-      {isPower && (
-        <div className="props-tabs">
-          <button type="button" className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>General</button>
-          <button type="button" className={tab === 'power' ? 'active' : ''} onClick={() => setTab('power')}>Power</button>
-        </div>
-      )}
+      <div className="props-tabs">
+        <button type="button" className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>General</button>
+        <button type="button" className={tab === 'power' ? 'active' : ''} onClick={() => setTab('power')}>Power</button>
+      </div>
 
       {saving && <div className="props-panel-saving">Saving…</div>}
       {error && <div className="props-panel-error" onClick={() => setError(null)}>{error}</div>}
@@ -600,27 +584,22 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
               </>
             )}
 
-            {/* Non-power devices keep a single panel — Power is tucked into a
-                collapsed-by-default accordion instead of a tab. Shown for
-                every non-power device, including passive items (patch
-                panels, shelves, etc.) — anything can be wired to a PDU/UPS
-                outlet or left on Wall (Direct), so the selector belongs
-                here regardless of whether the device itself draws power. */}
-            {!isPower && (
-              // Keyed on the slot so switching devices always resets it
-              // collapsed, instead of inheriting the previous device's
-              // expanded/collapsed state (React would otherwise reuse the
-              // same component instance here across selections).
-              <CollapsibleSection key={slot.id} title="Power">
-                {pluggedIntoField}
-              </CollapsibleSection>
-            )}
-
             {actionsSection}
           </>
         )}
 
-        {showPower && (
+        {showPower && !isPower && (
+          <>
+            {powerSources.length === 0 && (
+              <p className="props-empty-note">
+                No power devices in this rack. Add a UPS or PDU to map power connections.
+              </p>
+            )}
+            {pluggedIntoField}
+          </>
+        )}
+
+        {showPower && isPower && (
           <>
             {/* Input Plug Type */}
             <div className="props-field">
