@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf';
 import { CATEGORY_CONFIG, resolveRenderType } from './deviceRenderConfig';
 import {
   isPowerDevice, isPassiveItem, isUps, getPowerLabel, flattenOutlets, verticalPdusForUps, listPowerSources,
+  getPowerSourceLabel,
 } from '../../utils/power';
 import { layoutVerticalPdus, cordPathD, DEFAULT_U_HEIGHT } from './verticalPduLayout';
 import './ExportModal.css';
@@ -114,14 +115,14 @@ function makePdf(dataUrl, cssW, cssH, filename) {
 // values live rendering already had. Every PDU is included — a vertical
 // PDU is bolted to the rack's own frame rail, visible from whichever face
 // you're looking at it from, not "inside" just one of them.
-function relayoutPdus(clone, rack, verticalPdus, uSlots, hasMiddleGap) {
+function relayoutPdus(clone, rack, verticalPdus, uSlots) {
   const frame = clone.querySelector('.rack-dual-frame');
   if (!frame) return;
   const frameWidth = frame.offsetWidth;
   const frameHeight = frame.offsetHeight;
 
   const layout = layoutVerticalPdus({
-    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frameWidth, frameHeight, hasMiddleGap,
+    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frameWidth, frameHeight,
   });
   const byId = new Map([...layout].map(([id, v]) => [String(id), v]));
 
@@ -131,7 +132,7 @@ function relayoutPdus(clone, rack, verticalPdus, uSlots, hasMiddleGap) {
     el.style.left = `${entry.leftPx}px`;
     el.style.top = `${entry.top}px`;
     el.style.height = `${entry.height}px`;
-    el.classList.remove('rack-vertical-pdu-left', 'rack-vertical-pdu-middle', 'rack-vertical-pdu-right');
+    el.classList.remove('rack-vertical-pdu-left', 'rack-vertical-pdu-right');
     el.classList.add(`rack-vertical-pdu-${entry.side}`);
   }
 
@@ -239,7 +240,7 @@ function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
 
   const verticalPdus = allSlots.filter((s) => s.rack_id === rack.id && s.item_type === 'vertical-pdu');
   const uSlots = allSlots.filter((s) => s.rack_id === rack.id && s.item_type !== 'vertical-pdu');
-  relayoutPdus(clone, rack, verticalPdus, uSlots, view === 'side-by-side');
+  relayoutPdus(clone, rack, verticalPdus, uSlots);
 
   // Expand the clone's own box (not .rack-dual-frame's — see below) to fit
   // any vertical PDU strip floating outside the frame's normal bounds.
@@ -425,12 +426,30 @@ function orderPowerDevices(slots) {
   return result;
 }
 
+// "<PDU label> → <Type> Outlet N", or the appropriate not-connected label,
+// for one PSU's connection. Looks the source up in `allSlots` (project-
+// wide, not just the racks being exported) since a PSU can point at a
+// PDU/UPS in any rack — the connections table is text, not a rendered
+// panel, so it can describe a cross-rack connection even when the target
+// rack itself isn't part of this particular export.
+function describeConnection(sourceId, outlet, allSlots, unsetLabel) {
+  if (!sourceId) return unsetLabel;
+  const source = allSlots.find((x) => x.id === sourceId);
+  if (!source) return unsetLabel;
+  const flat = flattenOutlets(source).find((o) => o.n === outlet);
+  const outletLabel = flat ? `${flat.type} Outlet ${flat.indexInGroup}` : `Outlet ${outlet}`;
+  return `${getPowerSourceLabel(source, allSlots)} → ${outletLabel}`;
+}
+
 // Pure data model — no canvas. { outletBlocks, connections, hasContent }
-function buildPowerSummaryModel(slots) {
+// `slots` is the devices actually being exported (rows in the table);
+// `allSlots` is every rack in the project, used only to resolve what a
+// cross-rack PSU connection or outlet occupant actually points at.
+function buildPowerSummaryModel(slots, allSlots) {
   const powerDevices = orderPowerDevices(slots);
   if (powerDevices.length === 0) return { outletBlocks: [], connections: [], hasContent: false };
 
-  const sourceById = new Map(listPowerSources(slots).map((entry) => [entry.slot.id, entry]));
+  const sourceById = new Map(listPowerSources(allSlots).map((entry) => [entry.slot.id, entry]));
 
   const outletBlocks = powerDevices.map((dev) => {
     const entry = sourceById.get(dev.id);
@@ -460,16 +479,19 @@ function buildPowerSummaryModel(slots) {
 
   // Every non-power, non-passive device (passive items like blanks/patch
   // panels/shelves have no power cord, so they're not relevant here).
+  // Each row shows both independent power connections — PSU2 is optional,
+  // so an unset one reads as "Not connected" rather than "Wall (Direct)"
+  // (which specifically means "this cord really does go to the wall").
   const connections = slots
     .filter((s) => !isPowerDevice(s) && !isPassiveItem(s) && s.item_type !== 'vertical-pdu')
     .sort((a, b) => b.u_position - a.u_position)
-    .map((s) => {
-      const source = s.power_source_slot_id ? slots.find((x) => x.id === s.power_source_slot_id) : null;
-      if (!source) return { device: getPowerLabel(s), pluggedInto: 'Wall (Direct)', dim: true };
-      const outlet = flattenOutlets(source).find((o) => o.n === s.power_source_outlet);
-      const outletLabel = outlet ? `${outlet.type} Outlet ${outlet.indexInGroup}` : `Outlet ${s.power_source_outlet}`;
-      return { device: getPowerLabel(s), pluggedInto: `${getPowerLabel(source)} → ${outletLabel}`, dim: false };
-    });
+    .map((s) => ({
+      device: getPowerLabel(s),
+      psu1: describeConnection(s.power_source_slot_id, s.power_source_outlet, allSlots, 'Wall (Direct)'),
+      psu1Dim: !s.power_source_slot_id,
+      psu2: describeConnection(s.psu2_source_slot_id, s.psu2_source_outlet, allSlots, 'Not connected'),
+      psu2Dim: !s.psu2_source_slot_id,
+    }));
 
   return { outletBlocks, connections, hasContent: true };
 }
@@ -550,22 +572,33 @@ function drawPowerSummaryPanel(ctx, x, y, panelW, model, { theme, scale }) {
     });
   });
 
-  // ── Section 2: device → plugged-into table ─────────────────────────────
+  // ── Section 2: device → PSU1/PSU2 plugged-into table ────────────────────
   if (model.connections.length > 0) {
     cy += POW_SECTION_GAP * s;
 
+    // Two columns of roughly equal width for the two independent power
+    // cords, with the device name column slightly narrower than either —
+    // a "Rack 2 — PDU Right → Outlet 3"-style label needs more room than
+    // a device name does.
+    const col1 = x + POW_PADH * s;
+    const col2 = x + Math.round(panelW * 0.26);
+    const col3 = x + Math.round(panelW * 0.63);
+
     ctx.font = `bold ${Math.round(POW_FONT_SZ_SM * s)}px monospace`;
     ctx.fillStyle = hdrColor;
-    ctx.fillText('DEVICE → PLUGGED INTO', x + POW_PADH * s, cy + 10 * s);
+    ctx.fillText('DEVICE', col1, cy + 10 * s);
+    ctx.fillText('PSU 1', col2, cy + 10 * s);
+    ctx.fillText('PSU 2', col3, cy + 10 * s);
     cy += POW_TABLE_HEADER_H * s;
 
     ctx.font = `${Math.round(POW_FONT_SZ_SM * s)}px monospace`;
-    const colSplit = Math.round(panelW * 0.32);
     model.connections.forEach((row) => {
       ctx.fillStyle = txtColor;
-      ctx.fillText(truncateToWidth(ctx, row.device, colSplit - POW_PADH * s), x + POW_PADH * s, cy + 9 * s);
-      ctx.fillStyle = row.dim ? dimColor : txtColor;
-      ctx.fillText(truncateToWidth(ctx, row.pluggedInto, panelW - colSplit - POW_PADH * s), x + colSplit, cy + 9 * s);
+      ctx.fillText(truncateToWidth(ctx, row.device, col2 - col1 - 4 * s), col1, cy + 9 * s);
+      ctx.fillStyle = row.psu1Dim ? dimColor : txtColor;
+      ctx.fillText(truncateToWidth(ctx, row.psu1, col3 - col2 - 4 * s), col2, cy + 9 * s);
+      ctx.fillStyle = row.psu2Dim ? dimColor : txtColor;
+      ctx.fillText(truncateToWidth(ctx, row.psu2, x + panelW - col3 - POW_PADH * s), col3, cy + 9 * s);
       cy += POW_TABLE_ROW_H * s;
     });
   }
@@ -573,16 +606,17 @@ function drawPowerSummaryPanel(ctx, x, y, panelW, model, { theme, scale }) {
 
 // ─── Composite the legend and/or power summary, stacked in one side column ────
 // Returns { dataUrl, cssW, cssH } with updated (expanded) dimensions.
-async function compositeSidePanel(dataUrl, cssW, cssH, slots, { theme, scale, includeLegend, includePowerSummary }) {
+async function compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, { theme, scale, includeLegend, includePowerSummary }) {
   const legendItems = includeLegend ? buildLegendItems(slots) : [];
-  const powerModel = includePowerSummary ? buildPowerSummaryModel(slots) : { hasContent: false };
+  const powerModel = includePowerSummary ? buildPowerSummaryModel(slots, allSlots) : { hasContent: false };
 
   const legendH = legendItems.length > 0 ? measureLegendHeight(legendItems) : 0;
   const powerH = powerModel.hasContent ? measurePowerSummaryHeight(powerModel) : 0;
   if (legendH === 0 && powerH === 0) return { dataUrl, cssW, cssH };
 
   const LEG_W = 168;   // legend-only column width (unchanged from before)
-  const POW_W = 260;   // wider column when the power summary is present, to fit "Device → Type Outlet N"
+  const POW_W = 460;   // wider column when the power summary is present, to fit two
+                        // independent "Rack N — PDU Side → Type Outlet N" PSU columns
   const SIDE_GAP = 20; // gap between rack image and the side column
   const STACK_GAP = 14; // gap between legend and power summary within the column
   const TOP_OFFSET = 20; // drop the column 20px from the top so it doesn't crowd the rack name
@@ -689,7 +723,7 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
 
   if ((includeLegend || includePowerSummary) && format !== 'svg') {
     const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-    const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, { theme, scale, includeLegend, includePowerSummary });
+    const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, { theme, scale, includeLegend, includePowerSummary });
     ({ dataUrl, cssW, cssH } = sideResult);
   }
 
@@ -749,7 +783,7 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
       let { dataUrl, cssW, cssH } = result;
       if (il || ips) {
         const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-        const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, { theme: t, scale: PREVIEW_SCALE, includeLegend: il, includePowerSummary: ips });
+        const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, { theme: t, scale: PREVIEW_SCALE, includeLegend: il, includePowerSummary: ips });
         dataUrl = sideResult.dataUrl;
       }
       setPreviewUrl(dataUrl);

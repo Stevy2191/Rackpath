@@ -113,9 +113,10 @@ export function findCatalogEntryByModel(model) {
   );
 }
 
-// PDU catalog entries — used for picking a model when adding a vertical PDU.
-// Includes both horizontal and vertical/0U PDU types, since the vertical-PDU
-// attach flow ignores uSize entirely (it always floats at full rack height).
+// PDU catalog entries for the "Add Vertical PDU" picker — vertical/0U
+// models only. PDU - Horizontal is a real U-slot device mounted normally
+// on a face; it never floats alongside the frame, so it has no place in
+// this list regardless of how the vertical-PDU attach flow itself works.
 export function pduCatalogEntries() {
-  return RACK_CATALOG.filter((entry) => entry.renderType === 'pdu' || entry.renderType === 'pdu-vertical');
+  return RACK_CATALOG.filter((entry) => entry.renderType === 'pdu-vertical');
 }

@@ -70,39 +70,53 @@ async function findCollision(rackId, projectId, uPosition, uSize, side, excludeI
   return null;
 }
 
-// Finds a different slot already plugged into the same outlet, if any.
-async function findOutletConflict(rackId, projectId, sourceSlotId, outlet, excludeId) {
+// Finds a different device-PSU slot already plugged into the same source
+// outlet, if any. Project-wide, not rack-scoped — a PDU/UPS's outlets are
+// occupied by whichever device claims them, regardless of which rack that
+// consuming device physically sits in, and checks *both* PSU1 and PSU2
+// columns since either of a device's two independent power cords could be
+// the one claiming this outlet. `excludeSlotId`/`excludeField` (PSU1' or
+// 'psu2') skip the one column being actively edited on the slot itself, so
+// re-saving its own existing value isn't flagged as a conflict with itself.
+async function findOutletConflict(projectId, sourceSlotId, outlet, excludeSlotId, excludeField) {
   if (!sourceSlotId || outlet == null) return null;
-  let query = `
-    SELECT id, item_label FROM rack_slots
-    WHERE rack_id = ? AND project_id = ? AND power_source_slot_id = ? AND power_source_outlet = ?`;
-  const params = [rackId, projectId, sourceSlotId, outlet];
-  if (excludeId) {
-    query += ' AND id != ?';
-    params.push(excludeId);
-  }
-  const [rows] = await pool.query(query, params);
-  return rows[0] || null;
+
+  let q1 = `SELECT id, item_label FROM rack_slots
+            WHERE project_id = ? AND power_source_slot_id = ? AND power_source_outlet = ?`;
+  const p1 = [projectId, sourceSlotId, outlet];
+  if (excludeSlotId && excludeField === 'psu1') { q1 += ' AND id != ?'; p1.push(excludeSlotId); }
+  const [rows1] = await pool.query(q1, p1);
+  if (rows1[0]) return rows1[0];
+
+  let q2 = `SELECT id, item_label FROM rack_slots
+            WHERE project_id = ? AND psu2_source_slot_id = ? AND psu2_source_outlet = ?`;
+  const p2 = [projectId, sourceSlotId, outlet];
+  if (excludeSlotId && excludeField === 'psu2') { q2 += ' AND id != ?'; p2.push(excludeSlotId); }
+  const [rows2] = await pool.query(q2, p2);
+  if (rows2[0]) return rows2[0];
+
+  return null;
 }
 
-// Validates a power_source_slot_id/power_source_outlet pair: source must
-// exist in the same rack, outlet must be within the total count of its
-// outlet groups, and a slot can't be wired to itself. Returns an error
-// string, or null if valid (including the "no source set" / Wall-Direct
-// case).
-async function validatePowerSource(rackId, projectId, slotId, sourceSlotId, outlet) {
+// Validates a power source slot/outlet pair for either PSU: the source
+// must exist somewhere in the same *project* (any rack — devices can now
+// plug into a PDU/UPS in a different rack than their own), the outlet
+// must be within the total count of its outlet groups, and a slot can't
+// be wired to itself. Returns an error string, or null if valid (including
+// the "no source set" / Wall-Direct case).
+async function validatePowerSource(projectId, slotId, sourceSlotId, outlet) {
   if (!sourceSlotId) return null;
   if (outlet === undefined || outlet === null) {
-    return 'power_source_outlet is required when power_source_slot_id is set';
+    return 'An outlet is required when a power source is set';
   }
   if (slotId && String(sourceSlotId) === String(slotId)) {
     return 'A device cannot be its own power source';
   }
   const [[source]] = await pool.query(
-    'SELECT id, outlet_groups FROM rack_slots WHERE id = ? AND rack_id = ? AND project_id = ?',
-    [sourceSlotId, rackId, projectId]
+    'SELECT id, outlet_groups FROM rack_slots WHERE id = ? AND project_id = ?',
+    [sourceSlotId, projectId]
   );
-  if (!source) return 'Power source not found in this rack';
+  if (!source) return 'Power source not found in this project';
   const outletCount = sumOutletGroups(source.outlet_groups);
   if (!outletCount || outlet < 1 || outlet > outletCount) {
     return `Outlet must be between 1 and ${outletCount || 0}`;
@@ -150,6 +164,7 @@ router.post('/', async (req, res, next) => {
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
       port_count, bay_count, capacity_va,
       power_source_slot_id, power_source_outlet, mount_side,
+      psu2_source_slot_id, psu2_source_outlet,
     } = req.body;
     const u_size = req.body.u_size || 1;
 
@@ -180,20 +195,40 @@ router.post('/', async (req, res, next) => {
     const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
     // Vertical PDUs are floating elements alongside the rack frame, not
-    // occupying U columns — they never collide with U-slot devices.
-    if (item_type !== 'vertical-pdu') {
+    // occupying U columns — they never collide with U-slot devices. A real
+    // rack only has physical room for one PDU per side, so a 3rd is
+    // rejected outright rather than being given some less-meaningful
+    // stacked position.
+    if (item_type === 'vertical-pdu') {
+      const [[{ pduCount }]] = await pool.query(
+        `SELECT COUNT(*) AS pduCount FROM rack_slots WHERE rack_id = ? AND project_id = ? AND item_type = 'vertical-pdu'`,
+        [rack_id, req.projectId]
+      );
+      if (pduCount >= 2) {
+        return res.status(409).json({ error: 'Both Left and Right vertical PDU positions are already in use on this rack' });
+      }
+    } else {
       const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, null, half_width, resolvedHalfPos);
       if (collision) {
         return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
       }
     }
 
-    const sourceError = await validatePowerSource(rack_id, req.projectId, null, power_source_slot_id, power_source_outlet);
-    if (sourceError) return res.status(400).json({ error: sourceError });
+    const psu1Error = await validatePowerSource(req.projectId, null, power_source_slot_id, power_source_outlet);
+    if (psu1Error) return res.status(400).json({ error: psu1Error });
     if (power_source_slot_id) {
-      const conflict = await findOutletConflict(rack_id, req.projectId, power_source_slot_id, power_source_outlet, null);
+      const conflict = await findOutletConflict(req.projectId, power_source_slot_id, power_source_outlet, null, 'psu1');
       if (conflict) {
         return res.status(409).json({ error: `Outlet ${power_source_outlet} is already in use by ${conflict.item_label || 'another device'}` });
+      }
+    }
+
+    const psu2Error = await validatePowerSource(req.projectId, null, psu2_source_slot_id, psu2_source_outlet);
+    if (psu2Error) return res.status(400).json({ error: `PSU 2: ${psu2Error}` });
+    if (psu2_source_slot_id) {
+      const conflict = await findOutletConflict(req.projectId, psu2_source_slot_id, psu2_source_outlet, null, 'psu2');
+      if (conflict) {
+        return res.status(409).json({ error: `Outlet ${psu2_source_outlet} is already in use by ${conflict.item_label || 'another device'}` });
       }
     }
 
@@ -204,8 +239,9 @@ router.post('/', async (req, res, next) => {
           half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes,
           outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
           port_count, bay_count, capacity_va,
-          power_source_slot_id, power_source_outlet, mount_side)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          power_source_slot_id, power_source_outlet, mount_side,
+          psu2_source_slot_id, psu2_source_outlet)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
@@ -218,6 +254,7 @@ router.post('/', async (req, res, next) => {
         input_plug_type || null, capacity_value || null, capacity_unit || null,
         port_count || null, bay_count || null, capacity_va || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
+        psu2_source_slot_id || null, psu2_source_outlet || null,
       ]
     );
 
@@ -249,6 +286,7 @@ router.put('/:id', async (req, res, next) => {
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
       port_count, bay_count, capacity_va,
       power_source_slot_id, power_source_outlet, mount_side,
+      psu2_source_slot_id, psu2_source_outlet,
     } = req.body;
     let u_position = req.body.u_position;
     const u_size = req.body.u_size || 1;
@@ -286,12 +324,21 @@ router.put('/:id', async (req, res, next) => {
       }
     }
 
-    const sourceError = await validatePowerSource(rack_id, req.projectId, req.params.id, power_source_slot_id, power_source_outlet);
-    if (sourceError) return res.status(400).json({ error: sourceError });
+    const psu1Error = await validatePowerSource(req.projectId, req.params.id, power_source_slot_id, power_source_outlet);
+    if (psu1Error) return res.status(400).json({ error: psu1Error });
     if (power_source_slot_id) {
-      const conflict = await findOutletConflict(rack_id, req.projectId, power_source_slot_id, power_source_outlet, req.params.id);
+      const conflict = await findOutletConflict(req.projectId, power_source_slot_id, power_source_outlet, req.params.id, 'psu1');
       if (conflict) {
         return res.status(409).json({ error: `Outlet ${power_source_outlet} is already in use by ${conflict.item_label || 'another device'}` });
+      }
+    }
+
+    const psu2Error = await validatePowerSource(req.projectId, req.params.id, psu2_source_slot_id, psu2_source_outlet);
+    if (psu2Error) return res.status(400).json({ error: `PSU 2: ${psu2Error}` });
+    if (psu2_source_slot_id) {
+      const conflict = await findOutletConflict(req.projectId, psu2_source_slot_id, psu2_source_outlet, req.params.id, 'psu2');
+      if (conflict) {
+        return res.status(409).json({ error: `Outlet ${psu2_source_outlet} is already in use by ${conflict.item_label || 'another device'}` });
       }
     }
 
@@ -303,7 +350,8 @@ router.put('/:id', async (req, res, next) => {
            ip_address=?, slot_notes=?,
            outlet_groups=?, input_voltage=?, input_plug_type=?, capacity_value=?, capacity_unit=?,
            port_count=?, bay_count=?, capacity_va=?,
-           power_source_slot_id=?, power_source_outlet=?, mount_side=?
+           power_source_slot_id=?, power_source_outlet=?, mount_side=?,
+           psu2_source_slot_id=?, psu2_source_outlet=?
        WHERE id=? AND project_id=?`,
       [
         rack_id, device_id || null,
@@ -317,6 +365,7 @@ router.put('/:id', async (req, res, next) => {
         input_plug_type || null, capacity_value || null, capacity_unit || null,
         port_count || null, bay_count || null, capacity_va || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
+        psu2_source_slot_id || null, psu2_source_outlet || null,
         req.params.id, req.projectId,
       ]
     );
@@ -344,6 +393,7 @@ router.patch('/:id', async (req, res, next) => {
       'outlet_groups', 'input_voltage', 'input_plug_type', 'capacity_value', 'capacity_unit',
       'port_count', 'bay_count', 'capacity_va',
       'power_source_slot_id', 'power_source_outlet', 'mount_side',
+      'psu2_source_slot_id', 'psu2_source_outlet',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -400,23 +450,40 @@ router.patch('/:id', async (req, res, next) => {
       }
     }
 
-    // Outlet assignment check when the power source changes
-    if ('power_source_slot_id' in updates || 'power_source_outlet' in updates) {
+    // Outlet assignment check when either PSU's power source changes
+    if ('power_source_slot_id' in updates || 'power_source_outlet' in updates
+      || 'psu2_source_slot_id' in updates || 'psu2_source_outlet' in updates) {
       const [[cur]] = await pool.query(
-        'SELECT rack_id, power_source_slot_id, power_source_outlet FROM rack_slots WHERE id = ? AND project_id = ?',
+        'SELECT power_source_slot_id, power_source_outlet, psu2_source_slot_id, psu2_source_outlet FROM rack_slots WHERE id = ? AND project_id = ?',
         [req.params.id, req.projectId]
       );
       if (!cur) return res.status(404).json({ error: 'Rack slot not found' });
 
-      const newSourceId = 'power_source_slot_id' in updates ? updates.power_source_slot_id : cur.power_source_slot_id;
-      const newOutlet    = 'power_source_outlet'  in updates ? updates.power_source_outlet  : cur.power_source_outlet;
+      if ('power_source_slot_id' in updates || 'power_source_outlet' in updates) {
+        const newSourceId = 'power_source_slot_id' in updates ? updates.power_source_slot_id : cur.power_source_slot_id;
+        const newOutlet    = 'power_source_outlet'  in updates ? updates.power_source_outlet  : cur.power_source_outlet;
 
-      const sourceError = await validatePowerSource(cur.rack_id, req.projectId, req.params.id, newSourceId, newOutlet);
-      if (sourceError) return res.status(400).json({ error: sourceError });
-      if (newSourceId) {
-        const conflict = await findOutletConflict(cur.rack_id, req.projectId, newSourceId, newOutlet, req.params.id);
-        if (conflict) {
-          return res.status(409).json({ error: `Outlet ${newOutlet} is already in use by ${conflict.item_label || 'another device'}` });
+        const psu1Error = await validatePowerSource(req.projectId, req.params.id, newSourceId, newOutlet);
+        if (psu1Error) return res.status(400).json({ error: psu1Error });
+        if (newSourceId) {
+          const conflict = await findOutletConflict(req.projectId, newSourceId, newOutlet, req.params.id, 'psu1');
+          if (conflict) {
+            return res.status(409).json({ error: `Outlet ${newOutlet} is already in use by ${conflict.item_label || 'another device'}` });
+          }
+        }
+      }
+
+      if ('psu2_source_slot_id' in updates || 'psu2_source_outlet' in updates) {
+        const newSourceId = 'psu2_source_slot_id' in updates ? updates.psu2_source_slot_id : cur.psu2_source_slot_id;
+        const newOutlet    = 'psu2_source_outlet'  in updates ? updates.psu2_source_outlet  : cur.psu2_source_outlet;
+
+        const psu2Error = await validatePowerSource(req.projectId, req.params.id, newSourceId, newOutlet);
+        if (psu2Error) return res.status(400).json({ error: `PSU 2: ${psu2Error}` });
+        if (newSourceId) {
+          const conflict = await findOutletConflict(req.projectId, newSourceId, newOutlet, req.params.id, 'psu2');
+          if (conflict) {
+            return res.status(409).json({ error: `Outlet ${newOutlet} is already in use by ${conflict.item_label || 'another device'}` });
+          }
         }
       }
     }

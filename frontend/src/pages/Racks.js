@@ -174,6 +174,8 @@ export default function RacksPage() {
           power_source_slot_id: slot.power_source_slot_id,
           power_source_outlet: slot.power_source_outlet,
           mount_side: slot.mount_side,
+          psu2_source_slot_id: slot.psu2_source_slot_id,
+          psu2_source_outlet: slot.psu2_source_outlet,
           ...changes,
         });
       } catch (err) {
@@ -514,6 +516,8 @@ export default function RacksPage() {
       slot={selectedSlot}
       rackHeight={selectedSlotRack?.u_height || 42}
       rackSlots={allSlots.filter((s) => s.rack_id === selectedSlot.rack_id)}
+      allSlots={allSlots}
+      racks={racks}
       userCatalogEntries={userCatalogEntries}
       devices={devices}
       actions={actions}

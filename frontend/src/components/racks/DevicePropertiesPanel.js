@@ -3,8 +3,8 @@ import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus } from 'l
 import { useScrollOverflow } from './useScrollOverflow';
 import client from '../../api/client';
 import {
-  isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel,
-  listPowerSources, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet,
+  isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel, getPowerSourceLabel,
+  groupPowerSourcesByRack, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet,
 } from '../../utils/power';
 import { pduCatalogEntries } from './rackCatalog';
 import { COLOR_SWATCHES, getFieldSchema, INPUT_VOLTAGES, INPUT_PLUG_TYPES, CAPACITY_UNITS } from './deviceFieldSchemas';
@@ -21,14 +21,13 @@ const FACE_OPTIONS = [
 ];
 
 const VERTICAL_PDU_POSITION_LABELS = {
-  left:   'Left of Front',
-  middle: 'Middle (between Front and Rear)',
-  right:  'Right of Rear',
+  left:  'Left',
+  right: 'Right',
 };
 
 const WALL_DIRECT = '';
 
-export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest }) {
+export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, allSlots, racks, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -41,13 +40,11 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
   const [setBodyEl, setBodyContentEl, hasMoreBelow] = useScrollOverflow();
 
   const isVerticalPdu = slot?.item_type === 'vertical-pdu';
-  // Position is assigned rack-wide by creation order — see
+  // Position (Left/Right) is assigned rack-wide by creation order — see
   // computeVerticalPduPositions — so it has to be derived from every
-  // vertical PDU in the rack, not just this one. This is the PDU's
-  // logical slot, which (deliberately) doesn't change when Rear is
-  // toggled — see RackEnclosure's resolvePduPosition for how a 'middle'
-  // slot still gets drawn somewhere sensible when there's no gap to
-  // float it in, without that being treated as a change of slot.
+  // vertical PDU in the rack, not just this one: 1st PDU added is Left,
+  // 2nd is Right. A 3rd is rejected outright (see VerticalPduSection)
+  // since a real rack only mounts one PDU per side.
   const verticalPduPosition = isVerticalPdu
     ? computeVerticalPduPositions((rackSlots || []).filter((s) => s.item_type === 'vertical-pdu')).get(slot.id)
     : null;
@@ -82,6 +79,8 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
       half_depth:    !!slot.half_depth,
       power_source_slot_id: slot.power_source_slot_id || null,
       power_source_outlet:  slot.power_source_outlet  || null,
+      psu2_source_slot_id:  slot.psu2_source_slot_id   || null,
+      psu2_source_outlet:   slot.psu2_source_outlet    || null,
     });
     setError(null);
     setSavingToCatalog(false);
@@ -230,28 +229,52 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
     ? (slot.hostname || slot.ip || `Device ${slot.device_id}`)
     : (slot.item_label || slot.custom_type || 'Device');
 
-  const pluggedIntoField = (
-    <PluggedIntoField
-      key={slot.id}
+  const onPsuChange = (changes) => {
+    setFields((f) => ({ ...f, ...changes }));
+    patch(changes);
+  };
+
+  // Vertical PDUs only ever have the one connection (to their owning UPS,
+  // set automatically when they're attached — see VerticalPduSection), so
+  // they keep the single "Plugged Into" field rather than gaining a PSU2
+  // that wouldn't mean anything for them. Every other non-passive item
+  // (regular devices, and a horizontal PDU/UPS chained to an upstream
+  // source) gets independent PSU 1 / PSU 2 selectors.
+  const psu1Field = (
+    <PsuField
+      key={`${slot.id}-psu1`}
       slot={slot}
-      rackSlots={rackSlots || []}
+      allSlots={allSlots || []}
+      racks={racks || []}
+      fieldPrefix="psu1"
+      label={isVerticalPdu ? 'Plugged Into' : 'PSU 1'}
       fields={fields}
-      onChange={(changes) => {
-        setFields((f) => ({ ...f, ...changes }));
-        patch(changes);
-      }}
+      onChange={onPsuChange}
     />
   );
+  const psu2Field = !isVerticalPdu && (
+    <PsuField
+      key={`${slot.id}-psu2`}
+      slot={slot}
+      allSlots={allSlots || []}
+      racks={racks || []}
+      fieldPrefix="psu2"
+      label="PSU 2"
+      fields={fields}
+      onChange={onPsuChange}
+    />
+  );
+  const pluggedIntoFields = <>{psu1Field}{psu2Field}</>;
 
   const outletsSummary = (
     <>
       <div className="props-section-divider">
-        Outlets — {countOccupiedOutlets(slot, rackSlots || [])} of {getOutletCount(slot)} in use
+        Outlets — {countOccupiedOutlets(slot, allSlots || [])} of {getOutletCount(slot)} in use
       </div>
       {getOutletCount(slot) === 0 ? (
         <p className="props-empty-note">No outlets defined for this device.</p>
       ) : (
-        <PowerOutletList slot={slot} rackSlots={rackSlots || []} onSelectSlot={onSelectSlot} />
+        <PowerOutletList slot={slot} allSlots={allSlots || []} onSelectSlot={onSelectSlot} />
       )}
     </>
   );
@@ -307,7 +330,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
   const showPowerTab = !passive;
   const showGeneral = !showPowerTab || tab === 'general';
   const showPower = showPowerTab && tab === 'power';
-  const powerSources = listPowerSources(rackSlots || [], slot.id);
+  const powerSourceGroups = groupPowerSourcesByRack(allSlots || [], racks || [], slot.id);
 
   return (
     <div className="props-panel">
@@ -466,14 +489,13 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
             )}
 
             {/* Vertical PDU position — automatic, by creation order (1st
-                left of Front, 2nd in the middle gap, then alternating
-                further out) rather than user-chosen, so it's shown
+                Left, 2nd Right) rather than user-chosen, so it's shown
                 read-only here instead of as a selectable control. */}
             {isVerticalPdu && (
               <div className="props-field">
                 <label className="props-field-label">Position</label>
                 <div className="props-readonly">
-                  {VERTICAL_PDU_POSITION_LABELS[verticalPduPosition?.side] || 'Left of Front'}
+                  {VERTICAL_PDU_POSITION_LABELS[verticalPduPosition?.side] || 'Left'}
                 </div>
               </div>
             )}
@@ -617,12 +639,12 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
 
         {showPower && !isPower && (
           <>
-            {powerSources.length === 0 && (
+            {powerSourceGroups.length === 0 && (
               <p className="props-empty-note">
-                No power devices in this rack. Add a UPS or PDU to map power connections.
+                No power devices in this project. Add a UPS or PDU to any rack to map power connections.
               </p>
             )}
-            {pluggedIntoField}
+            {pluggedIntoFields}
           </>
         )}
 
@@ -695,7 +717,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
             {!passive && (
               <>
                 <div className="props-section-divider">Plugged Into</div>
-                {pluggedIntoField}
+                {pluggedIntoFields}
               </>
             )}
 
@@ -714,6 +736,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
               <VerticalPduSection
                 ups={slot}
                 rackSlots={rackSlots || []}
+                allSlots={allSlots || []}
                 userCatalogEntries={userCatalogEntries || []}
                 rackHeight={rackHeight}
                 actions={actions}
@@ -736,19 +759,32 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
 // Two-step "Plugged Into" selector: pick the power device first, then one
 // of its outlets, instead of one flat dropdown listing every outlet across
 // every PDU/UPS in the rack. Once both steps are set, collapses to a
-// compact summary ("UPS → Outlet 3") with a button to reopen the selector.
-function PluggedIntoField({ slot, rackSlots, fields, onChange }) {
+// compact summary ("Rack 2 — PDU Right → Outlet 3") with a button to
+// reopen the selector. `fieldPrefix` ('psu1'/'psu2') picks which pair of
+// DB columns this instance reads/writes, so a device can have two of
+// these — one for each independent power cord — without either one
+// stepping on the other's state. Power sources are listed project-wide,
+// grouped by rack (see groupPowerSourcesByRack), since either PSU can go
+// to a PDU/UPS in any rack, not just this device's own.
+function PsuField({ slot, allSlots, racks, fieldPrefix, label, fields, onChange }) {
   const [editing, setEditing] = useState(false);
   const [pendingSourceId, setPendingSourceId] = useState(null);
 
-  const sources = listPowerSources(rackSlots, slot.id);
-  const currentSourceId = fields.power_source_slot_id;
-  const currentOutlet = fields.power_source_outlet;
-  const currentSourceSlot = currentSourceId ? rackSlots.find((s) => s.id === currentSourceId) : null;
+  const sourceIdKey = fieldPrefix === 'psu2' ? 'psu2_source_slot_id' : 'power_source_slot_id';
+  const outletKey    = fieldPrefix === 'psu2' ? 'psu2_source_outlet'  : 'power_source_outlet';
+  // PSU1 unconnected reads as "Wall (Direct)" (a device really is drawing
+  // straight from the wall) — PSU2 unconnected reads as "Not connected"
+  // (it's simply not in use), per the spec for the optional second cord.
+  const unsetLabel = fieldPrefix === 'psu2' ? 'Not connected' : 'Wall (Direct)';
+
+  const groups = groupPowerSourcesByRack(allSlots, racks, slot.id);
+  const currentSourceId = fields[sourceIdKey];
+  const currentOutlet = fields[outletKey];
+  const currentSourceSlot = currentSourceId ? allSlots.find((s) => s.id === currentSourceId) : null;
 
   const summary = currentSourceId
-    ? `${getPowerLabel(currentSourceSlot)} → Outlet ${currentOutlet}`
-    : 'Wall (Direct)';
+    ? `${getPowerSourceLabel(currentSourceSlot, allSlots)} → Outlet ${currentOutlet}`
+    : unsetLabel;
 
   const startEditing = () => {
     setPendingSourceId(currentSourceId || null);
@@ -757,7 +793,7 @@ function PluggedIntoField({ slot, rackSlots, fields, onChange }) {
 
   const handleSourceChange = (val) => {
     if (val === WALL_DIRECT) {
-      onChange({ power_source_slot_id: null, power_source_outlet: null });
+      onChange({ [sourceIdKey]: null, [outletKey]: null });
       setEditing(false);
       return;
     }
@@ -767,14 +803,14 @@ function PluggedIntoField({ slot, rackSlots, fields, onChange }) {
   };
 
   const handleOutletChange = (n) => {
-    onChange({ power_source_slot_id: pendingSourceId, power_source_outlet: n });
+    onChange({ [sourceIdKey]: pendingSourceId, [outletKey]: n });
     setEditing(false);
   };
 
   if (!editing) {
     return (
       <div className="props-field">
-        <label className="props-field-label">Plugged Into</label>
+        <label className="props-field-label">{label}</label>
         <div className="props-plugged-summary">
           <span className="props-plugged-summary-text">{summary}</span>
           <button type="button" className="props-upload-btn" onClick={startEditing}>Change</button>
@@ -783,21 +819,27 @@ function PluggedIntoField({ slot, rackSlots, fields, onChange }) {
     );
   }
 
-  const selectedSourceEntry = pendingSourceId != null ? sources.find((s) => s.slot.id === pendingSourceId) : null;
+  const selectedSourceEntry = pendingSourceId != null
+    ? groups.flatMap((g) => g.sources).find((s) => s.slot.id === pendingSourceId)
+    : null;
   const outletValue = pendingSourceId === currentSourceId ? (currentOutlet || '') : '';
 
   return (
     <div className="props-field">
-      <label className="props-field-label">Plugged Into</label>
+      <label className="props-field-label">{label}</label>
       <select
         className="props-input"
         value={pendingSourceId == null ? WALL_DIRECT : String(pendingSourceId)}
         onChange={(e) => handleSourceChange(e.target.value)}
         autoFocus
       >
-        <option value={WALL_DIRECT}>Wall (Direct)</option>
-        {sources.map(({ slot: sourceSlot }) => (
-          <option key={sourceSlot.id} value={sourceSlot.id}>{getPowerLabel(sourceSlot)}</option>
+        <option value={WALL_DIRECT}>{unsetLabel}</option>
+        {groups.map((g) => (
+          <optgroup key={g.rackId} label={g.rackName}>
+            {g.sources.map(({ slot: sourceSlot }) => (
+              <option key={sourceSlot.id} value={sourceSlot.id}>{getPowerSourceLabel(sourceSlot, allSlots)}</option>
+            ))}
+          </optgroup>
         ))}
       </select>
 
@@ -809,8 +851,12 @@ function PluggedIntoField({ slot, rackSlots, fields, onChange }) {
           onChange={(e) => handleOutletChange(Number(e.target.value))}
         >
           <option value="" disabled>Select outlet…</option>
-          {selectedSourceEntry.outlets.map(({ n, type, indexInGroup, occupant }) => {
-            const occupiedByOther = occupant && occupant.id !== slot.id;
+          {selectedSourceEntry.outlets.map(({ n, type, indexInGroup, occupant, occupantPsu }) => {
+            // An outlet already claimed by this *same* device's other PSU
+            // is just as real a conflict as one claimed by another device
+            // entirely — but the field's own current value (this exact
+            // PSU's existing claim) isn't a conflict with itself.
+            const occupiedByOther = occupant && !(occupant.id === slot.id && occupantPsu === fieldPrefix);
             return (
               <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
                 {type} — Outlet {indexInGroup}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
@@ -825,16 +871,22 @@ function PluggedIntoField({ slot, rackSlots, fields, onChange }) {
   );
 }
 
-function PowerOutletList({ slot, rackSlots, onSelectSlot }) {
+function PowerOutletList({ slot, allSlots, onSelectSlot }) {
+  // Project-wide and checking both PSU columns — the device plugged into
+  // a given outlet can be in any rack, on either of its two power cords.
   const outlets = Array.from({ length: getOutletCount(slot) }, (_, i) => {
     const n = i + 1;
-    const occupant = rackSlots.find((s) => s.power_source_slot_id === slot.id && s.power_source_outlet === n);
-    return { n, occupant };
+    const occupant = allSlots.find((s) =>
+      (s.power_source_slot_id === slot.id && s.power_source_outlet === n)
+      || (s.psu2_source_slot_id === slot.id && s.psu2_source_outlet === n)
+    );
+    const occupantPsu = occupant && occupant.psu2_source_slot_id === slot.id && occupant.psu2_source_outlet === n ? 'PSU 2' : null;
+    return { n, occupant, occupantPsu };
   });
 
   return (
     <div className="props-outlet-list">
-      {outlets.map(({ n, occupant }) => (
+      {outlets.map(({ n, occupant, occupantPsu }) => (
         <div
           key={n}
           className={`props-outlet-row${occupant ? ' has-occupant' : ''}`}
@@ -842,18 +894,22 @@ function PowerOutletList({ slot, rackSlots, onSelectSlot }) {
           title={occupant ? `Jump to ${getPowerLabel(occupant)}` : undefined}
         >
           <span className="props-outlet-num">{n}</span>
-          <span className="props-outlet-name">{occupant ? getPowerLabel(occupant) : 'Empty'}</span>
+          <span className="props-outlet-name">
+            {occupant ? `${getPowerLabel(occupant)}${occupantPsu ? ` (${occupantPsu})` : ''}` : 'Empty'}
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
-function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, actions, onSelectSlot }) {
+function VerticalPduSection({ ups, rackSlots, allSlots, userCatalogEntries, rackHeight, actions, onSelectSlot }) {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState(null);
+  // Vertical/0U models only — PDU - Horizontal is a real U-slot device
+  // placed normally on a face, it never belongs in this floating-strip list.
   const catalogEntries = pduCatalogEntries();
-  const customPdus = userCatalogEntries.filter((c) => c.render_type === 'pdu' || c.render_type === 'pdu-vertical');
+  const customPdus = userCatalogEntries.filter((c) => c.render_type === 'pdu-vertical');
   const [sourceKey, setSourceKey] = useState('');
 
   const attached = verticalPdusForUps(rackSlots, ups.id);
@@ -862,6 +918,10 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
   // This is the PDU's logical slot and doesn't change when Rear is toggled.
   const allRackPdus = rackSlots.filter((s) => s.item_type === 'vertical-pdu');
   const pduPositions = computeVerticalPduPositions(allRackPdus);
+  // A real rack only has room for one PDU per side — once both Left and
+  // Right are taken (rack-wide, not just this UPS's), no more vertical
+  // PDUs can be added at all, regardless of which UPS would own the 3rd one.
+  const bothSidesTaken = allRackPdus.length >= 2;
 
   const openAdd = () => {
     setSourceKey(catalogEntries[0] ? `catalog:${catalogEntries[0].id}` : (customPdus[0] ? `custom:${customPdus[0].id}` : ''));
@@ -870,8 +930,9 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
   };
 
   const handleAdd = () => {
+    if (bothSidesTaken) { setError('Both Left and Right vertical PDU positions are already in use on this rack'); return; }
     if (!sourceKey) { setError('Choose a PDU model'); return; }
-    const outlet = firstFreeOutlet(ups, rackSlots);
+    const outlet = firstFreeOutlet(ups, allSlots);
     if (!outlet) { setError('UPS has no free outlets'); return; }
 
     const [kind, idRaw] = sourceKey.split(':');
@@ -925,14 +986,16 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
   return (
     <>
       <div className="props-section-divider">Vertical PDUs</div>
-      {attached.length === 0 && !adding && (
+      {attached.length === 0 && !adding && !bothSidesTaken && (
         <p className="props-empty-note">No vertical PDUs attached.</p>
       )}
       {attached.length > 0 && (
         <div className="props-outlet-list">
           {attached.map((pdu) => (
             <div key={pdu.id} className="props-outlet-row has-occupant" onClick={() => onSelectSlot && onSelectSlot(pdu.id)}>
-              <span className="props-outlet-name">{pdu.item_label || 'PDU'} ({pduPositions.get(pdu.id)?.side || 'left'})</span>
+              <span className="props-outlet-name">
+                {pdu.item_label || 'PDU'} ({VERTICAL_PDU_POSITION_LABELS[pduPositions.get(pdu.id)?.side] || 'Left'})
+              </span>
               <button
                 type="button"
                 className="props-outlet-remove"
@@ -970,6 +1033,8 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
             <button type="button" className="props-upload-btn" onClick={handleAdd}>Add</button>
           </div>
         </div>
+      ) : bothSidesTaken ? (
+        <p className="props-empty-note">Both Left and Right vertical PDU positions are already in use on this rack.</p>
       ) : (
         <button type="button" className="props-upload-btn" onClick={openAdd} disabled={catalogEntries.length === 0 && customPdus.length === 0}>
           <Plus size={12} /> Add Vertical PDU

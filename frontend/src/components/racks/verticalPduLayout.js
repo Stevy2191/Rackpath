@@ -13,11 +13,6 @@ export const STRIP_STACK_GAP = 24;
 // and export) — not currently zoom-dependent, but kept here as the single
 // source both RackCanvas and the export capture read it from.
 export const DEFAULT_U_HEIGHT = 40;
-// Must match .rack-dual-frame's CSS `gap` — the middle vertical PDU slot is
-// centered in this gap between the Front and Rear panels. Sized to leave
-// ~28px of clear space on either side of the (9px-wide) strip rather than
-// crowding it against either panel's edge.
-export const PANEL_GAP = 65;
 // A vertical PDU's floating strip is sized off the rack's own rendered
 // height, not whatever u_size happens to be stored on its slot — a real
 // vertical PDU spans most (not all) of the rack regardless of how tall the
@@ -25,13 +20,6 @@ export const PANEL_GAP = 65;
 // rack's while both still read as "the same kind of object" relative to
 // their own frame. Centered vertically in the remaining 1 - ratio gap.
 export const PDU_HEIGHT_RATIO = 0.65;
-
-export function resolveFace(s) {
-  if (s.mounted_face) return s.mounted_face;
-  if (s.front_back === 'back' || s.side === 'back') return 'rear';
-  if (s.side === 'both') return 'both';
-  return 'front';
-}
 
 function bottomY(rack, uHeight, u_position, u_size) {
   const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
@@ -71,54 +59,34 @@ function buildCordCurve(upsX, upsY, pduX, pduY, outward) {
   return { upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY };
 }
 
-// Turns an assigned slot ({side, stack} from computeVerticalPduPositions)
-// into the side/stack actually used for layout. 'middle' only has a literal
-// gap to float in when both columns are showing — without a companion
-// column (Rear hidden live, or either single-column export capture) there's
-// no gap, so it renders beside the visible column's own right edge instead,
-// parked one stack beyond any *real* right-side PDU so it can't land on top
-// of one.
-export function resolvePduSlot({ side, stack }, { hasMiddleGap, rightSideCount }) {
-  if (side === 'middle' && !hasMiddleGap) return { side: 'right', stack: rightSideCount };
-  return { side, stack };
-}
-
 // Absolute left-edge offset (from the frame's own left edge) for a given
-// resolved side/stack — the single source of truth both the floating strip
-// and its power cord's endpoint are computed from, so they always agree.
+// side/stack — the single source of truth both the floating strip and its
+// power cord's endpoint are computed from, so they always agree. 'right'
+// floats beyond whichever edge `frameWidth` actually measures — the right
+// edge of Rear when it's showing, or of Front alone when it isn't — so a
+// PDU automatically tracks "the rightmost visible column" without needing
+// to know which face that currently is.
 export function pduLeftPx({ side, stack }, frameWidth) {
   const offsetPx = STRIP_OFFSET_BASE + stack * STRIP_STACK_GAP;
-  if (side === 'left') return -offsetPx;
-  if (side === 'right') return frameWidth + offsetPx - STRIP_WIDTH;
-  // Middle: centered in the gap between the Front and Rear panels — the
-  // only spot a real centerline PDU could physically occupy, so (unlike
-  // left/right) it never stacks multiple strips.
-  const halfWidth = (frameWidth - PANEL_GAP) / 2;
-  return halfWidth + PANEL_GAP / 2 - STRIP_WIDTH / 2;
+  return side === 'left' ? -offsetPx : frameWidth + offsetPx - STRIP_WIDTH;
 }
 
 // Full layout for every vertical PDU in a rack: where its strip floats
 // (left/top/height) and (if it's plugged into a UPS that's also in
-// `uSlots`) the bezier control points for its power cord. `hasMiddleGap`
-// should be true only when both Front and Rear are actually present in
-// whatever's being laid out (live rendering with Rear shown, or a
-// Side-by-Side export capture) — false for Rear hidden live, or a Front
-// Only/Rear Only single-column capture.
+// `uSlots`) the bezier control points for its power cord.
 //
 // Returns Map<pduId, { side, stack, leftPx, top, height, cord: null | {
 //   upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY
 // } }>.
-export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameWidth, frameHeight, hasMiddleGap }) {
+export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameWidth, frameHeight }) {
   const assigned = computeVerticalPduPositions(verticalPdus);
-  const rightSideCount = [...assigned.values()].filter((p) => p.side === 'right').length;
   const { top, height } = pduBox(frameHeight);
   const pduBottomY = top + height;
 
   const result = new Map();
   for (const pdu of verticalPdus) {
-    const slot = assigned.get(pdu.id);
-    const resolved = resolvePduSlot(slot, { hasMiddleGap, rightSideCount });
-    const leftPx = pduLeftPx(resolved, frameWidth);
+    const { side, stack } = assigned.get(pdu.id);
+    const leftPx = pduLeftPx({ side, stack }, frameWidth);
 
     let cord = null;
     const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
@@ -130,26 +98,15 @@ export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameW
       const pduY = pduBottomY;
 
       // Left/right cords always enter from that outer edge of the frame
-      // being laid out. A middle cord has no outer edge to default to, so
-      // it attaches to whichever panel the UPS actually lives on, on the
-      // edge facing the gap — the only edge that makes physical sense for
-      // a centerline PDU.
-      let upsX;
-      let outward; // which way "away from the rack" is, for the curve's bow
-      if (resolved.side === 'left') { upsX = 0; outward = -1; }
-      else if (resolved.side === 'right') { upsX = frameWidth; outward = 1; }
-      else {
-        const halfWidth = (frameWidth - PANEL_GAP) / 2;
-        const upsOnRear = resolveFace(ups) === 'rear';
-        upsX = upsOnRear ? halfWidth + PANEL_GAP : halfWidth;
-        outward = upsOnRear ? -1 : 1;
-      }
+      // being laid out.
+      const upsX = side === 'left' ? 0 : frameWidth;
+      const outward = side === 'left' ? -1 : 1; // which way "away from the rack" is, for the curve's bow
       const upsY = bottomY(rack, uHeight, ups.u_position, ups.u_size);
 
       cord = buildCordCurve(upsX, upsY, pduX, pduY, outward);
     }
 
-    result.set(pdu.id, { side: resolved.side, stack: resolved.stack, leftPx, top, height, cord });
+    result.set(pdu.id, { side, stack, leftPx, top, height, cord });
   }
   return result;
 }

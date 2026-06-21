@@ -370,12 +370,11 @@ export default function RackEnclosure({
     return () => observer.disconnect();
   }, []);
 
-  // left/middle/right + stack-out-from-the-frame assignment, position math,
-  // and (for any PDU plugged into a UPS in this rack) its power cord's
-  // bezier endpoints — all computed by the shared layout helper so the
-  // export capture's off-screen single-column renders use the exact same
-  // formulas live rendering does. 'middle' only has a gap to float in while
-  // Rear is showing, hence hasMiddleGap: showRear.
+  // left/right + stack-out-from-the-frame assignment, position math, and
+  // (for any PDU plugged into a UPS in this rack) its power cord's bezier
+  // endpoints — all computed by the shared layout helper so the export
+  // capture's off-screen renders use the exact same formulas live
+  // rendering does.
   const pduLayout = layoutVerticalPdus({
     verticalPdus,
     uSlots,
@@ -383,7 +382,6 @@ export default function RackEnclosure({
     uHeight,
     frameWidth: frameSize.width,
     frameHeight: frameSize.height,
-    hasMiddleGap: showRear,
   });
 
   // Stop rendering the cords' traveling pulse while this rack is scrolled

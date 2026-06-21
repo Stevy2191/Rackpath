@@ -69,26 +69,30 @@ export function countUsedU(slots, rackId) {
   return used.size;
 }
 
-// Assigns each vertical PDU in a rack to one of three floating positions —
-// left of the Front column, the middle gap between Front and Rear, or right
-// of the Rear column — by creation order (lowest id first). Only one PDU
-// ever lands in the middle: it's the actual physical centerline of the
-// rack, just wide enough for one strip, so every PDU after the 2nd
-// alternates further out on the left/right instead of trying to share it.
+// Assigns each vertical PDU in a rack to a floating position — left of the
+// Front column, or right of the Rear column (or right of Front when Rear
+// isn't showing/doesn't exist — a presentation concern handled separately
+// by whatever turns this into pixel coordinates, see verticalPduLayout's
+// pduLeftPx) — by creation order (lowest id first): 1st PDU goes left, 2nd
+// goes right. Real dual-PSU rack setups mount exactly one PDU per side, so
+// callers are expected to reject adding a 3rd (see the rack-slots POST
+// route) — this function itself doesn't enforce that, it just keeps
+// alternating sides if it's ever called with more than 2, so pre-existing
+// data from before that limit existed still renders somewhere sane
+// instead of breaking.
 //
-// This assignment is deliberately independent of whether Rear is actually
-// showing right now — a PDU's logical slot (1st = left, 2nd = middle, 3rd =
-// right, ...) is a property of how many PDUs exist and in what order they
-// were created, not of the current Front/Rear toggle. Whether a 'middle'
-// PDU can actually *render* in a gap that may not currently exist is a
-// presentation concern, handled separately by whatever's turning this into
-// pixel coordinates (see RackEnclosure's pduLeftPx) — keeping it out of this
-// function means toggling Rear can never reshuffle anyone's assigned slot,
-// only how the 'middle' slot happens to be drawn.
+// This used to also have a 3rd 'middle' position (the actual physical
+// centerline, for the 2nd PDU specifically) — removed because a real
+// vertical PDU only ever mounts left/right of the frame, never literally
+// between Front and Rear. Any PDU previously assigned 'middle' (always
+// the 2nd-created one in its rack) now lands on 'right' instead, exactly
+// matching "Left if available, Right if not": the 1st PDU always already
+// holds 'left' by the time there's a 2nd one. No data migration needed,
+// since this position was always computed live, never stored.
 //
-// Returns Map<pduId, { side: 'left'|'middle'|'right', stack: number }>,
-// where `stack` is how many other PDUs on that same side sit between this
-// one and the frame (0 = closest).
+// Returns Map<pduId, { side: 'left'|'right', stack: number }>, where
+// `stack` is how many other PDUs on that same side sit between this one
+// and the frame (0 = closest).
 export function computeVerticalPduPositions(verticalPdus) {
   const sorted = [...verticalPdus].sort((a, b) => a.id - b.id);
   const positions = new Map();
@@ -96,15 +100,8 @@ export function computeVerticalPduPositions(verticalPdus) {
   let rightCount = 0;
 
   sorted.forEach((pdu, index) => {
-    let side;
-    if (index === 0) side = 'left';
-    else if (index === 1) side = 'middle';
-    else if (index === 2) side = 'right';
-    else side = index % 2 === 1 ? 'left' : 'right';
-
-    if (side === 'middle') {
-      positions.set(pdu.id, { side, stack: 0 });
-    } else if (side === 'left') {
+    const side = index % 2 === 0 ? 'left' : 'right';
+    if (side === 'left') {
       positions.set(pdu.id, { side, stack: leftCount });
       leftCount += 1;
     } else {
