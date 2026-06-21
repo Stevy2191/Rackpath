@@ -28,7 +28,7 @@ const VERTICAL_PDU_POSITION_LABELS = {
 
 const WALL_DIRECT = '';
 
-export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest }) {
+export default function DevicePropertiesPanel({ slot, rackHeight, rackShowRear, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -43,9 +43,13 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
   const isVerticalPdu = slot?.item_type === 'vertical-pdu';
   // Position is assigned rack-wide by creation order — see
   // computeVerticalPduPositions — so it has to be derived from every
-  // vertical PDU in the rack, not just this one.
+  // vertical PDU in the rack, not just this one. hasMiddle mirrors
+  // RackEnclosure's own check: with Rear hidden there's no gap for a
+  // middle PDU to float in, so it renders on the left instead — this
+  // label needs to agree with that or it'll claim "Middle" for a PDU
+  // that's actually sitting on the left.
   const verticalPduPosition = isVerticalPdu
-    ? computeVerticalPduPositions((rackSlots || []).filter((s) => s.item_type === 'vertical-pdu')).get(slot.id)
+    ? computeVerticalPduPositions((rackSlots || []).filter((s) => s.item_type === 'vertical-pdu'), { hasMiddle: rackShowRear }).get(slot.id)
     : null;
   const passive = slot ? isPassiveItem(slot) : false;
   const isPower = slot ? isPowerDevice(slot) : false;
@@ -710,6 +714,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
               <VerticalPduSection
                 ups={slot}
                 rackSlots={rackSlots || []}
+                rackShowRear={rackShowRear}
                 userCatalogEntries={userCatalogEntries || []}
                 rackHeight={rackHeight}
                 actions={actions}
@@ -845,7 +850,7 @@ function PowerOutletList({ slot, rackSlots, onSelectSlot }) {
   );
 }
 
-function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, actions, onSelectSlot }) {
+function VerticalPduSection({ ups, rackSlots, rackShowRear, userCatalogEntries, rackHeight, actions, onSelectSlot }) {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState(null);
   const catalogEntries = pduCatalogEntries();
@@ -854,9 +859,11 @@ function VerticalPduSection({ ups, rackSlots, userCatalogEntries, rackHeight, ac
 
   const attached = verticalPdusForUps(rackSlots, ups.id);
   // Position is assigned rack-wide (by creation order across *all* vertical
-  // PDUs in the rack, not just this UPS's), matching RackEnclosure's layout.
+  // PDUs in the rack, not just this UPS's), matching RackEnclosure's layout —
+  // hasMiddle has to agree with it too, or this list would claim "middle"
+  // for a PDU that's actually rendering on the left because Rear is hidden.
   const allRackPdus = rackSlots.filter((s) => s.item_type === 'vertical-pdu');
-  const pduPositions = computeVerticalPduPositions(allRackPdus);
+  const pduPositions = computeVerticalPduPositions(allRackPdus, { hasMiddle: rackShowRear });
 
   const openAdd = () => {
     setSourceKey(catalogEntries[0] ? `catalog:${catalogEntries[0].id}` : (customPdus[0] ? `custom:${customPdus[0].id}` : ''));

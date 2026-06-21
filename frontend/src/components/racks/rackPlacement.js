@@ -75,24 +75,41 @@ export function countUsedU(slots, rackId) {
 // ever lands in the middle: it's the actual physical centerline of the
 // rack, just wide enough for one strip, so every PDU after the 2nd
 // alternates further out on the left/right instead of trying to share it.
+//
+// `hasMiddle` should be false when Rear is hidden — there's no gap to
+// float a middle PDU in once Rear's column disappears and Front expands
+// to fill the space, so whichever PDU would've been 2nd (middle) instead
+// stacks on the left, same as any other left-side PDU.
+//
 // Returns Map<pduId, { side: 'left'|'middle'|'right', stack: number }>,
 // where `stack` is how many other PDUs on that same side sit between this
 // one and the frame (0 = closest).
-export function computeVerticalPduPositions(verticalPdus) {
+export function computeVerticalPduPositions(verticalPdus, { hasMiddle = true } = {}) {
   const sorted = [...verticalPdus].sort((a, b) => a.id - b.id);
   const positions = new Map();
+  let leftCount = 0;
+  let rightCount = 0;
+
   sorted.forEach((pdu, index) => {
     let side;
-    let stack;
-    if (index === 0)      { side = 'left';   stack = 0; }
-    else if (index === 1) { side = 'middle'; stack = 0; }
-    else if (index === 2) { side = 'right';  stack = 0; }
-    else {
-      const rest = index - 3;
-      side = rest % 2 === 0 ? 'left' : 'right';
-      stack = 1 + Math.floor(rest / 2);
+    if (index === 0) side = 'left';
+    else if (index === 1) side = hasMiddle ? 'middle' : 'left';
+    else if (index === 2) side = 'right';
+    // From the 4th PDU on, alternate left/right regardless of hasMiddle —
+    // this matches the with-middle scheme exactly (index 3 -> left, 4 ->
+    // right, ...) since index is odd/even in the same pattern either way.
+    else side = index % 2 === 1 ? 'left' : 'right';
+
+    if (side === 'middle') {
+      positions.set(pdu.id, { side, stack: 0 });
+    } else if (side === 'left') {
+      positions.set(pdu.id, { side, stack: leftCount });
+      leftCount += 1;
+    } else {
+      positions.set(pdu.id, { side, stack: rightCount });
+      rightCount += 1;
     }
-    positions.set(pdu.id, { side, stack });
   });
+
   return positions;
 }

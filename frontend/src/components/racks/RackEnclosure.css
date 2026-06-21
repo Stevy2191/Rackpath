@@ -39,11 +39,14 @@
 /* ─── Dual-panel layout ──────────────────────────────────────
    Just a flex row + gap now — each panel below carries its own full
    frame, so Front and Rear read as two separate rack enclosures
-   sitting side by side rather than one box split down the middle. */
+   sitting side by side rather than one box split down the middle.
+   Wide enough that a vertical PDU floating in the middle (see
+   PANEL_GAP in RackEnclosure.js, which this must match) gets clear
+   space on both sides instead of crowding either panel's edge. */
 .rack-dual-frame {
   display: flex;
   align-items: stretch;
-  gap: 20px;
+  gap: 44px;
   position: relative;
   cursor: pointer;
 }

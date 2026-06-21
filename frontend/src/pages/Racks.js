@@ -513,6 +513,7 @@ export default function RacksPage() {
     <DevicePropertiesPanel
       slot={selectedSlot}
       rackHeight={selectedSlotRack?.u_height || 42}
+      rackShowRear={selectedSlotRack?.show_rear !== undefined ? Boolean(selectedSlotRack.show_rear) : true}
       rackSlots={allSlots.filter((s) => s.rack_id === selectedSlot.rack_id)}
       userCatalogEntries={userCatalogEntries}
       devices={devices}

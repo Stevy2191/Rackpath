@@ -15,8 +15,10 @@ const STRIP_WIDTH = 9;
 const STRIP_OFFSET_BASE = 40;
 const STRIP_STACK_GAP = 24;
 // Must match .rack-dual-frame's CSS `gap` — the middle vertical PDU slot is
-// centered in this gap between the Front and Rear panels.
-const PANEL_GAP = 20;
+// centered in this gap between the Front and Rear panels. Sized to leave
+// ~17px of clear space on either side of the (9px-wide) strip rather than
+// crowding it against either panel's edge.
+const PANEL_GAP = 44;
 
 const ANNOTATION_LABELS = {
   name:         'Name',
@@ -352,6 +354,7 @@ export default function RackEnclosure({
   const uRows = Array.from({ length: rack.u_height }, (_, i) => rack.u_height - i);
   const usedU = countUsedU(slots, rack.id);
   const freeU = rack.u_height - usedU;
+  const showRear = rack.show_rear !== undefined ? Boolean(rack.show_rear) : true;
 
   // Vertical PDUs are floating elements alongside the frame, not part of the
   // front/rear U grid — keep them out of the U-occupancy maps entirely.
@@ -359,8 +362,11 @@ export default function RackEnclosure({
   const uSlots = slots.filter((s) => s.item_type !== 'vertical-pdu');
 
   // left/middle/right + stack-out-from-the-frame assignment, by creation
-  // order — see computeVerticalPduPositions for the exact scheme.
-  const pduPositions = computeVerticalPduPositions(verticalPdus);
+  // order — see computeVerticalPduPositions for the exact scheme. The
+  // middle slot only exists when Rear is actually showing (it's the gap
+  // between Front and Rear) — with Rear hidden there's no gap to float a
+  // PDU in, so it falls back to stacking on the left instead.
+  const pduPositions = computeVerticalPduPositions(verticalPdus, { hasMiddle: showRear });
 
   // Absolute left-edge offset (from the dual-frame's own left edge) for a
   // given side/stack — the single source of truth both the floating strip
@@ -546,7 +552,6 @@ export default function RackEnclosure({
     onSelectSlot,
   };
 
-  const showRear        = rack.show_rear !== undefined ? Boolean(rack.show_rear) : true;
   const annotationField = (rack.annotation_field && rack.annotation_field !== 'none') ? rack.annotation_field : null;
   const showAnnotations = Boolean(rack.show_annotations) && Boolean(annotationField);
 
