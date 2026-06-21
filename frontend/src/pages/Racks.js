@@ -523,7 +523,6 @@ export default function RacksPage() {
       onSelectSlot={handleSelectSlot}
       onSaveToCatalog={saveSlotToCatalog}
       onDeleteRequest={(slot) => setDeleteConfirmSlot(slot)}
-      onDuplicate={(slot) => actions.onSlotDuplicate(slot)}
     />
   ) : (focusedRack && rackEditOpen) ? (
     <RackEditPanel

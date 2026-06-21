@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus } from 'lucide-react';
 import { useScrollOverflow } from './useScrollOverflow';
 import client from '../../api/client';
 import {
@@ -26,7 +26,7 @@ const MOUNT_SIDE_OPTIONS = [
 
 const WALL_DIRECT = '';
 
-export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest, onDuplicate }) {
+export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest }) {
   const [fields, setFields] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -284,9 +284,6 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
             <BookmarkPlus size={12} /> Save to Catalog
           </button>
         )}
-        <button type="button" className="props-upload-btn" onClick={() => onDuplicate(slot)}>
-          <Copy size={12} /> Duplicate Device
-        </button>
         <button type="button" className="props-delete-btn" onClick={() => onDeleteRequest(slot)}>
           <Trash2 size={12} /> Delete Device
         </button>
