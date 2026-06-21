@@ -115,14 +115,22 @@ function makePdf(dataUrl, cssW, cssH, filename) {
 // values live rendering already had. Every PDU is included — a vertical
 // PDU is bolted to the rack's own frame rail, visible from whichever face
 // you're looking at it from, not "inside" just one of them.
-function relayoutPdus(clone, rack, verticalPdus, uSlots) {
+function relayoutPdus(clone, rack, verticalPdus, uSlots, view) {
   const frame = clone.querySelector('.rack-dual-frame');
   if (!frame) return;
-  const frameWidth = frame.offsetWidth;
   const frameHeight = frame.offsetHeight;
+  // Both PDUs anchor to Front specifically, never Rear — see
+  // verticalPduLayout.pduLeftPx. Rear Only has no Front panel in the
+  // clone at all (it was removed entirely, not just hidden), so this
+  // falls back to the frame's own width — which at that point *is* just
+  // Rear's width, the same "single visible column" fallback Front Only/
+  // Rear Only already used before Front/Rear became distinguishable.
+  const frontPanel = frame.querySelector('.rack-panel-frame-front');
+  const frontWidth = frontPanel ? frontPanel.offsetWidth : frame.offsetWidth;
+  const hasGap = view === 'side-by-side';
 
   const layout = layoutVerticalPdus({
-    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frameWidth, frameHeight,
+    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frontWidth, frameHeight, hasGap,
   });
   const byId = new Map([...layout].map(([id, v]) => [String(id), v]));
 
@@ -152,7 +160,7 @@ function relayoutPdus(clone, rack, verticalPdus, uSlots) {
   // its declared [left, left+width] box rather than relying on overflow.
   const xs = cords.flatMap(({ cord }) => [cord.upsX, cord.c1x, cord.c2x, cord.pduX]);
   const svgLeft = Math.min(0, ...xs);
-  const svgWidth = Math.max(frameWidth, ...xs) - svgLeft;
+  const svgWidth = Math.max(frame.offsetWidth, ...xs) - svgLeft;
   svg.style.left = `${svgLeft}px`;
   svg.setAttribute('width', svgWidth);
 
@@ -240,7 +248,7 @@ function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
 
   const verticalPdus = allSlots.filter((s) => s.rack_id === rack.id && s.item_type === 'vertical-pdu');
   const uSlots = allSlots.filter((s) => s.rack_id === rack.id && s.item_type !== 'vertical-pdu');
-  relayoutPdus(clone, rack, verticalPdus, uSlots);
+  relayoutPdus(clone, rack, verticalPdus, uSlots, view);
 
   // Expand the clone's own box (not .rack-dual-frame's — see below) to fit
   // any vertical PDU strip floating outside the frame's normal bounds.

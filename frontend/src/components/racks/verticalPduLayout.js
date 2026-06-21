@@ -9,6 +9,12 @@ import { computeVerticalPduPositions } from './rackPlacement';
 export const STRIP_WIDTH = 9;
 export const STRIP_OFFSET_BASE = 40;
 export const STRIP_STACK_GAP = 24;
+// Must match .rack-dual-frame's CSS `gap` — both vertical PDUs mount
+// alongside the Front column (that's where the UPS they're plugged into
+// lives), so a Right-side PDU floats in this gap rather than past Rear's
+// own outer edge. Wide enough to center a strip in it with real breathing
+// room on both sides (see pduLeftPx) rather than crowding either column.
+export const PANEL_GAP = 65;
 // Fixed per-U pixel height used everywhere a rack is rendered (live canvas
 // and export) — not currently zoom-dependent, but kept here as the single
 // source both RackCanvas and the export capture read it from.
@@ -59,16 +65,25 @@ function buildCordCurve(upsX, upsY, pduX, pduY, outward) {
   return { upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY };
 }
 
-// Absolute left-edge offset (from the frame's own left edge) for a given
+// Absolute left-edge offset (from Front's own left edge) for a given
 // side/stack — the single source of truth both the floating strip and its
-// power cord's endpoint are computed from, so they always agree. 'right'
-// floats beyond whichever edge `frameWidth` actually measures — the right
-// edge of Rear when it's showing, or of Front alone when it isn't — so a
-// PDU automatically tracks "the rightmost visible column" without needing
-// to know which face that currently is.
-export function pduLeftPx({ side, stack }, frameWidth) {
+// power cord's endpoint are computed from, so they always agree. Both
+// sides are anchored relative to Front specifically (`frontWidth`), never
+// Rear — that's where the UPS they're plugged into lives, and neither PDU
+// should ever end up past Rear's own outer edge. `hasGap` is true only
+// when Rear is actually present alongside Front (so there's a real gap to
+// float a Right-side PDU in) — false for Rear hidden/absent, where Right
+// instead floats the same fixed distance outside Front's edge that Left
+// does outside its own.
+export function pduLeftPx({ side, stack }, frontWidth, hasGap) {
   const offsetPx = STRIP_OFFSET_BASE + stack * STRIP_STACK_GAP;
-  return side === 'left' ? -offsetPx : frameWidth + offsetPx - STRIP_WIDTH;
+  if (side === 'left') return -offsetPx;
+  if (hasGap) {
+    // Centered in the gap, with real breathing room on both sides, rather
+    // than crowding up against either column's edge.
+    return frontWidth + (PANEL_GAP - STRIP_WIDTH) / 2 + stack * STRIP_STACK_GAP;
+  }
+  return frontWidth + offsetPx - STRIP_WIDTH;
 }
 
 // Full layout for every vertical PDU in a rack: where its strip floats
@@ -78,7 +93,7 @@ export function pduLeftPx({ side, stack }, frameWidth) {
 // Returns Map<pduId, { side, stack, leftPx, top, height, cord: null | {
 //   upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY
 // } }>.
-export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameWidth, frameHeight }) {
+export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frontWidth, frameHeight, hasGap }) {
   const assigned = computeVerticalPduPositions(verticalPdus);
   const { top, height } = pduBox(frameHeight);
   const pduBottomY = top + height;
@@ -86,7 +101,7 @@ export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameW
   const result = new Map();
   for (const pdu of verticalPdus) {
     const { side, stack } = assigned.get(pdu.id);
-    const leftPx = pduLeftPx({ side, stack }, frameWidth);
+    const leftPx = pduLeftPx({ side, stack }, frontWidth, hasGap);
 
     let cord = null;
     const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);
@@ -97,9 +112,11 @@ export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frameW
       const pduX = leftPx + STRIP_WIDTH / 2;
       const pduY = pduBottomY;
 
-      // Left/right cords always enter from that outer edge of the frame
-      // being laid out.
-      const upsX = side === 'left' ? 0 : frameWidth;
+      // Left/right cords always enter from that outer edge of Front —
+      // the boundary itself, not wherever the strip floats to — same as
+      // Left's upsX=0 is Front's left edge, not the strip's own (negative)
+      // position past it.
+      const upsX = side === 'left' ? 0 : frontWidth;
       const outward = side === 'left' ? -1 : 1; // which way "away from the rack" is, for the curve's bow
       const upsY = bottomY(rack, uHeight, ups.u_position, ups.u_size);
 

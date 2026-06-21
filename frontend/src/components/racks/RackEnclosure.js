@@ -110,6 +110,7 @@ function groupStripeRows(rowSet) {
 function RackPanel({
   face,
   hidden,
+  panelRef,
   showLeftRail,
   showRightRail,
   uRows,
@@ -146,7 +147,7 @@ function RackPanel({
   }
 
   return (
-    <div className={`rack-panel-frame rack-panel-frame-${face}`} style={hidden ? { display: 'none' } : undefined}>
+    <div ref={panelRef} className={`rack-panel-frame rack-panel-frame-${face}`} style={hidden ? { display: 'none' } : undefined}>
       <div className="rack-panel-label">{face === 'front' ? 'FRONT' : 'REAR'}</div>
       <div className="rack-top-blank" />
       <div className="rack-body">
@@ -370,6 +371,27 @@ export default function RackEnclosure({
     return () => observer.disconnect();
   }, []);
 
+  // Both vertical PDUs are mounted alongside the Front column specifically
+  // (that's where the UPS they're plugged into lives) — Left floats off
+  // Front's own left edge, Right floats off Front's own right edge, into
+  // the gap before Rear. Measured separately from the dual-frame's overall
+  // width (frameSize.width, above) for exactly that reason: with Rear
+  // showing, the frame is wider than Front alone, and anchoring Right to
+  // the *frame's* edge would put it beyond Rear instead of beside Front.
+  // When Rear is hidden, Front *is* the frame's only content, so this
+  // naturally comes out equal to frameSize.width — no separate case needed.
+  const frontPanelRef = useRef(null);
+  const [frontWidth, setFrontWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = frontPanelRef.current;
+    if (!el) return;
+    const measure = () => setFrontWidth(el.offsetWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // left/right + stack-out-from-the-frame assignment, position math, and
   // (for any PDU plugged into a UPS in this rack) its power cord's bezier
   // endpoints — all computed by the shared layout helper so the export
@@ -380,8 +402,9 @@ export default function RackEnclosure({
     uSlots,
     rack,
     uHeight,
-    frameWidth: frameSize.width,
+    frontWidth,
     frameHeight: frameSize.height,
+    hasGap: showRear,
   });
 
   // Stop rendering the cords' traveling pulse while this rack is scrolled
@@ -537,6 +560,7 @@ export default function RackEnclosure({
       >
         <RackPanel
           face="front"
+          panelRef={frontPanelRef}
           showLeftRail
           showRightRail
           fullByTop={frontMap.fullByTop}

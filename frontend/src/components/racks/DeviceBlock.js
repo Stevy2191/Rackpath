@@ -46,21 +46,17 @@ export default function DeviceBlock({
   const blockHeight = `${slot.u_size * (uHeight || 40)}px`;
 
   if (isHalfDepthStripe) {
-    // Render one segment per U row (rather than one tall block spanning
-    // u_size rows) so a multi-U no-go zone still reads as separate blocked
-    // rows instead of one merged red blob. The wrapping flex column keeps
-    // the same total height as before, so layout elsewhere is unaffected —
-    // the gap between segments eats into each row's share of that height.
+    // One continuous block spanning the device's full height (u_size *
+    // uHeight, same as every other device block), not one segment per U
+    // row — a multi-U no-go zone is blocked solid for that device's
+    // entire span, so it has to read as a single unbroken zone rather
+    // than several same-looking 1U blocks stacked with gaps.
     return (
       <div
-        className="device-block-halfdepth-stripe-group"
+        className="device-block-halfdepth-stripe"
         style={{ height: blockHeight }}
         title="Half-depth device on opposite face"
-      >
-        {Array.from({ length: slot.u_size }, (_, i) => (
-          <div key={i} className="device-block-halfdepth-stripe" />
-        ))}
-      </div>
+      />
     );
   }
 
