@@ -491,7 +491,7 @@ export default function RackEnclosure({
     const c2x = pduX + outward * reach;
     const c2y = pduY + 24;
 
-    cords.push({ key: pdu.id, upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY });
+    cords.push({ key: pdu.id, resolvedSide: resolved.side, upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY });
   }
 
   // The SVG itself has to actually span every point any cord touches —
@@ -683,7 +683,7 @@ export default function RackEnclosure({
                 + `${c.c2x - cordsSvgLeft} ${c.c2y}, `
                 + `${c.pduX - cordsSvgLeft} ${c.pduY}`;
               return (
-                <g key={c.key}>
+                <g key={c.key} className={`rack-power-cord rack-power-cord-${c.resolvedSide}`}>
                   {/* Soft outer glow: a wider, near-transparent stroke
                       behind the crisp line, rather than an SVG blur filter
                       — filters are another thing that doesn't reliably

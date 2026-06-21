@@ -175,34 +175,6 @@ async function captureSingle(rackId, { format, view, theme, scale }) {
   const capFn = captureFnFor(format);
   const bg = bgFor(theme);
 
-  if (view === 'stacked') {
-    const frontResult = await withClasses(enclosure, ['rack-capture-front-only', ...themeClass], () => (
-      captureEnclosure(rackId, toPng, { backgroundColor: bg, pixelRatio: scale })
-    ));
-
-    const rearResult = await withClasses(enclosure, ['rack-capture-rear-only', ...themeClass], () => (
-      captureEnclosure(rackId, toPng, { backgroundColor: bg, pixelRatio: scale })
-    ));
-
-    const STACK_GAP = Math.round(16 * scale);
-    const totalW = Math.max(frontResult.cssW, rearResult.cssW) * scale;
-    const totalH = (frontResult.cssH + rearResult.cssH) * scale + STACK_GAP;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = totalW;
-    canvas.height = totalH;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, totalW, totalH);
-
-    const [frontImg, rearImg] = await Promise.all([loadImage(frontResult.dataUrl), loadImage(rearResult.dataUrl)]);
-    ctx.drawImage(frontImg, 0, 0, frontResult.cssW * scale, frontResult.cssH * scale);
-    ctx.drawImage(rearImg, 0, frontResult.cssH * scale + STACK_GAP, rearResult.cssW * scale, rearResult.cssH * scale);
-
-    const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
-    return { dataUrl: canvas.toDataURL(mime, 0.95), cssW: totalW / scale, cssH: totalH / scale };
-  }
-
   const viewClass =
     view === 'front-only' ? ['rack-capture-front-only'] :
     view === 'rear-only'  ? ['rack-capture-rear-only']  : [];
@@ -616,12 +588,7 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
     result = await captureSingle(targetRacks[0].id, { format, view, theme, scale });
   } else {
     const singles = await Promise.all(
-      targetRacks.map((r) => captureSingle(r.id, {
-        format: view === 'stacked' ? 'png' : format,
-        view,
-        theme,
-        scale,
-      }))
+      targetRacks.map((r) => captureSingle(r.id, { format, view, theme, scale }))
     );
     result = await compositeRacks(singles, { theme, scale, format });
   }
@@ -754,7 +721,6 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
                   <option value="side-by-side">Side-by-Side (Front &amp; Rear)</option>
                   <option value="front-only">Front Only</option>
                   <option value="rear-only">Rear Only</option>
-                  <option value="stacked">Stacked (Front then Rear)</option>
                 </select>
               </div>
             )}

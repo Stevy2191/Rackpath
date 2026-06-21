@@ -63,6 +63,19 @@ export default function RackEditPanel({ rack, usedU = 0, onClose, onSave, onDupl
     setSaving(false);
   };
 
+  // Rear View is the one field that saves the instant it's changed, rather
+  // than waiting for "Save Changes" like everything else in this form. The
+  // save payload spreads `rack` itself (its own last-saved values) rather
+  // than the current `edits` state, so any *other* in-progress, unsaved
+  // edit in this form doesn't get persisted early as a side effect of
+  // toggling this one checkbox — same pattern as the rack context menu's
+  // "Show Annotations" instant toggle (handleCtxToggleAnnotations).
+  const handleRearViewToggle = (checked) => {
+    const show_rear = checked ? 1 : 0;
+    setEdits((prev) => ({ ...prev, show_rear }));
+    onSave({ ...rack, show_rear });
+  };
+
   const handleDelete = () => {
     // eslint-disable-next-line no-alert
     if (!window.confirm(`Delete "${rack.name}" and all its slots? This cannot be undone.`)) return;
@@ -181,10 +194,11 @@ export default function RackEditPanel({ rack, usedU = 0, onClose, onSave, onDupl
               <input
                 type="checkbox"
                 checked={Boolean(edits.show_rear)}
-                onChange={(e) => setEdits({ ...edits, show_rear: e.target.checked ? 1 : 0 })}
+                onChange={(e) => handleRearViewToggle(e.target.checked)}
               />
               Show rear panel
             </label>
+            <span className="rep-field-hint">Applies immediately — no need to Save Changes.</span>
           </div>
 
           <div className="rep-field rep-field-section-start">

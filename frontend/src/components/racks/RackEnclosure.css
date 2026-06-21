@@ -435,6 +435,20 @@
 .rack-capture-rear-only .rack-panel-frame-front { display: none; }
 .rack-capture-rear-only .rack-units { flex: 0 0 308px; width: 308px; }
 
+/* A middle-gap PDU's pixel position is computed from the live dual-frame
+   width, which these single-panel export views don't actually change (they
+   only hide one panel via CSS) — so without this, it'd render at a
+   leftover "centered in a gap that isn't shown" position, landing in the
+   middle of whichever single panel IS visible instead. "Between Front and
+   Rear" has no sensible place to be when only one of them is in the
+   image, so it (and its cord) are hidden rather than redrawn elsewhere. */
+.rack-capture-front-only .rack-vertical-pdu-middle,
+.rack-capture-rear-only .rack-vertical-pdu-middle,
+.rack-capture-front-only .rack-power-cord-middle,
+.rack-capture-rear-only .rack-power-cord-middle {
+  display: none;
+}
+
 /* ─── Export capture: light theme ────────────────────────── */
 .rack-capture-light .rack-panel-frame {
   background: linear-gradient(135deg, #dde1ea 0%, #e8ecf4 50%, #edf0f7 100%);

@@ -315,3 +315,11 @@
   flex-shrink: 0;
 }
 
+.rep-field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.65rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
