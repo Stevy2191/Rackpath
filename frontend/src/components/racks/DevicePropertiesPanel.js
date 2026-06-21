@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronUp, ChevronDown, ChevronRight, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
+import { useScrollOverflow } from './useScrollOverflow';
 import client from '../../api/client';
 import {
   isPassiveItem, isPowerDevice, isUps, getOutletCount, getPowerLabel,
@@ -50,6 +51,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
   const frontFileRef = useRef(null);
   const rearFileRef = useRef(null);
   const saveTimer = useRef(null);
+  const [setBodyEl, setBodyContentEl, hasMoreBelow] = useScrollOverflow();
 
   const isVerticalPdu = slot?.item_type === 'vertical-pdu';
   const passive = slot ? isPassiveItem(slot) : false;
@@ -329,7 +331,8 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
       {saving && <div className="props-panel-saving">Saving…</div>}
       {error && <div className="props-panel-error" onClick={() => setError(null)}>{error}</div>}
 
-      <div className="props-panel-body">
+      <div className="props-panel-body" ref={setBodyEl}>
+      <div className="props-panel-fields" ref={setBodyContentEl}>
         {showGeneral && (
           <>
             {/* Label */}
@@ -712,6 +715,12 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, use
               />
             )}
           </>
+        )}
+      </div>
+        {hasMoreBelow && (
+          <div className="props-more-below">
+            <ChevronDown size={11} /> More below
+          </div>
         )}
       </div>
     </div>
