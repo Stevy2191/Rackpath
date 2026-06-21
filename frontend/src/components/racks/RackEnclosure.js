@@ -101,10 +101,16 @@ function groupStripeRows(rowSet) {
   let i = 0;
   while (i < sorted.length) {
     const start = sorted[i];
-    let size = 1;
-    while (i + 1 < sorted.length && sorted[i + 1] === sorted[i] + size) { size++; i++; }
+    // Extend the run while each next element is exactly 1 more than the
+    // *current* element — comparing against a separately-tracked `size`
+    // instead (as this used to) drifts as soon as the run passes 2 rows,
+    // since both the index and the running size advance together and get
+    // double-counted, splitting any 3+-row run into multiple groups.
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+    const size = j - i + 1;
     result.set(start + size - 1, { u_position: start, u_size: size });
-    i++;
+    i = j + 1;
   }
   return result;
 }
@@ -183,7 +189,12 @@ function RackPanel({
             if (covered.has(u) && !hwAtU.has(u)) return null;
 
             // ── Half-width row: render a split container ──────────────────
-            if (hwRenderU.has(u) || (hwAtU.has(u) && (hwStripesLeft.has(u) || hwStripesRight.has(u)))) {
+            // Enter this branch for a real ½W device starting here (hwRenderU)
+            // *or* a ½W no-go stripe starting here — the latter needs no real
+            // device on this face at all (e.g. a ½W half-depth device whose
+            // projected stripe lands on an otherwise-empty opposite face), so
+            // it can't be gated behind hwAtU like the real-device case is.
+            if (hwRenderU.has(u) || hwStripesLeft.has(u) || hwStripesRight.has(u)) {
               const pair = hwAtU.get(u) || {};
               const leftSlot  = pair.left;
               const rightSlot = pair.right;
@@ -264,6 +275,11 @@ function RackPanel({
 
             // ── Covered by a ½W device at a higher topU (no sibling here) ─
             if (hwAtU.has(u)) return null;
+
+            // ── Covered by a ½W no-go stripe at a higher topU, with no real
+            //    device on this face at all (same "no sibling" case as above,
+            //    just for a stripe instead of a real device) ────────────────
+            if (hwStripesLeftCovered.has(u) || hwStripesRightCovered.has(u)) return null;
 
             // ── Full-width half-depth stripe from opposite face ────────────
             if (fullStripesCovered.has(u)) return null;
