@@ -1,12 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pencil, Link2, ArrowLeftRight, Copy, Trash2 } from 'lucide-react';
+import { Link2, ArrowLeftRight, Copy, Trash2 } from 'lucide-react';
 import './RackDeviceContextMenu.css';
 
 export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, onDeleteRequest, actions }) {
   const ref = useRef(null);
   const [mode, setMode] = useState('menu');
-  const [label, setLabel] = useState(slot.item_label || '');
-  const [uSize, setUSize] = useState(slot.u_size);
 
   useEffect(() => {
     const handleMouseDown = (e) => {
@@ -22,11 +20,6 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, on
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose]);
-
-  const saveEdit = () => {
-    actions.onSlotUpdate(slot, { item_label: label, u_size: uSize });
-    onClose();
-  };
 
   const toggleFrontBack = () => {
     const curFace = slot.mounted_face || (slot.front_back === 'back' || slot.side === 'back' ? 'rear' : 'front');
@@ -53,32 +46,6 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, on
 
   return (
     <div className="rack-context-menu" style={{ left: x, top: y }} ref={ref}>
-      {mode === 'edit' && (
-        <div className="rack-context-menu-form">
-          <label>
-            Label
-            <input value={label} onChange={(e) => setLabel(e.target.value)} autoFocus />
-          </label>
-          <label>
-            U Size
-            <input
-              type="number"
-              min="1"
-              value={uSize}
-              onChange={(e) => setUSize(Math.max(1, Number(e.target.value)))}
-            />
-          </label>
-          <div className="rack-context-menu-form-actions">
-            <button type="button" onClick={() => setMode('menu')}>
-              Back
-            </button>
-            <button type="button" className="primary" onClick={saveEdit}>
-              Save
-            </button>
-          </div>
-        </div>
-      )}
-
       {mode === 'link' && (
         <div className="rack-context-menu-form">
           <label>
@@ -104,11 +71,6 @@ export default function RackDeviceContextMenu({ slot, x, y, devices, onClose, on
 
       {mode === 'menu' && (
         <ul>
-          <li>
-            <button type="button" onClick={() => setMode('edit')}>
-              <Pencil size={13} /> Edit
-            </button>
-          </li>
           <li>
             <button type="button" onClick={() => setMode('link')}>
               <Link2 size={13} /> Link to inventory device
