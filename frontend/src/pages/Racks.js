@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Cable, Download, LayoutGrid, Plus } from 'lucide-react';
+import { Download, LayoutGrid, Plus } from 'lucide-react';
 import client from '../api/client';
 import PortEditorModal from '../components/PortEditorModal';
 import RackCanvas from '../components/racks/RackCanvas';
@@ -44,7 +44,6 @@ export default function RacksPage() {
   const [fitRackRequest, setFitRackRequest] = useState(null);   // { id, t }
   const [portEditorDevice, setPortEditorDevice] = useState(null);
   const [addRackOpen, setAddRackOpen] = useState(false);
-  const [cableViewEnabled, setCableViewEnabled] = useState(false);
   const [deleteConfirmSlot, setDeleteConfirmSlot] = useState(null);
   const [deleteConfirmRack, setDeleteConfirmRack] = useState(null);
   const racksMainRef = useRef(null);
@@ -553,9 +552,6 @@ export default function RacksPage() {
           >
             <Download size={14} /> Export…
           </button>
-          <button type="button" className={cableViewEnabled ? 'active' : ''} onClick={() => setCableViewEnabled((v) => !v)}>
-            <Cable size={14} /> Show Cables
-          </button>
           <button type="button" className={catalogOpen ? 'active' : ''} onClick={() => setCatalogOpen((v) => !v)}>
             <LayoutGrid size={14} /> Device Catalog
           </button>
@@ -590,7 +586,6 @@ export default function RacksPage() {
           selectedSlotId={selectedSlotId}
           actions={actions}
           onRequestPlacement={requestPlacement}
-          cableViewEnabled={cableViewEnabled}
           focusedRackId={focusedRackId}
           onFocusRack={(rackId) => {
             // Single click on the rack frame / empty rack space: select that

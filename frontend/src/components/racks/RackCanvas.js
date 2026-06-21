@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { Plus, Minus, Maximize2, Settings } from 'lucide-react';
 import RackEnclosure from './RackEnclosure';
-import CableOverlay from './CableOverlay';
 import { resolveUPosition, isSpanFree, buildOccupiedSet } from './rackPlacement';
 import './RackCanvas.css';
 
@@ -37,7 +36,6 @@ export default function RackCanvas({
   selectedSlotId,
   actions,
   onRequestPlacement,
-  cableViewEnabled,
   focusedRackId,
   onFocusRack,
   onSelectSlot,
@@ -302,8 +300,6 @@ export default function RackCanvas({
             onRenameCancel={onRenameCancel}
           />
         ))}
-
-        {cableViewEnabled && <CableOverlay racks={sortedRacks} allSlots={allSlots} />}
       </div>
 
       {focusedRackId && (
