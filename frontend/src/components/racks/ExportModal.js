@@ -100,26 +100,28 @@ function makePdf(dataUrl, cssW, cssH, filename) {
   pdf.save(filename);
 }
 
-// Rewrites every floating vertical-PDU strip and its power cord in an
-// off-screen single-column clone (Front Only / Rear Only) to the position
-// it belongs at given the clone's own (now much narrower) frame width.
-// The clone still has whatever pixel positions got baked in from the live,
-// two-panel render at clone time, which is wrong the instant a whole panel
-// + the gap to it has been removed from a *copy* with no React/observer
-// of its own to ever recompute them. Reuses the exact same layout formula
-// live rendering uses (see verticalPduLayout) so a PDU lands in the same
-// place an export would show it living on the canvas, were the rack
-// permanently in this single-column mode. Every PDU is included — a
-// vertical PDU is bolted to the rack's own frame rail, visible from
-// whichever face you're looking at it from, not "inside" just one of them.
-function relayoutPdusForSingleColumn(clone, rack, verticalPdus, uSlots) {
+// Rewrites every floating vertical-PDU strip and its power cord in the
+// off-screen clone to the position it belongs at given the clone's own
+// (possibly just-changed) frame width — e.g. narrower after Front Only/
+// Rear Only removed a whole panel, or wider after Side-by-Side forced
+// Rear back on when the canvas had it off. The clone still has whatever
+// pixel positions got baked in from the live render at clone time, which
+// is wrong the instant the column composition differs from that, since
+// there's no React/observer of its own to ever recompute them. Reuses the
+// exact same layout formula live rendering uses (see verticalPduLayout) —
+// called unconditionally for every view, since when nothing about the
+// column composition actually changed this just reproduces the same
+// values live rendering already had. Every PDU is included — a vertical
+// PDU is bolted to the rack's own frame rail, visible from whichever face
+// you're looking at it from, not "inside" just one of them.
+function relayoutPdus(clone, rack, verticalPdus, uSlots, hasMiddleGap) {
   const frame = clone.querySelector('.rack-dual-frame');
   if (!frame) return;
   const frameWidth = frame.offsetWidth;
   const frameHeight = frame.offsetHeight;
 
   const layout = layoutVerticalPdus({
-    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frameWidth, frameHeight, hasMiddleGap: false,
+    verticalPdus, uSlots, rack, uHeight: DEFAULT_U_HEIGHT, frameWidth, frameHeight, hasMiddleGap,
   });
   const byId = new Map([...layout].map(([id, v]) => [String(id), v]));
 
@@ -199,6 +201,16 @@ function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
   const frame = clone.querySelector('.rack-dual-frame');
   if (!frame) return null;
 
+  // The export's view selection is completely independent of the canvas's
+  // own "Show Rear Panel" toggle — Side-by-Side and Rear Only must render
+  // Rear even when it's hidden on screen. RackEnclosure always renders
+  // both panels now (Rear's own on-screen visibility is just a plain CSS
+  // display toggle carried over onto this clone from the live render), so
+  // forcing it back on is just overriding that one style — on the clone
+  // only; the live, on-screen rack is never touched.
+  const rearPanel = frame.querySelector('.rack-panel-frame-rear');
+  if (view !== 'front-only' && rearPanel) rearPanel.style.display = '';
+
   if (view !== 'side-by-side') {
     const deadFace = view === 'front-only' ? 'rear' : 'front';
     const deadPanel = frame.querySelector(`.rack-panel-frame-${deadFace}`);
@@ -206,12 +218,17 @@ function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
     // Matches the live single-column rack mode's own wider unit column
     // (Rear permanently hidden) rather than a one-off magic width.
     clone.classList.add('rack-enclosure-single');
+  } else {
+    // The opposite case: if Rear was off on the canvas, the live clone
+    // carries this class sized for Front alone — forcing Rear back on
+    // for Side-by-Side needs the normal two-column width instead.
+    clone.classList.remove('rack-enclosure-single');
   }
 
   // A detached node tree has no layout box at all — offsetWidth/offsetLeft/
   // offsetParent are all 0/null until it's actually attached to the
-  // document, so every measurement below (the single-column PDU relayout,
-  // and the overflow-bleed sizing) has to happen *after* this, not before.
+  // document, so every measurement below (the PDU relayout, and the
+  // overflow-bleed sizing) has to happen *after* this, not before.
   const wrapper = document.createElement('div');
   wrapper.style.position = 'fixed';
   wrapper.style.left = '-100000px';
@@ -220,11 +237,9 @@ function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
 
-  if (view !== 'side-by-side') {
-    const verticalPdus = allSlots.filter((s) => s.rack_id === rack.id && s.item_type === 'vertical-pdu');
-    const uSlots = allSlots.filter((s) => s.rack_id === rack.id && s.item_type !== 'vertical-pdu');
-    relayoutPdusForSingleColumn(clone, rack, verticalPdus, uSlots);
-  }
+  const verticalPdus = allSlots.filter((s) => s.rack_id === rack.id && s.item_type === 'vertical-pdu');
+  const uSlots = allSlots.filter((s) => s.rack_id === rack.id && s.item_type !== 'vertical-pdu');
+  relayoutPdus(clone, rack, verticalPdus, uSlots, view === 'side-by-side');
 
   // Expand the clone's own box (not .rack-dual-frame's — see below) to fit
   // any vertical PDU strip floating outside the frame's normal bounds.

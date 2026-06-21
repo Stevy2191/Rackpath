@@ -109,6 +109,7 @@ function groupStripeRows(rowSet) {
 // One face panel (front or rear)
 function RackPanel({
   face,
+  hidden,
   showLeftRail,
   showRightRail,
   uRows,
@@ -145,7 +146,7 @@ function RackPanel({
   }
 
   return (
-    <div className={`rack-panel-frame rack-panel-frame-${face}`}>
+    <div className={`rack-panel-frame rack-panel-frame-${face}`} style={hidden ? { display: 'none' } : undefined}>
       <div className="rack-panel-label">{face === 'front' ? 'FRONT' : 'REAR'}</div>
       <div className="rack-top-blank" />
       <div className="rack-body">
@@ -550,22 +551,28 @@ export default function RackEnclosure({
           hwStripesRight={frontStripes.hwStripesRight}
           {...panelProps}
         />
-        {showRear && (
-          <RackPanel
-            face="rear"
-            showLeftRail
-            showRightRail
-            fullByTop={rearMap.fullByTop}
-            hwAtU={rearMap.hwAtU}
-            hwRenderU={rearMap.hwRenderU}
-            covered={rearMap.covered}
-            occupiedByU={rearMap.occupiedByU}
-            fullStripes={rearStripes.fullStripes}
-            hwStripesLeft={rearStripes.hwStripesLeft}
-            hwStripesRight={rearStripes.hwStripesRight}
-            {...panelProps}
-          />
-        )}
+        {/* Always rendered, never conditionally omitted — Rear being
+            hidden on screen is purely a display:none toggle on this same
+            node, not the node's absence. That's what lets the export
+            capture force Rear back on for Side-by-Side/Rear Only by
+            overriding one style on its *clone*; if this were itself
+            conditional, there'd be nothing in the live DOM to clone in
+            the first place when Rear is off. */}
+        <RackPanel
+          face="rear"
+          hidden={!showRear}
+          showLeftRail
+          showRightRail
+          fullByTop={rearMap.fullByTop}
+          hwAtU={rearMap.hwAtU}
+          hwRenderU={rearMap.hwRenderU}
+          covered={rearMap.covered}
+          occupiedByU={rearMap.occupiedByU}
+          fullStripes={rearStripes.fullStripes}
+          hwStripesLeft={rearStripes.hwStripesLeft}
+          hwStripesRight={rearStripes.hwStripesRight}
+          {...panelProps}
+        />
 
         {showAnnotations && (
           <div className="rack-annotation-col">
