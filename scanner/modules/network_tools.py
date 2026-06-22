@@ -288,28 +288,47 @@ def _make_snmp_fns(host, version, community, v3_user, v3_auth_protocol,
 def _format_timeticks(val):
     """Convert SNMP TimeTicks (hundredths of a second) to 'Xd Xh Xm Xs' string.
 
-    puresnmp may return an int subclass (TimeTicks), a plain int, or a string
-    representation like 'TimeTicks: 1234567' depending on the version.
+    puresnmp may return a TimeTicks int subclass, a plain int/float, or a
+    string representation. Try every extraction path to get the raw integer.
     """
+    import sys
+    print(f'[DEBUG snmp uptime] raw={val!r} type={type(val).__name__}', file=sys.stderr, flush=True)
     if val is None:
         return None
     try:
-        if isinstance(val, (int, float)):
-            hundredths = int(val)
-        else:
+        hundredths = None
+
+        # 1. Prefer an explicit .value attribute (some puresnmp typed wrappers)
+        if hasattr(val, 'value'):
+            try:
+                hundredths = int(val.value)
+            except (TypeError, ValueError):
+                pass
+
+        # 2. Direct int() cast — works for plain int, float, and int subclasses
+        #    (puresnmp TimeTicks IS an int subclass in 1.x, so this should succeed)
+        if hundredths is None:
+            try:
+                hundredths = int(val)
+            except (TypeError, ValueError):
+                pass
+
+        # 3. String extraction — handles "TimeTicks: 1234567" or similar
+        if hundredths is None:
             m = re.search(r'\d+', str(val))
-            if not m:
-                return str(val)
-            hundredths = int(m.group())
+            hundredths = int(m.group()) if m else 0
+
+        print(f'[DEBUG snmp uptime] hundredths={hundredths}', file=sys.stderr, flush=True)
         secs = hundredths // 100
         days = secs // 86400
         hours = (secs % 86400) // 3600
         mins = (secs % 3600) // 60
         s = secs % 60
         if days > 0:
-            return f'{days} days, {hours}h {mins}m {s}s'
+            return f'{days}d {hours}h {mins}m {s}s'
         return f'{hours}h {mins}m {s}s'
-    except Exception:
+    except Exception as exc:
+        print(f'[DEBUG snmp uptime] error={exc!r}', file=sys.stderr, flush=True)
         return str(val)
 
 
@@ -362,10 +381,26 @@ def _query_cpu(get_fn, walk_fn, raw_oids):
     if forti is not None:
         return {'source': 'FortiGate', 'load_percent': _to_num(forti)}
 
-    # Ubiquiti EdgeSwitch
-    ubnt_cpu = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.5.1', raw_oids)
-    if ubnt_cpu is not None:
-        return {'source': 'Ubiquiti EdgeSwitch', 'load_1min': _to_num(ubnt_cpu)}
+    # Ubiquiti EdgeSwitch — walk the subtree first; fall back to direct GETs
+    import sys
+    ubnt_cpu_5sec = ubnt_cpu_1min = ubnt_cpu_5min = None
+    ubnt_cpu_walk = walk_fn('1.3.6.1.4.1.41112.1.5.1.2.1.5', raw_oids)
+    print(f'[DEBUG snmp cpu] ubnt walk .5={ubnt_cpu_walk!r}', file=sys.stderr, flush=True)
+    if ubnt_cpu_walk:
+        first = next((v for v in ubnt_cpu_walk.values() if v is not None), None)
+        ubnt_cpu_1min = first
+    if ubnt_cpu_1min is None:
+        ubnt_cpu_5sec = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.3.1', raw_oids)
+        ubnt_cpu_1min = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.5.1', raw_oids)
+        ubnt_cpu_5min = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.7.1', raw_oids)
+        print(f'[DEBUG snmp cpu] ubnt GET 5s={ubnt_cpu_5sec!r} 1m={ubnt_cpu_1min!r} 5m={ubnt_cpu_5min!r}', file=sys.stderr, flush=True)
+    if any(v is not None for v in (ubnt_cpu_5sec, ubnt_cpu_1min, ubnt_cpu_5min)):
+        return {
+            'source': 'Ubiquiti EdgeSwitch',
+            'load_5sec': _to_num(ubnt_cpu_5sec),
+            'load_1min': _to_num(ubnt_cpu_1min),
+            'load_5min': _to_num(ubnt_cpu_5min),
+        }
 
     # Generic HOST-RESOURCES-MIB processor load walk
     hr_cpu = walk_fn('1.3.6.1.2.1.25.3.3.1.2', raw_oids)
@@ -408,9 +443,21 @@ def _query_memory(get_fn, walk_fn, raw_oids):
     if forti_mem is not None:
         return {'source': 'FortiGate', 'percent': _to_num(forti_mem)}
 
-    # Ubiquiti EdgeSwitch (values in bytes)
-    ubnt_total = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.11.1', raw_oids)
-    ubnt_free  = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.12.1', raw_oids)
+    # Ubiquiti EdgeSwitch (values in bytes) — walk subtrees first, GET as fallback
+    import sys
+    ubnt_total = ubnt_free = None
+    ubnt_total_walk = walk_fn('1.3.6.1.4.1.41112.1.5.1.2.1.11', raw_oids)
+    ubnt_free_walk  = walk_fn('1.3.6.1.4.1.41112.1.5.1.2.1.12', raw_oids)
+    print(f'[DEBUG snmp mem] ubnt walk total={ubnt_total_walk!r} free={ubnt_free_walk!r}', file=sys.stderr, flush=True)
+    if ubnt_total_walk:
+        ubnt_total = next((v for v in ubnt_total_walk.values() if v is not None), None)
+    if ubnt_free_walk:
+        ubnt_free = next((v for v in ubnt_free_walk.values() if v is not None), None)
+    if ubnt_total is None:
+        ubnt_total = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.11.1', raw_oids)
+    if ubnt_free is None:
+        ubnt_free  = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.12.1', raw_oids)
+    print(f'[DEBUG snmp mem] ubnt total={ubnt_total!r} free={ubnt_free!r}', file=sys.stderr, flush=True)
     if any(v is not None for v in (ubnt_total, ubnt_free)):
         t = _to_num(ubnt_total)
         f = _to_num(ubnt_free)

@@ -1,7 +1,5 @@
 .network-tools-page {
-  padding: 24px 32px 48px;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 24px;
 }
 
 .network-tools-header {
@@ -15,12 +13,13 @@
 
 .network-tools-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  width: 100%;
   align-items: start;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 768px) {
   .network-tools-grid {
     grid-template-columns: 1fr;
   }
