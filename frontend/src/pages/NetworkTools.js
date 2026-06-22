@@ -13,7 +13,7 @@ export default function NetworkToolsPage() {
       <div className="network-tools-header">
         <h2>Network Tools</h2>
       </div>
-      <div className="network-tools-grid">
+      <div className="network-tools-container">
         <SubnetCalculatorTool />
         <MacLookupTool />
         <PingTool />

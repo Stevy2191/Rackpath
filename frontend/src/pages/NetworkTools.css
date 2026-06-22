@@ -11,17 +11,14 @@
   color: var(--color-text);
 }
 
-.network-tools-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-  width: 100%;
-  align-items: start;
+.network-tools-container {
+  column-count: 2;
+  column-gap: 24px;
 }
 
 @media (max-width: 768px) {
-  .network-tools-grid {
-    grid-template-columns: 1fr;
+  .network-tools-container {
+    column-count: 1;
   }
 }
 
@@ -30,11 +27,11 @@
   border: 1px solid var(--color-border);
   border-radius: 10px;
   box-shadow: 0 1px 3px var(--color-shadow);
-  display: flex;
-  flex-direction: column;
+  break-inside: avoid;
+  display: inline-block;
   width: 100%;
   box-sizing: border-box;
-  min-width: 0;
+  margin-bottom: 24px;
 }
 
 .nt-card-header {
