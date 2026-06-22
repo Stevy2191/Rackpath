@@ -148,6 +148,34 @@ def tools_dns():
         return jsonify({"error": str(exc)}), 400
 
 
+@app.route('/tools/snmp-stats', methods=['POST'])
+def tools_snmp_stats():
+    data = request.get_json(force=True, silent=True) or {}
+    host = data.get('host')
+    if not host:
+        return jsonify({"error": "host is required"}), 400
+    stats = data.get('stats') or ['system', 'cpu', 'memory', 'interfaces']
+    if not isinstance(stats, list):
+        return jsonify({"error": "stats must be a list"}), 400
+    try:
+        result = network_tools.run_snmp_stats(
+            host=host,
+            version=data.get('version', '2c'),
+            community=data.get('community', 'public'),
+            v3_user=data.get('v3_user') or '',
+            v3_auth_protocol=data.get('v3_auth_protocol') or 'MD5',
+            v3_auth_password=data.get('v3_auth_password') or '',
+            v3_priv_protocol=data.get('v3_priv_protocol') or 'AES',
+            v3_priv_password=data.get('v3_priv_password') or '',
+            stats=stats,
+        )
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"SNMP query failed: {exc}"}), 500
+
+
 def _derive_callbacks(callback_url, host_callback_url, progress_callback_url):
     """Fill in host/progress callback URLs from the results callback if the API
     didn't supply them explicitly (keeps backwards compatibility)."""

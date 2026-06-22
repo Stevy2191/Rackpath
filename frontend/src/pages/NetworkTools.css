@@ -17,6 +17,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
+  align-items: start;
 }
 
 @media (max-width: 860px) {
@@ -32,6 +33,9 @@
   box-shadow: 0 1px 3px var(--color-shadow);
   display: flex;
   flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .nt-card-header {
@@ -232,4 +236,84 @@
 
 .nt-range-slider {
   width: 100%;
+}
+
+.nt-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding-top: 4px;
+}
+
+.nt-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.nt-checkbox-label input[type="checkbox"] {
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.nt-snmp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 10px;
+}
+
+.nt-snmp-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.nt-snmp-no-data {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.nt-table-wrap {
+  overflow-x: auto;
+  margin-top: 4px;
+}
+
+.nt-iface-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.nt-iface-table th,
+.nt-iface-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+  font-family: 'Roboto Mono', monospace;
+}
+
+.nt-iface-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.nt-iface-up {
+  color: #2a8a4a;
+  font-weight: 600;
+}
+
+.nt-iface-down {
+  color: var(--color-danger);
 }

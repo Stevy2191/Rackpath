@@ -1,4 +1,5 @@
-"""Simple synchronous network diagnostic tools: ping, traceroute, DNS lookup.
+"""Simple synchronous network diagnostic tools: ping, traceroute, DNS lookup,
+and SNMP device stats.
 
 Unlike the /scan job pipeline (threaded, callback-driven), these run a single
 subprocess/query and return the result directly in the request/response cycle.
@@ -10,10 +11,21 @@ import subprocess
 import dns.exception
 import dns.resolver
 import dns.reversename
+from puresnmp import get as snmp_get, walk as snmp_walk
 
 # Hostnames, IPv4 and IPv6 literals only - rejects anything that could be
 # mistaken for a CLI flag when passed as a subprocess argument.
 _HOST_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9.\-:]*[A-Za-z0-9])?$')
+
+# Optional puresnmp v3 credential API (added in puresnmp 1.7.0).
+try:
+    from puresnmp.credentials import V3, Auth, Priv as PrivCred
+    from puresnmp.api.raw import get as raw_get, walk as raw_walk
+    _HAS_V3 = True
+except Exception:
+    _HAS_V3 = False
+
+_SNMP_TIMEOUT = 5
 
 RECORD_TYPES = {'A', 'AAAA', 'MX', 'CNAME', 'TXT', 'NS', 'PTR'}
 
@@ -179,3 +191,305 @@ def run_dns_lookup(host, record_type='A'):
 
     raw_output = '\n'.join(results) if results else 'No records found'
     return {'host': host, 'record_type': record_type, 'results': results, 'raw_output': raw_output}
+
+
+# ---------------------------------------------------------------------------
+# SNMP device stats
+# ---------------------------------------------------------------------------
+
+def _decode_snmp(value):
+    """Convert a puresnmp value to a JSON-safe Python type."""
+    if isinstance(value, bytes):
+        try:
+            return value.decode('utf-8').strip('\x00')
+        except UnicodeDecodeError:
+            return '0x' + value.hex()
+    if isinstance(value, (int, float)):
+        return value
+    return str(value)
+
+
+def _make_snmp_fns(host, version, community, v3_user, v3_auth_protocol,
+                   v3_auth_password, v3_priv_protocol, v3_priv_password):
+    """Return (get_fn, walk_fn) closures for the requested SNMP version.
+
+    get_fn(oid, raw_oids) -> value | None
+    walk_fn(oid, raw_oids) -> {oid_str: value}
+    """
+    if version in ('1', '2c'):
+        def _get(oid, raw_oids):
+            try:
+                val = snmp_get(host, community, oid, timeout=_SNMP_TIMEOUT)
+                decoded = _decode_snmp(val)
+                raw_oids[oid] = decoded
+                return decoded
+            except Exception:
+                return None
+
+        def _walk(base_oid, raw_oids):
+            results = {}
+            try:
+                for varbind in snmp_walk(host, community, base_oid, timeout=_SNMP_TIMEOUT):
+                    decoded = _decode_snmp(varbind.value)
+                    key = str(varbind.oid)
+                    results[key] = decoded
+                    raw_oids[key] = decoded
+            except Exception:
+                pass
+            return results
+
+        return _get, _walk
+
+    # --- SNMPv3 ---
+    if not _HAS_V3:
+        raise ValueError('SNMPv3 is not supported by this version of puresnmp')
+
+    try:
+        auth_obj = None
+        priv_obj = None
+        if v3_auth_password:
+            auth_obj = Auth(
+                secret=v3_auth_password.encode(),
+                method=(v3_auth_protocol or 'md5').lower(),
+            )
+        if v3_priv_password and auth_obj:
+            priv_obj = PrivCred(
+                secret=v3_priv_password.encode(),
+                method=(v3_priv_protocol or 'des').lower(),
+            )
+        creds = V3(username=v3_user or '', auth=auth_obj, priv=priv_obj)
+    except Exception as exc:
+        raise ValueError(f'SNMPv3 credential error: {exc}') from exc
+
+    def _get_v3(oid, raw_oids):
+        try:
+            val = raw_get(host, creds, oid, timeout=_SNMP_TIMEOUT)
+            decoded = _decode_snmp(val)
+            raw_oids[oid] = decoded
+            return decoded
+        except Exception:
+            return None
+
+    def _walk_v3(base_oid, raw_oids):
+        results = {}
+        try:
+            for varbind in raw_walk(host, creds, base_oid, timeout=_SNMP_TIMEOUT):
+                decoded = _decode_snmp(varbind.value)
+                key = str(varbind.oid)
+                results[key] = decoded
+                raw_oids[key] = decoded
+        except Exception:
+            pass
+        return results
+
+    return _get_v3, _walk_v3
+
+
+def _query_system(get_fn, raw_oids):
+    oids = {
+        'sysDescr':    '1.3.6.1.2.1.1.1.0',
+        'sysName':     '1.3.6.1.2.1.1.5.0',
+        'sysLocation': '1.3.6.1.2.1.1.6.0',
+        'sysContact':  '1.3.6.1.2.1.1.4.0',
+        'sysUptime':   '1.3.6.1.2.1.1.3.0',
+    }
+    return {key: get_fn(oid, raw_oids) for key, oid in oids.items()}
+
+
+def _query_cpu(get_fn, walk_fn, raw_oids):
+    # NET-SNMP (Linux)
+    load_1min  = get_fn('1.3.6.1.4.1.2021.11.9.0', raw_oids)
+    load_5min  = get_fn('1.3.6.1.4.1.2021.11.10.0', raw_oids)
+    load_15min = get_fn('1.3.6.1.4.1.2021.11.11.0', raw_oids)
+    if any(v is not None for v in (load_1min, load_5min, load_15min)):
+        return {
+            'source': 'NET-SNMP',
+            'load_1min':  _to_num(load_1min),
+            'load_5min':  _to_num(load_5min),
+            'load_15min': _to_num(load_15min),
+        }
+
+    # Cisco IOS
+    ios_5sec = get_fn('1.3.6.1.4.1.9.2.1.57.0', raw_oids)
+    ios_1min = get_fn('1.3.6.1.4.1.9.2.1.58.0', raw_oids)
+    ios_5min = get_fn('1.3.6.1.4.1.9.2.1.59.0', raw_oids)
+    if any(v is not None for v in (ios_5sec, ios_1min, ios_5min)):
+        return {
+            'source': 'Cisco IOS',
+            'load_5sec': _to_num(ios_5sec),
+            'load_1min': _to_num(ios_1min),
+            'load_5min': _to_num(ios_5min),
+        }
+
+    # Cisco NX-OS
+    nxos = get_fn('1.3.6.1.4.1.9.9.109.1.1.1.1.3.1', raw_oids)
+    if nxos is not None:
+        return {'source': 'Cisco NX-OS', 'load_percent': _to_num(nxos)}
+
+    # Fortinet FortiGate
+    forti = get_fn('1.3.6.1.4.1.12356.101.4.1.3.0', raw_oids)
+    if forti is not None:
+        return {'source': 'FortiGate', 'load_percent': _to_num(forti)}
+
+    # Generic HOST-RESOURCES-MIB processor load walk
+    hr_cpu = walk_fn('1.3.6.1.2.1.25.3.3.1.2', raw_oids)
+    if hr_cpu:
+        values = [_to_num(v) for v in hr_cpu.values() if v is not None]
+        avg = round(sum(values) / len(values)) if values else None
+        return {'source': 'HOST-RESOURCES-MIB', 'load_percent': avg}
+
+    return {'source': None}
+
+
+def _query_memory(get_fn, walk_fn, raw_oids):
+    # NET-SNMP UCD-SNMP-MIB
+    total_real = get_fn('1.3.6.1.4.1.2021.4.5.0', raw_oids)
+    avail_real = get_fn('1.3.6.1.4.1.2021.4.6.0', raw_oids)
+    total_free = get_fn('1.3.6.1.4.1.2021.4.11.0', raw_oids)
+    if any(v is not None for v in (total_real, avail_real)):
+        total_kb = _to_num(total_real)
+        free_kb  = _to_num(avail_real) or _to_num(total_free)
+        used_kb  = (total_kb - free_kb) if total_kb is not None and free_kb is not None else None
+        return {'source': 'NET-SNMP', 'total_kb': total_kb, 'used_kb': used_kb, 'free_kb': free_kb}
+
+    # Cisco IOS ciscoMemoryPool
+    used_mem = get_fn('1.3.6.1.4.1.9.9.48.1.1.1.5.1', raw_oids)
+    free_mem = get_fn('1.3.6.1.4.1.9.9.48.1.1.1.6.1', raw_oids)
+    if any(v is not None for v in (used_mem, free_mem)):
+        u = _to_num(used_mem)
+        f = _to_num(free_mem)
+        total = (u + f) if u is not None and f is not None else None
+        # Values are bytes; convert to kB
+        return {
+            'source': 'Cisco IOS',
+            'total_kb': _div(total, 1024),
+            'used_kb':  _div(u, 1024),
+            'free_kb':  _div(f, 1024),
+        }
+
+    # Fortinet (returns usage %)
+    forti_mem = get_fn('1.3.6.1.4.1.12356.101.4.1.4.0', raw_oids)
+    if forti_mem is not None:
+        return {'source': 'FortiGate', 'percent': _to_num(forti_mem)}
+
+    # Generic HOST-RESOURCES-MIB hrStorage table
+    hr_descr = walk_fn('1.3.6.1.2.1.25.2.3.1.3', raw_oids)
+    hr_units  = walk_fn('1.3.6.1.2.1.25.2.3.1.4', raw_oids)
+    hr_size   = walk_fn('1.3.6.1.2.1.25.2.3.1.5', raw_oids)
+    hr_used   = walk_fn('1.3.6.1.2.1.25.2.3.1.6', raw_oids)
+    if hr_size:
+        for oid, descr in hr_descr.items():
+            idx = oid.rsplit('.', 1)[-1]
+            if descr and 'ram' in str(descr).lower():
+                units_oid = f'1.3.6.1.2.1.25.2.3.1.4.{idx}'
+                size_oid  = f'1.3.6.1.2.1.25.2.3.1.5.{idx}'
+                used_oid  = f'1.3.6.1.2.1.25.2.3.1.6.{idx}'
+                unit_bytes = _to_num(hr_units.get(units_oid)) or 1
+                size_units = _to_num(hr_size.get(size_oid))
+                used_units = _to_num(hr_used.get(used_oid))
+                total_kb = _div(size_units * unit_bytes if size_units else None, 1024)
+                used_kb  = _div(used_units * unit_bytes if used_units else None, 1024)
+                free_kb  = (total_kb - used_kb) if total_kb and used_kb else None
+                return {'source': 'HOST-RESOURCES-MIB', 'total_kb': total_kb, 'used_kb': used_kb, 'free_kb': free_kb}
+
+    return {'source': None}
+
+
+def _query_interfaces(walk_fn, raw_oids):
+    base = '1.3.6.1.2.1.2.2.1'
+    tables = {
+        'index':        walk_fn(f'{base}.1', raw_oids),
+        'descr':        walk_fn(f'{base}.2', raw_oids),
+        'type':         walk_fn(f'{base}.3', raw_oids),
+        'speed':        walk_fn(f'{base}.5', raw_oids),
+        'admin_status': walk_fn(f'{base}.7', raw_oids),
+        'oper_status':  walk_fn(f'{base}.8', raw_oids),
+        'in_octets':    walk_fn(f'{base}.10', raw_oids),
+        'out_octets':   walk_fn(f'{base}.16', raw_oids),
+    }
+
+    # Collect all interface indexes from the descr table
+    indexes = set()
+    for oid in tables['descr']:
+        idx = oid.rsplit('.', 1)[-1]
+        indexes.add(idx)
+
+    interfaces = []
+    for idx in sorted(indexes, key=lambda x: int(x) if x.isdigit() else 0):
+        def col(name):
+            return tables[name].get(f'{base}.{_COL_NUM[name]}.{idx}')
+
+        interfaces.append({
+            'index':        _to_num(col('index')) or int(idx),
+            'description':  col('descr'),
+            'type':         _to_num(col('type')),
+            'speed':        _to_num(col('speed')),
+            'admin_status': _to_num(col('admin_status')),
+            'oper_status':  _to_num(col('oper_status')),
+            'in_octets':    _to_num(col('in_octets')),
+            'out_octets':   _to_num(col('out_octets')),
+        })
+
+    return interfaces
+
+
+_COL_NUM = {
+    'index': '1', 'descr': '2', 'type': '3', 'speed': '5',
+    'admin_status': '7', 'oper_status': '8', 'in_octets': '10', 'out_octets': '16',
+}
+
+
+def _to_num(val):
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        return int(f) if f == int(f) else f
+    except (TypeError, ValueError):
+        return None
+
+
+def _div(val, divisor):
+    if val is None:
+        return None
+    try:
+        return int(val) // divisor
+    except (TypeError, ValueError):
+        return None
+
+
+def run_snmp_stats(host, version, community, v3_user, v3_auth_protocol,
+                   v3_auth_password, v3_priv_protocol, v3_priv_password, stats):
+    host = _validate_host(host)
+    version = (version or '2c').lower()
+    if version not in ('1', '2c', 'v3'):
+        raise ValueError(f'Unsupported SNMP version: {version}')
+
+    raw_oids = {}
+    try:
+        get_fn, walk_fn = _make_snmp_fns(
+            host, version, community or 'public',
+            v3_user, v3_auth_protocol, v3_auth_password,
+            v3_priv_protocol, v3_priv_password,
+        )
+    except ValueError:
+        raise
+
+    result = {'raw_oids': raw_oids}
+
+    # Probe system info first to detect auth/timeout; if SNMP is completely
+    # unresponsive, all get calls return None but we don't hard-error here —
+    # the frontend can show "no data" rather than a failure.
+    if 'system' in stats:
+        result['system'] = _query_system(get_fn, raw_oids)
+
+    if 'cpu' in stats:
+        result['cpu'] = _query_cpu(get_fn, walk_fn, raw_oids)
+
+    if 'memory' in stats:
+        result['memory'] = _query_memory(get_fn, walk_fn, raw_oids)
+
+    if 'interfaces' in stats:
+        result['interfaces'] = _query_interfaces(walk_fn, raw_oids)
+
+    return result

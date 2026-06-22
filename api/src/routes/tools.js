@@ -7,9 +7,9 @@ const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:5001';
 
 // Simple proxies to the scanner's synchronous diagnostic endpoints - no DB
 // involved, just forward the body and relay the scanner's response/error.
-async function proxyToScanner(req, res, scannerPath) {
+async function proxyToScanner(req, res, scannerPath, timeout = 60000) {
   try {
-    const response = await axios.post(`${SCANNER_URL}${scannerPath}`, req.body, { timeout: 60000 });
+    const response = await axios.post(`${SCANNER_URL}${scannerPath}`, req.body, { timeout });
     res.json(response.data);
   } catch (err) {
     if (err.response) {
@@ -23,6 +23,7 @@ async function proxyToScanner(req, res, scannerPath) {
 router.post('/ping', (req, res) => proxyToScanner(req, res, '/tools/ping'));
 router.post('/traceroute', (req, res) => proxyToScanner(req, res, '/tools/traceroute'));
 router.post('/dns', (req, res) => proxyToScanner(req, res, '/tools/dns'));
+router.post('/snmp-stats', (req, res) => proxyToScanner(req, res, '/tools/snmp-stats', 90000));
 
 // api.macvendors.com doesn't send CORS headers, so the browser can't call it
 // directly - proxy it server-side instead. Still stateless, no DB involved.

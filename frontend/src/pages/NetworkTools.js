@@ -4,6 +4,7 @@ import MacLookupTool from '../components/networkTools/MacLookupTool';
 import PingTool from '../components/networkTools/PingTool';
 import TracerouteTool from '../components/networkTools/TracerouteTool';
 import DnsResolverTool from '../components/networkTools/DnsResolverTool';
+import SnmpStatsTool from '../components/networkTools/SnmpStatsTool';
 import './NetworkTools.css';
 
 export default function NetworkToolsPage() {
@@ -18,6 +19,7 @@ export default function NetworkToolsPage() {
         <PingTool />
         <TracerouteTool />
         <DnsResolverTool />
+        <SnmpStatsTool />
       </div>
     </div>
   );
