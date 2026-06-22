@@ -52,17 +52,84 @@ export function pduBox(frameHeight) {
 // gap itself, reading as the curve overshooting past either end. Scaling
 // both by the anchors' own distance keeps the bow proportional at any
 // length: short cord → tight curve, long cord → a wider bow.
+//
+// The droop itself is built around a single low point — `lowY`, strictly
+// below *both* upsY and pduY, like a real cable sagging under its own
+// weight rather than a level line with some bulge — and the two control
+// points are deliberately uneven distances from it: c1 (the UPS end)
+// only drops halfway to lowY, so the cord leaves the UPS at a shallow
+// angle, while c2 (the PDU end) sits right at lowY, forcing the curve to
+// still be near its deepest point just before the PDU and so rise into
+// it steeply — the look of a cable anchored/supported at the PDU end
+// rather than sagging evenly along its whole length.
 function buildCordCurve(upsX, upsY, pduX, pduY, outward) {
   const dist = Math.hypot(pduX - upsX, pduY - upsY);
   const reach = Math.max(10, Math.min(40, dist * 0.3));
-  const sag = Math.max(6, Math.min(28, dist * 0.18));
+  const droop = Math.max(16, Math.min(48, dist * 0.24));
+  const lowY = Math.max(upsY, pduY) + droop;
 
-  const c1x = upsX + outward * reach * 0.45;
-  const c1y = upsY + sag * 0.6;
+  const c1x = upsX + outward * reach * 0.4;
+  const c1y = (upsY + lowY) / 2;
   const c2x = pduX + outward * reach;
-  const c2y = pduY + sag;
+  const c2y = lowY;
 
   return { upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY };
+}
+
+// Half the gap between the two parallel strands drawn for each cord (see
+// cordStrandPaths) — suggests the cable's physical roundness rather than
+// a flat schematic line.
+export const CORD_STRAND_OFFSET = 1.4;
+
+function unitPerpendicular(dx, dy, distance) {
+  const len = Math.hypot(dx, dy) || 1;
+  return { ox: (-dy / len) * distance, oy: (dx / len) * distance };
+}
+
+function bezierPoint(cord, t) {
+  const mt = 1 - t;
+  return {
+    x: mt * mt * mt * cord.upsX + 3 * mt * mt * t * cord.c1x + 3 * mt * t * t * cord.c2x + t * t * t * cord.pduX,
+    y: mt * mt * mt * cord.upsY + 3 * mt * mt * t * cord.c1y + 3 * mt * t * t * cord.c2y + t * t * t * cord.pduY,
+  };
+}
+
+// Derivative of the cubic bezier at t — its direction is the curve's own
+// tangent there, used to offset perpendicular to the curve itself rather
+// than to one fixed direction.
+function bezierTangent(cord, t) {
+  const mt = 1 - t;
+  return {
+    dx: 3 * mt * mt * (cord.c1x - cord.upsX) + 6 * mt * t * (cord.c2x - cord.c1x) + 3 * t * t * (cord.pduX - cord.c2x),
+    dy: 3 * mt * mt * (cord.c1y - cord.upsY) + 6 * mt * t * (cord.c2y - cord.c1y) + 3 * t * t * (cord.pduY - cord.c2y),
+  };
+}
+
+// How many points the offset strand polylines below are sampled at —
+// plenty for a curve this gentle to still read as perfectly smooth once
+// anti-aliased, while being simple, exact per-point geometry rather than
+// an approximated offset curve.
+const STRAND_SAMPLES = 24;
+
+// A true per-point offset of the cord's curve, used to draw its two
+// parallel strands — each sampled point is shifted perpendicular to the
+// curve's *own local tangent* there, not one fixed direction for the
+// whole curve. A single rigid shift (or even shifting just the two ends
+// along their own local tangents) looks right while the curve stays
+// close to a straight line, but this curve deliberately droops well off
+// one (see buildCordCurve): far enough that anything less than a
+// per-point offset visibly pinches the two "parallel" strands together
+// partway along instead of keeping them apart the curve's whole length.
+function offsetStrandPoints(cord, distance) {
+  const pts = [];
+  for (let i = 0; i <= STRAND_SAMPLES; i++) {
+    const t = i / STRAND_SAMPLES;
+    const p = bezierPoint(cord, t);
+    const tangent = bezierTangent(cord, t);
+    const { ox, oy } = unitPerpendicular(tangent.dx, tangent.dy, distance);
+    pts.push({ x: p.x + ox, y: p.y + oy });
+  }
+  return pts;
 }
 
 // Absolute left-edge offset (from Front's own left edge) for a given
@@ -138,4 +205,20 @@ export function cordPathD(cord, svgLeftShift = 0) {
     + `C ${cord.c1x - svgLeftShift} ${cord.c1y}, `
     + `${cord.c2x - svgLeftShift} ${cord.c2y}, `
     + `${cord.pduX - svgLeftShift} ${cord.pduY}`;
+}
+
+function polylineD(points, svgLeftShift) {
+  return points.map(({ x, y }, i) => `${i === 0 ? 'M' : 'L'} ${x - svgLeftShift} ${y}`).join(' ');
+}
+
+// The two parallel-strand path `d` strings drawn on top of the glow/seam
+// layers — one offset +CORD_STRAND_OFFSET, the other -CORD_STRAND_OFFSET,
+// each a polyline through points sampled off the curve's own local
+// tangent (see offsetStrandPoints) so they stay apart the curve's whole
+// length instead of pinching together partway through.
+export function cordStrandPaths(cord, svgLeftShift = 0) {
+  return {
+    strand1: polylineD(offsetStrandPoints(cord, CORD_STRAND_OFFSET), svgLeftShift),
+    strand2: polylineD(offsetStrandPoints(cord, -CORD_STRAND_OFFSET), svgLeftShift),
+  };
 }

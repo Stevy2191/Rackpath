@@ -384,19 +384,29 @@
   z-index: 1;
 }
 
-/* Wide, near-transparent stroke sitting under the crisp line — a cheap
-   stand-in for a glow filter that's cheaper to render and, unlike an SVG
-   blur filter, survives the export capture's clone/serialize step. */
+/* Wide, low-opacity stroke under everything else, blurred via the actual
+   `filter: blur()` set inline in RackEnclosure.js (a real soft glow,
+   not just a flatter wash) — a plain CSS filter is just an inlined
+   computed style, so unlike an SVG <filter>/feGaussianBlur *element* it
+   survives the export capture's clone/serialize step. */
 .rack-power-cord-glow {
   stroke: #f59e0b;
   stroke-linecap: round;
 }
 
-/* Thin solid cable — no dash/march animation; the traveling pulse dot
-   (.rack-power-cord-pulse) is what now reads as "power flowing". */
+/* Darker seam sitting between the two strands below — peeks out from
+   under their inner edges as a cheap roundness/cylinder cue. */
+.rack-power-cord-seam {
+  stroke-linecap: round;
+}
+
+/* Two thin parallel strands (not one flat line) suggesting a real
+   cable's width — no dash/march animation; the traveling pulse + tail
+   (.rack-power-cord-pulse / -pulse-trail) is what reads as "power
+   flowing". */
 .rack-power-cord-line {
   stroke: #f59e0b;
-  stroke-width: 1.4;
+  stroke-width: 2;
   stroke-linecap: round;
   fill: none;
 }
@@ -408,6 +418,13 @@
 
 .rack-power-cord-pulse-core {
   fill: #ffe3a3;
+}
+
+/* Comet tail behind the main pulse — plain circles, no blur (they're
+   already small/faint enough not to need it, and it's one less filter
+   per trailing dot to carry through the export capture). */
+.rack-power-cord-pulse-trail circle {
+  fill: #fbbf24;
 }
 
 /* ─── Export capture: light theme ────────────────────────── */

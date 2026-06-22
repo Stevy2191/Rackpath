@@ -6,7 +6,7 @@ import {
   isPowerDevice, isPassiveItem, isUps, getPowerLabel, flattenOutlets, verticalPdusForUps, listPowerSources,
   getPowerSourceLabel,
 } from '../../utils/power';
-import { layoutVerticalPdus, cordPathD, DEFAULT_U_HEIGHT } from './verticalPduLayout';
+import { layoutVerticalPdus, cordPathD, cordStrandPaths, DEFAULT_U_HEIGHT } from './verticalPduLayout';
 import './ExportModal.css';
 
 const EXPORT_SCALE = Math.max(window.devicePixelRatio || 1, 3);
@@ -167,9 +167,18 @@ function relayoutPdus(clone, rack, verticalPdus, uSlots, view) {
   for (const { g, side, cord } of cords) {
     g.setAttribute('class', `rack-power-cord rack-power-cord-${side}`);
     const d = cordPathD(cord, svgLeft);
-    g.querySelectorAll('path').forEach((p) => p.setAttribute('d', d));
-    const anim = g.querySelector('animateMotion');
-    if (anim) anim.setAttribute('path', d);
+    const { strand1, strand2 } = cordStrandPaths(cord, svgLeft);
+    // Every <path> in the group is one of glow/seam (centerline) or one
+    // of the two offset strands — see the matching data-strand markers
+    // RackEnclosure.js renders them with — rather than blindly setting
+    // the same `d` on all of them the way a single-line cord used to.
+    g.querySelectorAll('path[data-strand]').forEach((p) => {
+      const strand = p.dataset.strand;
+      p.setAttribute('d', strand === '1' ? strand1 : strand === '2' ? strand2 : d);
+    });
+    // Every animateMotion (the lead pulse and its comet-tail dots) rides
+    // the same centerline path, just phase-shifted by its own `begin`.
+    g.querySelectorAll('animateMotion').forEach((anim) => anim.setAttribute('path', d));
   }
 }
 

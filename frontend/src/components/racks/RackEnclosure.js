@@ -3,8 +3,23 @@ import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
 import { countUsedU } from './rackPlacement';
-import { layoutVerticalPdus, cordPathD } from './verticalPduLayout';
+import { layoutVerticalPdus, cordPathD, cordStrandPaths, CORD_STRAND_OFFSET } from './verticalPduLayout';
 import './RackEnclosure.css';
+
+// Power cord traveling pulse: a lead dot plus a short comet tail of
+// progressively smaller, fainter dots a few percent of the cord's own
+// duration behind it — each is its own <animateMotion> on the exact same
+// path as the lead, just delayed (a positive `begin`, so at any moment
+// it's *earlier* along the path than the lead, i.e. behind it). Kept
+// short (a few hundred ms against the 2.4s loop) so it reads as a tight
+// spark trail, not a smear strung out across the whole cord.
+const CORD_PULSE_DUR = 2.4;
+const CORD_PULSE_TRAIL = [
+  { delay: 0.07, r: 1.3, opacity: 0.5 },
+  { delay: 0.14, r: 1.0, opacity: 0.32 },
+  { delay: 0.21, r: 0.7, opacity: 0.18 },
+  { delay: 0.28, r: 0.45, opacity: 0.09 },
+];
 
 const ANNOTATION_LABELS = {
   name:         'Name',
@@ -642,32 +657,73 @@ export default function RackEnclosure({
           >
             {cords.map((c) => {
               const d = cordPathD(c, cordsSvgLeft);
+              const { strand1, strand2 } = cordStrandPaths(c, cordsSvgLeft);
               return (
                 <g key={c.key} className={`rack-power-cord rack-power-cord-${c.resolvedSide}`} data-pdu-id={c.key}>
-                  {/* Soft outer glow: a wider, near-transparent stroke
-                      behind the crisp line, rather than an SVG blur filter
-                      — filters are another thing that doesn't reliably
-                      survive the export capture's clone/serialize step. */}
-                  <path d={d} className="rack-power-cord-glow" stroke="#f59e0b" strokeWidth={5} fill="none" opacity={0.18} />
-                  {/* The cord itself: a thin solid (no longer dashed) warm
-                      line. Attributes are set literally, not just via the
-                      CSS class, so the export capture (which re-inlines
-                      computed styles when cloning, but doesn't reliably
-                      carry over *external-stylesheet* styling for nested
-                      svg content) still shows it. */}
-                  <path d={d} className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={1.4} fill="none" />
-                  {/* Traveling pulse: only rendered while the rack is in
-                      view, since SMIL/animateMotion can't be paused via
-                      the CSS animation-play-state trick used for the old
-                      marching-dashes animation — omitting the element
-                      entirely is what actually stops it from spending
+                  {/* Soft outer glow: a wide, low-opacity stroke on the
+                      centerline with a CSS `filter: blur(...)` — a real
+                      blur (unlike layered flat-opacity rings), and unlike
+                      an SVG <filter>/feGaussianBlur *element*, a plain CSS
+                      filter is just an inlined computed style, so it
+                      actually survives the export capture's clone/
+                      serialize step (the inline SVG defs+url() version
+                      doesn't reliably carry over the way the rest of an
+                      element's style does). */}
+                  <path
+                    d={d}
+                    data-strand="glow"
+                    className="rack-power-cord-glow"
+                    stroke="#f59e0b"
+                    strokeWidth={7}
+                    fill="none"
+                    opacity={0.28}
+                    style={{ filter: 'blur(2px)' }}
+                  />
+                  {/* Darker seam between the two strands below, peeking
+                      out from under their inner edges — a cheap cylinder/
+                      roundness cue without needing an actual 3D gradient. */}
+                  <path
+                    d={d}
+                    data-strand="seam"
+                    className="rack-power-cord-seam"
+                    stroke="#2a1604"
+                    strokeWidth={CORD_STRAND_OFFSET * 2 + 1}
+                    fill="none"
+                    opacity={0.45}
+                  />
+                  {/* The cord itself: two thin parallel strands (rather
+                      than one flat line) suggesting a real cable's width/
+                      roundness — both the exact same bezier, just rigidly
+                      offset a couple px perpendicular to its overall
+                      direction (see cordStrandPaths). Attributes are set
+                      literally, not just via the CSS class, so the export
+                      capture (which re-inlines computed styles when
+                      cloning, but doesn't reliably carry over *external-
+                      stylesheet* styling for nested svg content) still
+                      shows it. */}
+                  <path d={strand1} data-strand="1" className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={2} fill="none" />
+                  <path d={strand2} data-strand="2" className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={2} fill="none" />
+                  {/* Traveling pulse + a short fading comet tail behind
+                      it: only rendered while the rack is in view, since
+                      SMIL/animateMotion can't be paused via the CSS
+                      animation-play-state trick used for the old
+                      marching-dashes animation — omitting the elements
+                      entirely is what actually stops them from spending
                       render cycles off-screen. */}
                   {cordsInView && !reduceMotion && (
-                    <g className="rack-power-cord-pulse">
-                      <animateMotion dur="2.4s" repeatCount="indefinite" path={d} />
-                      <circle r={3.2} className="rack-power-cord-pulse-glow" fill="#fbbf24" opacity={0.35} />
-                      <circle r={1.3} className="rack-power-cord-pulse-core" fill="#ffe3a3" />
-                    </g>
+                    <>
+                      {CORD_PULSE_TRAIL.map((t, i) => (
+                        <g key={i} className="rack-power-cord-pulse-trail">
+                          <animateMotion dur={`${CORD_PULSE_DUR}s`} begin={`${t.delay}s`} repeatCount="indefinite" path={d} />
+                          <circle r={t.r} fill="#fbbf24" opacity={t.opacity} />
+                        </g>
+                      ))}
+                      <g className="rack-power-cord-pulse">
+                        <animateMotion dur={`${CORD_PULSE_DUR}s`} repeatCount="indefinite" path={d} />
+                        <circle r={3.6} className="rack-power-cord-pulse-glow" fill="#fbbf24" opacity={0.35} />
+                        <circle r={1.6} className="rack-power-cord-pulse-core" fill="#ffe3a3" />
+                      </g>
+                    </>
                   )}
                 </g>
               );
