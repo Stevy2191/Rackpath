@@ -18,17 +18,6 @@ const IF_STATUS = {
   5: 'dormant', 6: 'notPresent', 7: 'lowerLayerDown',
 };
 
-function formatUptime(hundredths) {
-  if (hundredths == null) return 'n/a';
-  const secs = Math.floor(Number(hundredths) / 100);
-  const d = Math.floor(secs / 86400);
-  const h = Math.floor((secs % 86400) / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  if (d > 0) return `${d}d ${h}h ${m}m ${s}s`;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  return `${m}m ${s}s`;
-}
 
 function formatKb(kb) {
   if (kb == null) return 'n/a';
@@ -309,7 +298,7 @@ export default function SnmpStatsTool() {
                   ['Description', result.system.sysDescr],
                   ['Location', result.system.sysLocation],
                   ['Contact', result.system.sysContact],
-                  ['Uptime', formatUptime(result.system.sysUptime)],
+                  ['Uptime', result.system.sysUptime ?? 'n/a'],
                 ].map(([label, value]) => (
                   <div className="nt-result-row" key={label}>
                     <span className="nt-result-label">{label}</span>

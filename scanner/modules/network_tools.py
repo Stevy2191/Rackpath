@@ -285,15 +285,46 @@ def _make_snmp_fns(host, version, community, v3_user, v3_auth_protocol,
     return _get_v3, _walk_v3
 
 
+def _format_timeticks(val):
+    """Convert SNMP TimeTicks (hundredths of a second) to 'Xd Xh Xm Xs' string.
+
+    puresnmp may return an int subclass (TimeTicks), a plain int, or a string
+    representation like 'TimeTicks: 1234567' depending on the version.
+    """
+    if val is None:
+        return None
+    try:
+        if isinstance(val, (int, float)):
+            hundredths = int(val)
+        else:
+            m = re.search(r'\d+', str(val))
+            if not m:
+                return str(val)
+            hundredths = int(m.group())
+        secs = hundredths // 100
+        days = secs // 86400
+        hours = (secs % 86400) // 3600
+        mins = (secs % 3600) // 60
+        s = secs % 60
+        if days > 0:
+            return f'{days} days, {hours}h {mins}m {s}s'
+        return f'{hours}h {mins}m {s}s'
+    except Exception:
+        return str(val)
+
+
 def _query_system(get_fn, raw_oids):
-    oids = {
-        'sysDescr':    '1.3.6.1.2.1.1.1.0',
-        'sysName':     '1.3.6.1.2.1.1.5.0',
-        'sysLocation': '1.3.6.1.2.1.1.6.0',
-        'sysContact':  '1.3.6.1.2.1.1.4.0',
-        'sysUptime':   '1.3.6.1.2.1.1.3.0',
-    }
-    return {key: get_fn(oid, raw_oids) for key, oid in oids.items()}
+    result = {}
+    for key, oid in (
+        ('sysDescr',    '1.3.6.1.2.1.1.1.0'),
+        ('sysName',     '1.3.6.1.2.1.1.5.0'),
+        ('sysLocation', '1.3.6.1.2.1.1.6.0'),
+        ('sysContact',  '1.3.6.1.2.1.1.4.0'),
+    ):
+        result[key] = get_fn(oid, raw_oids)
+    uptime_raw = get_fn('1.3.6.1.2.1.1.3.0', raw_oids)
+    result['sysUptime'] = _format_timeticks(uptime_raw)
+    return result
 
 
 def _query_cpu(get_fn, walk_fn, raw_oids):
@@ -330,6 +361,11 @@ def _query_cpu(get_fn, walk_fn, raw_oids):
     forti = get_fn('1.3.6.1.4.1.12356.101.4.1.3.0', raw_oids)
     if forti is not None:
         return {'source': 'FortiGate', 'load_percent': _to_num(forti)}
+
+    # Ubiquiti EdgeSwitch
+    ubnt_cpu = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.5.1', raw_oids)
+    if ubnt_cpu is not None:
+        return {'source': 'Ubiquiti EdgeSwitch', 'load_1min': _to_num(ubnt_cpu)}
 
     # Generic HOST-RESOURCES-MIB processor load walk
     hr_cpu = walk_fn('1.3.6.1.2.1.25.3.3.1.2', raw_oids)
@@ -371,6 +407,20 @@ def _query_memory(get_fn, walk_fn, raw_oids):
     forti_mem = get_fn('1.3.6.1.4.1.12356.101.4.1.4.0', raw_oids)
     if forti_mem is not None:
         return {'source': 'FortiGate', 'percent': _to_num(forti_mem)}
+
+    # Ubiquiti EdgeSwitch (values in bytes)
+    ubnt_total = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.11.1', raw_oids)
+    ubnt_free  = get_fn('1.3.6.1.4.1.41112.1.5.1.2.1.12.1', raw_oids)
+    if any(v is not None for v in (ubnt_total, ubnt_free)):
+        t = _to_num(ubnt_total)
+        f = _to_num(ubnt_free)
+        u = (t - f) if t is not None and f is not None else None
+        return {
+            'source': 'Ubiquiti EdgeSwitch',
+            'total_kb': _div(t, 1024),
+            'used_kb':  _div(u, 1024),
+            'free_kb':  _div(f, 1024),
+        }
 
     # Generic HOST-RESOURCES-MIB hrStorage table
     hr_descr = walk_fn('1.3.6.1.2.1.25.2.3.1.3', raw_oids)
