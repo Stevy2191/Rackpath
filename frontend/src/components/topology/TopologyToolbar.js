@@ -1,5 +1,5 @@
 import React from 'react';
-import { MousePointer2, Link as LinkIcon, Type, BoxSelect, Calculator, Image, Shapes } from 'lucide-react';
+import { MousePointer2, Link as LinkIcon, Type, BoxSelect, Image, Shapes } from 'lucide-react';
 import { SHAPE_TYPES } from './ShapeNode';
 import './TopologyToolbar.css';
 
@@ -33,8 +33,6 @@ export default function TopologyToolbar({
   onShapeTypeChange,
   shapeMenuOpen,
   onToggleShapeMenu,
-  calcOpen,
-  onToggleCalc,
   background,
   backgroundMenuOpen,
   onToggleBackgroundMenu,
@@ -95,17 +93,6 @@ export default function TopologyToolbar({
             </div>
           )}
         </div>
-
-        <button
-          type="button"
-          className={`topology-mode-btn${calcOpen ? ' active' : ''}`}
-          onClick={onToggleCalc}
-          title="Subnet calculator"
-          aria-pressed={calcOpen}
-        >
-          <Calculator size={16} strokeWidth={2} />
-          <span>Calc</span>
-        </button>
 
         <div className="topology-toolbar-popover-anchor">
           <button

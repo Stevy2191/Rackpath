@@ -25,6 +25,7 @@ from modules import (
     mdns_discovery,
     multi_ping,
     netbios,
+    network_tools,
     nmap_scan,
     oui_lookup,
     snmp_discovery,
@@ -105,6 +106,46 @@ def scan_status(job_id):
     if job is None:
         return jsonify({"error": "job not found"}), 404
     return jsonify(job)
+
+
+# --- Simple synchronous diagnostic tools ----------------------------------
+# Unlike /scan above, these are quick on-demand operations: run, parse,
+# respond - no job tracking or callbacks.
+
+@app.route('/tools/ping', methods=['POST'])
+def tools_ping():
+    data = request.get_json(force=True, silent=True) or {}
+    host = data.get('host')
+    if not host:
+        return jsonify({"error": "host is required"}), 400
+    try:
+        return jsonify(network_tools.run_ping(host, data.get('count', 4)))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route('/tools/traceroute', methods=['POST'])
+def tools_traceroute():
+    data = request.get_json(force=True, silent=True) or {}
+    host = data.get('host')
+    if not host:
+        return jsonify({"error": "host is required"}), 400
+    try:
+        return jsonify(network_tools.run_traceroute(host, data.get('max_hops', 30)))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route('/tools/dns', methods=['POST'])
+def tools_dns():
+    data = request.get_json(force=True, silent=True) or {}
+    host = data.get('host')
+    if not host:
+        return jsonify({"error": "host is required"}), 400
+    try:
+        return jsonify(network_tools.run_dns_lookup(host, data.get('record_type', 'A')))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 def _derive_callbacks(callback_url, host_callback_url, progress_callback_url):

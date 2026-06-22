@@ -32,7 +32,6 @@ import NodePropertiesPanel from '../components/topology/NodePropertiesPanel';
 import EdgePropertiesPanel from '../components/topology/EdgePropertiesPanel';
 import LinkConfigModal from '../components/topology/LinkConfigModal';
 import AddNodeModal from '../components/topology/AddNodeModal';
-import SubnetCalculator from '../components/topology/SubnetCalculator';
 import TopologyToolbar from '../components/topology/TopologyToolbar';
 import { getLayoutedElements } from '../utils/layout';
 import './Topology.css';
@@ -222,7 +221,6 @@ function TopologyCanvas() {
   // Toolbar state.
   const [mode, setMode] = useState('select');
   const [linkSourceId, setLinkSourceId] = useState(null);
-  const [calcOpen, setCalcOpen] = useState(false);
   const [background, setBackground] = useState('dots');
   const [backgroundMenuOpen, setBackgroundMenuOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -1191,8 +1189,6 @@ function TopologyCanvas() {
         onShapeTypeChange={setShapeType}
         shapeMenuOpen={shapeMenuOpen}
         onToggleShapeMenu={() => setShapeMenuOpen((o) => !o)}
-        calcOpen={calcOpen}
-        onToggleCalc={() => setCalcOpen((o) => !o)}
         background={background}
         backgroundMenuOpen={backgroundMenuOpen}
         onToggleBackgroundMenu={() => setBackgroundMenuOpen((o) => !o)}
@@ -1245,8 +1241,6 @@ function TopologyCanvas() {
             )}
             <Controls />
           </ReactFlow>
-
-          {calcOpen && <SubnetCalculator onClose={() => setCalcOpen(false)} />}
 
           <div className="topology-floating-actions">
             <button type="button" onClick={handleAutoLayout} title="Auto layout">

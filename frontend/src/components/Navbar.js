@@ -16,6 +16,7 @@ const links = [
 
 const afterLinks = [
   { to: '/macros', label: 'Macros', icon: Key },
+  { to: '/network-tools', label: 'Network Tools' },
   { to: '/integrations', label: 'Integrations' },
 ];
 

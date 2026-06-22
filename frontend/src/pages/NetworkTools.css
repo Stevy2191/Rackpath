@@ -1,0 +1,235 @@
+.network-tools-page {
+  padding: 24px 32px 48px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.network-tools-header {
+  margin-bottom: 20px;
+}
+
+.network-tools-header h2 {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.network-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 860px) {
+  .network-tools-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nt-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px var(--color-shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.nt-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.nt-card-header svg {
+  color: var(--color-link);
+  flex-shrink: 0;
+}
+
+.nt-card-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.nt-card-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nt-field-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.nt-field-row .nt-field {
+  flex: 1;
+}
+
+.nt-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.nt-input,
+.nt-select {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.nt-input:focus,
+.nt-select:focus {
+  outline: none;
+  border-color: var(--color-link);
+}
+
+.nt-button {
+  align-self: flex-start;
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  border: none;
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.nt-button:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.nt-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.nt-loading {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.nt-error {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.nt-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+}
+
+.nt-result-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+  padding: 3px 0;
+}
+
+.nt-result-label {
+  color: var(--color-text-muted);
+}
+
+.nt-result-value {
+  color: var(--color-text);
+  font-family: 'Roboto Mono', monospace;
+  text-align: right;
+  word-break: break-all;
+}
+
+.nt-result-value.nt-success {
+  color: #2a8a4a;
+}
+
+.nt-result-value.nt-fail {
+  color: var(--color-danger);
+}
+
+.nt-hop-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.nt-hop-table th,
+.nt-hop-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+  font-family: 'Roboto Mono', monospace;
+}
+
+.nt-hop-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.nt-raw-output {
+  margin-top: 4px;
+}
+
+.nt-raw-output summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.nt-raw-output pre {
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 0.78rem;
+  overflow-x: auto;
+  margin-top: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.nt-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+}
+
+.nt-result-list-item {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  background: var(--color-bg-subtle);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.nt-range-slider {
+  width: 100%;
+}

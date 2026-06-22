@@ -11,6 +11,7 @@ import MacrosPage from './pages/Macros';
 import CamerasPage from './pages/Cameras';
 import AccessDevicesPage from './pages/AccessDevices';
 import IntegrationsPage from './pages/Integrations';
+import NetworkToolsPage from './pages/NetworkTools';
 import ScanPage from './pages/Scan';
 import LoginPage from './pages/Login';
 import ChangePasswordPage from './pages/ChangePassword';
@@ -157,6 +158,14 @@ function AppShell() {
             element={
               <RequireAuth>
                 <IntegrationsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/network-tools"
+            element={
+              <RequireAuth>
+                <NetworkToolsPage />
               </RequireAuth>
             }
           />
