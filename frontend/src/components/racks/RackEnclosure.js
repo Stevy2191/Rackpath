@@ -3,7 +3,7 @@ import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
 import { countUsedU } from './rackPlacement';
-import { layoutVerticalPdus, cordPathD, cordPathXs } from './verticalPduLayout';
+import { layoutVerticalPdus, cordPathD } from './verticalPduLayout';
 import './RackEnclosure.css';
 
 // Power cord traveling pulse: a lead dot plus a short comet tail of
@@ -475,7 +475,7 @@ export default function RackEnclosure({
   // svg's own origin (and every coordinate in it) to the leftmost point in
   // use keeps everything within its declared bounds instead of relying on
   // overflow to paint outside them.
-  const cordXs = cords.flatMap((c) => cordPathXs(c));
+  const cordXs = cords.flatMap((c) => [c.upsX, c.c1x, c.c2x, c.pduX]);
   const cordsSvgLeft  = Math.min(0, ...cordXs);
   const cordsSvgWidth = Math.max(frameSize.width, ...cordXs) - cordsSvgLeft;
 
@@ -677,16 +677,16 @@ export default function RackEnclosure({
                     opacity={0.28}
                     style={{ filter: 'blur(2px)' }}
                   />
-                  {/* The cord itself: a single solid line — coiled slack
-                      hanging just past the UPS's own exit point, then one
-                      clean run up to the PDU's bottom tip (see
-                      verticalPduLayout.buildCordPath). Attributes are set
-                      literally, not just via the CSS class, so the export
-                      capture (which re-inlines computed styles when
-                      cloning, but doesn't reliably carry over *external-
-                      stylesheet* styling for nested svg content) still
-                      shows it. */}
-                  <path d={d} className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={1.6} fill="none" />
+                  {/* The cord itself: a single solid line, gravity-drooped
+                      bezier from the UPS's exit point to the PDU's bottom
+                      tip (see verticalPduLayout.buildCordCurve) — no
+                      coil, no parallel strands, just one clean cable.
+                      Attributes are set literally, not just via the CSS
+                      class, so the export capture (which re-inlines
+                      computed styles when cloning, but doesn't reliably
+                      carry over *external-stylesheet* styling for nested
+                      svg content) still shows it. */}
+                  <path d={d} className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={2} fill="none" />
                   {/* Traveling pulse + a short fading comet tail behind
                       it: only rendered while the rack is in view, since
                       SMIL/animateMotion can't be paused via the CSS

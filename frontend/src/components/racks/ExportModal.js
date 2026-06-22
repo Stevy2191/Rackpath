@@ -6,7 +6,7 @@ import {
   isPowerDevice, isPassiveItem, isUps, getPowerLabel, flattenOutlets, verticalPdusForUps, listPowerSources,
   getPowerSourceLabel,
 } from '../../utils/power';
-import { layoutVerticalPdus, cordPathD, cordPathXs, DEFAULT_U_HEIGHT } from './verticalPduLayout';
+import { layoutVerticalPdus, cordPathD, DEFAULT_U_HEIGHT } from './verticalPduLayout';
 import './ExportModal.css';
 
 const EXPORT_SCALE = Math.max(window.devicePixelRatio || 1, 3);
@@ -158,9 +158,7 @@ function relayoutPdus(clone, rack, verticalPdus, uSlots, view) {
   // Re-derive the svg's own bounding box for the new coordinates — see the
   // matching comment in RackEnclosure.js for why this has to stay within
   // its declared [left, left+width] box rather than relying on overflow.
-  // Every point the path's coil + curve touches, not just its two
-  // anchors — the coil's loops bulge further out than either one.
-  const xs = cords.flatMap(({ cord }) => cordPathXs(cord));
+  const xs = cords.flatMap(({ cord }) => [cord.upsX, cord.c1x, cord.c2x, cord.pduX]);
   const svgLeft = Math.min(0, ...xs);
   const svgWidth = Math.max(frame.offsetWidth, ...xs) - svgLeft;
   svg.style.left = `${svgLeft}px`;
