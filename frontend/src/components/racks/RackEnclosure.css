@@ -394,19 +394,12 @@
   stroke-linecap: round;
 }
 
-/* Darker seam sitting between the two strands below — peeks out from
-   under their inner edges as a cheap roundness/cylinder cue. */
-.rack-power-cord-seam {
-  stroke-linecap: round;
-}
-
-/* Two thin parallel strands (not one flat line) suggesting a real
-   cable's width — no dash/march animation; the traveling pulse + tail
-   (.rack-power-cord-pulse / -pulse-trail) is what reads as "power
+/* Single solid line — no dash/march animation; the traveling pulse +
+   tail (.rack-power-cord-pulse / -pulse-trail) is what reads as "power
    flowing". */
 .rack-power-cord-line {
   stroke: #f59e0b;
-  stroke-width: 2;
+  stroke-width: 1.6;
   stroke-linecap: round;
   fill: none;
 }

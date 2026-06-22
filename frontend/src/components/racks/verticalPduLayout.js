@@ -43,93 +43,104 @@ export function pduBox(frameHeight) {
   return { top, height };
 }
 
-// Bezier control points scaled to the actual distance between the cord's
-// two anchors. Previously these were fixed pixel offsets (+16/+24 of sag,
-// 18-36px of horizontal reach) regardless of how far apart the anchors
-// actually were — fine for the long, U-position-driven gaps that used to
-// be typical, but a short cord (now common since the PDU's own bottom tip
-// no longer depends on its slot's u_size) would sag/bow by more than the
-// gap itself, reading as the curve overshooting past either end. Scaling
-// both by the anchors' own distance keeps the bow proportional at any
-// length: short cord → tight curve, long cord → a wider bow.
+// Bezier circle/ellipse approximation constant — the standard distance
+// (as a fraction of the radius) from an arc's endpoint to its control
+// point that makes 4 cubic beziers trace a near-perfect ellipse.
+const ELLIPSE_K = 0.5523;
+
+// Appends one full closed loop (4 cubic arcs, tracing a complete ellipse)
+// to `commands`, starting and ending at the *same* point (topX, topY) —
+// the ellipse's own top — centered at (topX, topY + ry). Goes around to
+// the `outward` side first (so it bulges away from the rack, matching
+// the direction the rest of the cord bows), giving one coil ring of a
+// loosely-wound cable.
+function appendLoop(commands, topX, topY, rx, ry, outward) {
+  const cx = topX;
+  const cy = topY + ry;
+  const kx = rx * ELLIPSE_K;
+  const ky = ry * ELLIPSE_K;
+  // top -> side (outward)
+  commands.push({ cmd: 'C', x1: cx + outward * kx, y1: cy - ry, x2: cx + outward * rx, y2: cy - ky, x: cx + outward * rx, y: cy });
+  // side -> bottom
+  commands.push({ cmd: 'C', x1: cx + outward * rx, y1: cy + ky, x2: cx + outward * kx, y2: cy + ry, x: cx, y: cy + ry });
+  // bottom -> side (inward)
+  commands.push({ cmd: 'C', x1: cx - outward * kx, y1: cy + ry, x2: cx - outward * rx, y2: cy + ky, x: cx - outward * rx, y: cy });
+  // side -> top (back to start)
+  commands.push({ cmd: 'C', x1: cx - outward * rx, y1: cy - ky, x2: cx - outward * kx, y2: cy - ry, x: cx, y: cy - ry });
+}
+
+// A short, gentle bezier between two nearby points — used to bridge from
+// one loop's top (where it closed back up) to the next loop's own top
+// (which has drifted slightly), without an abrupt jump.
+function appendConnector(commands, fromX, fromY, toX, toY) {
+  commands.push({
+    cmd: 'C',
+    x1: fromX, y1: fromY + (toY - fromY) * 0.3,
+    x2: toX, y2: toY - (toY - fromY) * 0.3,
+    x: toX, y: toY,
+  });
+}
+
+// Builds 3 progressively smaller coil loops hanging below `startX,startY`
+// — a cable's own slack, neatly wound and hung rather than left loose —
+// each one's top drifted slightly further outward/down than the last so
+// they read as loosely stacked rather than perfectly stacked circles.
+// Returns the point the path continues from afterward (the smallest,
+// last loop's own top).
+function appendCoil(commands, startX, startY, outward, baseR) {
+  const sizes = [1, 0.78, 0.58];
+  let top = { x: startX, y: startY };
+  sizes.forEach((scale, i) => {
+    const r = baseR * scale;
+    if (i > 0) {
+      const nextTop = { x: top.x + outward * r * 0.3, y: top.y + r * 0.35 };
+      appendConnector(commands, top.x, top.y, nextTop.x, nextTop.y);
+      top = nextTop;
+    }
+    appendLoop(commands, top.x, top.y, r, r * 0.85, outward);
+  });
+  return top;
+}
+
+// Builds the full power-cord path as a flat list of draw commands (one
+// initial M, then a run of C's) — coiled slack hanging just past the UPS
+// exit point, then one clean curve up to the PDU's bottom tip — rather
+// than the single sweeping bezier this used to be. Kept as a plain
+// command list (not a ready-made `d` string) so cordPathD can still
+// apply an arbitrary X shift to every point in it afterward, the same
+// way it always has.
 //
-// The droop itself is built around a single low point — `lowY`, strictly
-// below *both* upsY and pduY, like a real cable sagging under its own
-// weight rather than a level line with some bulge — and the two control
-// points are deliberately uneven distances from it: c1 (the UPS end)
-// only drops halfway to lowY, so the cord leaves the UPS at a shallow
-// angle, while c2 (the PDU end) sits right at lowY, forcing the curve to
-// still be near its deepest point just before the PDU and so rise into
-// it steeply — the look of a cable anchored/supported at the PDU end
-// rather than sagging evenly along its whole length.
-function buildCordCurve(upsX, upsY, pduX, pduY, outward) {
+// The coil's size scales with the cord's overall length, same reasoning
+// as the old curve's reach/droop did: a short cord between a closely-
+// spaced PDU and UPS gets a proportionally smaller coil than a long one.
+function buildCordPath(upsX, upsY, pduX, pduY, outward) {
   const dist = Math.hypot(pduX - upsX, pduY - upsY);
-  const reach = Math.max(10, Math.min(40, dist * 0.3));
-  const droop = Math.max(16, Math.min(48, dist * 0.24));
-  const lowY = Math.max(upsY, pduY) + droop;
+  const baseR = Math.max(5, Math.min(11, dist * 0.09));
+  const reach = Math.max(10, Math.min(36, dist * 0.28));
 
-  const c1x = upsX + outward * reach * 0.4;
-  const c1y = (upsY + lowY) / 2;
-  const c2x = pduX + outward * reach;
-  const c2y = lowY;
+  const commands = [{ cmd: 'M', x: upsX, y: upsY }];
 
-  return { upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY };
-}
+  // Small lead-in so the coil hangs just clear of the UPS's own exit
+  // point rather than starting right on top of it.
+  const coilStartX = upsX + outward * baseR * 0.4;
+  const coilStartY = upsY + baseR * 0.5;
+  appendConnector(commands, upsX, upsY, coilStartX, coilStartY);
 
-// Half the gap between the two parallel strands drawn for each cord (see
-// cordStrandPaths) — suggests the cable's physical roundness rather than
-// a flat schematic line.
-export const CORD_STRAND_OFFSET = 1.4;
+  const coilExit = appendCoil(commands, coilStartX, coilStartY, outward, baseR);
 
-function unitPerpendicular(dx, dy, distance) {
-  const len = Math.hypot(dx, dy) || 1;
-  return { ox: (-dy / len) * distance, oy: (dx / len) * distance };
-}
+  // One clean curve from the top of the coil to the PDU's bottom tip —
+  // a gentle, fairly symmetric bow (whichever direction it actually has
+  // to travel — the PDU's bottom tip isn't always below the UPS), not
+  // the old curve's pronounced gravity droop, since the coil itself is
+  // now what reads as the cable's slack.
+  const span = pduY - coilExit.y;
+  const c1x = coilExit.x + outward * reach * 0.55;
+  const c1y = coilExit.y + span * 0.33;
+  const c2x = pduX + outward * reach * 0.55;
+  const c2y = pduY - span * 0.33;
+  commands.push({ cmd: 'C', x1: c1x, y1: c1y, x2: c2x, y2: c2y, x: pduX, y: pduY });
 
-function bezierPoint(cord, t) {
-  const mt = 1 - t;
-  return {
-    x: mt * mt * mt * cord.upsX + 3 * mt * mt * t * cord.c1x + 3 * mt * t * t * cord.c2x + t * t * t * cord.pduX,
-    y: mt * mt * mt * cord.upsY + 3 * mt * mt * t * cord.c1y + 3 * mt * t * t * cord.c2y + t * t * t * cord.pduY,
-  };
-}
-
-// Derivative of the cubic bezier at t — its direction is the curve's own
-// tangent there, used to offset perpendicular to the curve itself rather
-// than to one fixed direction.
-function bezierTangent(cord, t) {
-  const mt = 1 - t;
-  return {
-    dx: 3 * mt * mt * (cord.c1x - cord.upsX) + 6 * mt * t * (cord.c2x - cord.c1x) + 3 * t * t * (cord.pduX - cord.c2x),
-    dy: 3 * mt * mt * (cord.c1y - cord.upsY) + 6 * mt * t * (cord.c2y - cord.c1y) + 3 * t * t * (cord.pduY - cord.c2y),
-  };
-}
-
-// How many points the offset strand polylines below are sampled at —
-// plenty for a curve this gentle to still read as perfectly smooth once
-// anti-aliased, while being simple, exact per-point geometry rather than
-// an approximated offset curve.
-const STRAND_SAMPLES = 24;
-
-// A true per-point offset of the cord's curve, used to draw its two
-// parallel strands — each sampled point is shifted perpendicular to the
-// curve's *own local tangent* there, not one fixed direction for the
-// whole curve. A single rigid shift (or even shifting just the two ends
-// along their own local tangents) looks right while the curve stays
-// close to a straight line, but this curve deliberately droops well off
-// one (see buildCordCurve): far enough that anything less than a
-// per-point offset visibly pinches the two "parallel" strands together
-// partway along instead of keeping them apart the curve's whole length.
-function offsetStrandPoints(cord, distance) {
-  const pts = [];
-  for (let i = 0; i <= STRAND_SAMPLES; i++) {
-    const t = i / STRAND_SAMPLES;
-    const p = bezierPoint(cord, t);
-    const tangent = bezierTangent(cord, t);
-    const { ox, oy } = unitPerpendicular(tangent.dx, tangent.dy, distance);
-    pts.push({ x: p.x + ox, y: p.y + oy });
-  }
-  return pts;
+  return commands;
 }
 
 // Absolute left-edge offset (from Front's own left edge) for a given
@@ -155,10 +166,12 @@ export function pduLeftPx({ side, stack }, frontWidth, hasGap) {
 
 // Full layout for every vertical PDU in a rack: where its strip floats
 // (left/top/height) and (if it's plugged into a UPS that's also in
-// `uSlots`) the bezier control points for its power cord.
+// `uSlots`) its power cord's full path — a few coiled loops of slack
+// hanging off the UPS's own exit point, then one clean curve up to the
+// PDU's bottom tip.
 //
 // Returns Map<pduId, { side, stack, leftPx, top, height, cord: null | {
-//   upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY
+//   upsX, upsY, pduX, pduY, commands
 // } }>.
 export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frontWidth, frameHeight, hasGap }) {
   const assigned = computeVerticalPduPositions(verticalPdus);
@@ -184,10 +197,10 @@ export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frontW
       // Left's upsX=0 is Front's left edge, not the strip's own (negative)
       // position past it.
       const upsX = side === 'left' ? 0 : frontWidth;
-      const outward = side === 'left' ? -1 : 1; // which way "away from the rack" is, for the curve's bow
+      const outward = side === 'left' ? -1 : 1; // which way "away from the rack" is, for the coil/curve's bow
       const upsY = bottomY(rack, uHeight, ups.u_position, ups.u_size);
 
-      cord = buildCordCurve(upsX, upsY, pduX, pduY, outward);
+      cord = { upsX, upsY, pduX, pduY, commands: buildCordPath(upsX, upsY, pduX, pduY, outward) };
     }
 
     result.set(pdu.id, { side, stack, leftPx, top, height, cord });
@@ -195,30 +208,23 @@ export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frontW
   return result;
 }
 
-// Renders a cord's bezier as an SVG path `d` string, shifting every
-// coordinate left by `svgLeftShift` — used when the containing svg's own
-// origin has been moved to keep negative-X content (a left-floating PDU)
-// within its declared bounds instead of relying on overflow to paint
-// outside them.
+// Renders a cord's command list (see buildCordPath) as an SVG path `d`
+// string, shifting every coordinate left by `svgLeftShift` — used when
+// the containing svg's own origin has been moved to keep negative-X
+// content (a left-floating PDU) within its declared bounds instead of
+// relying on overflow to paint outside them.
 export function cordPathD(cord, svgLeftShift = 0) {
-  return `M ${cord.upsX - svgLeftShift} ${cord.upsY} `
-    + `C ${cord.c1x - svgLeftShift} ${cord.c1y}, `
-    + `${cord.c2x - svgLeftShift} ${cord.c2y}, `
-    + `${cord.pduX - svgLeftShift} ${cord.pduY}`;
+  return cord.commands.map((c) => (
+    c.cmd === 'M'
+      ? `M ${c.x - svgLeftShift} ${c.y}`
+      : `C ${c.x1 - svgLeftShift} ${c.y1}, ${c.x2 - svgLeftShift} ${c.y2}, ${c.x - svgLeftShift} ${c.y}`
+  )).join(' ');
 }
 
-function polylineD(points, svgLeftShift) {
-  return points.map(({ x, y }, i) => `${i === 0 ? 'M' : 'L'} ${x - svgLeftShift} ${y}`).join(' ');
-}
-
-// The two parallel-strand path `d` strings drawn on top of the glow/seam
-// layers — one offset +CORD_STRAND_OFFSET, the other -CORD_STRAND_OFFSET,
-// each a polyline through points sampled off the curve's own local
-// tangent (see offsetStrandPoints) so they stay apart the curve's whole
-// length instead of pinching together partway through.
-export function cordStrandPaths(cord, svgLeftShift = 0) {
-  return {
-    strand1: polylineD(offsetStrandPoints(cord, CORD_STRAND_OFFSET), svgLeftShift),
-    strand2: polylineD(offsetStrandPoints(cord, -CORD_STRAND_OFFSET), svgLeftShift),
-  };
+// Every X coordinate the cord's path actually touches (move/curve
+// endpoints *and* control points, since the coil's loops bulge further
+// out than either anchor) — used to size the cords <svg> to fit the
+// whole path, coil included, not just the UPS/PDU anchors.
+export function cordPathXs(cord) {
+  return cord.commands.flatMap((c) => (c.cmd === 'M' ? [c.x] : [c.x1, c.x2, c.x]));
 }

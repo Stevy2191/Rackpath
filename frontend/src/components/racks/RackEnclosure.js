@@ -3,7 +3,7 @@ import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
 import { countUsedU } from './rackPlacement';
-import { layoutVerticalPdus, cordPathD, cordStrandPaths, CORD_STRAND_OFFSET } from './verticalPduLayout';
+import { layoutVerticalPdus, cordPathD, cordPathXs } from './verticalPduLayout';
 import './RackEnclosure.css';
 
 // Power cord traveling pulse: a lead dot plus a short comet tail of
@@ -475,7 +475,7 @@ export default function RackEnclosure({
   // svg's own origin (and every coordinate in it) to the leftmost point in
   // use keeps everything within its declared bounds instead of relying on
   // overflow to paint outside them.
-  const cordXs = cords.flatMap((c) => [c.upsX, c.c1x, c.c2x, c.pduX]);
+  const cordXs = cords.flatMap((c) => cordPathXs(c));
   const cordsSvgLeft  = Math.min(0, ...cordXs);
   const cordsSvgWidth = Math.max(frameSize.width, ...cordXs) - cordsSvgLeft;
 
@@ -657,12 +657,11 @@ export default function RackEnclosure({
           >
             {cords.map((c) => {
               const d = cordPathD(c, cordsSvgLeft);
-              const { strand1, strand2 } = cordStrandPaths(c, cordsSvgLeft);
               return (
                 <g key={c.key} className={`rack-power-cord rack-power-cord-${c.resolvedSide}`} data-pdu-id={c.key}>
                   {/* Soft outer glow: a wide, low-opacity stroke on the
                       centerline with a CSS `filter: blur(...)` — a real
-                      blur (unlike layered flat-opacity rings), and unlike
+                      blur (unlike a layered flat-opacity wash), and unlike
                       an SVG <filter>/feGaussianBlur *element*, a plain CSS
                       filter is just an inlined computed style, so it
                       actually survives the export capture's clone/
@@ -671,7 +670,6 @@ export default function RackEnclosure({
                       element's style does). */}
                   <path
                     d={d}
-                    data-strand="glow"
                     className="rack-power-cord-glow"
                     stroke="#f59e0b"
                     strokeWidth={7}
@@ -679,30 +677,16 @@ export default function RackEnclosure({
                     opacity={0.28}
                     style={{ filter: 'blur(2px)' }}
                   />
-                  {/* Darker seam between the two strands below, peeking
-                      out from under their inner edges — a cheap cylinder/
-                      roundness cue without needing an actual 3D gradient. */}
-                  <path
-                    d={d}
-                    data-strand="seam"
-                    className="rack-power-cord-seam"
-                    stroke="#2a1604"
-                    strokeWidth={CORD_STRAND_OFFSET * 2 + 1}
-                    fill="none"
-                    opacity={0.45}
-                  />
-                  {/* The cord itself: two thin parallel strands (rather
-                      than one flat line) suggesting a real cable's width/
-                      roundness — both the exact same bezier, just rigidly
-                      offset a couple px perpendicular to its overall
-                      direction (see cordStrandPaths). Attributes are set
+                  {/* The cord itself: a single solid line — coiled slack
+                      hanging just past the UPS's own exit point, then one
+                      clean run up to the PDU's bottom tip (see
+                      verticalPduLayout.buildCordPath). Attributes are set
                       literally, not just via the CSS class, so the export
                       capture (which re-inlines computed styles when
                       cloning, but doesn't reliably carry over *external-
                       stylesheet* styling for nested svg content) still
                       shows it. */}
-                  <path d={strand1} data-strand="1" className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={2} fill="none" />
-                  <path d={strand2} data-strand="2" className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={2} fill="none" />
+                  <path d={d} className="rack-power-cord-line" stroke="#f59e0b" strokeWidth={1.6} fill="none" />
                   {/* Traveling pulse + a short fading comet tail behind
                       it: only rendered while the rack is in view, since
                       SMIL/animateMotion can't be paused via the CSS
