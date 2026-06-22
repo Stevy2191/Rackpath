@@ -81,34 +81,41 @@ function appendConnector(commands, fromX, fromY, toX, toY) {
   });
 }
 
-// Builds 3 progressively smaller coil loops hanging below `startX,startY`
-// — a cable's own slack, neatly wound and hung rather than left loose —
-// each one's top drifted slightly further outward/down than the last so
-// they read as loosely stacked rather than perfectly stacked circles.
-// Returns the point the path continues from afterward (the smallest,
-// last loop's own top).
-function appendCoil(commands, startX, startY, outward, baseR) {
-  const sizes = [1, 0.78, 0.58];
+// Builds 3 progressively smaller coil loops climbing *upward* from
+// `startX,startY` — a cable's own slack, neatly wound like a length of
+// spring/slinky stood on its end rather than left loose on the ground.
+// Each loop is a tall, narrow ellipse (ry > rx) so it reads as a coil
+// viewed from the side rather than a flat ring, and each one's own top
+// sits above the previous loop's top by less than a full loop-height so
+// consecutive loops visibly overlap, with a slight outward drift per
+// loop for depth. Returns the point the path continues from afterward
+// (the smallest, topmost loop's own top).
+function appendVerticalCoil(commands, startX, startY, outward, baseR) {
+  const sizes = [1, 0.88, 0.78];
+  const rx = baseR * 0.55;
+  const ry = baseR * 1.15;
   let top = { x: startX, y: startY };
   sizes.forEach((scale, i) => {
-    const r = baseR * scale;
+    const loopRx = rx * scale;
+    const loopRy = ry * scale;
     if (i > 0) {
-      const nextTop = { x: top.x + outward * r * 0.3, y: top.y + r * 0.35 };
+      const nextTop = { x: top.x + outward * loopRx * 0.35, y: top.y - loopRy * 1.4 };
       appendConnector(commands, top.x, top.y, nextTop.x, nextTop.y);
       top = nextTop;
     }
-    appendLoop(commands, top.x, top.y, r, r * 0.85, outward);
+    appendLoop(commands, top.x, top.y, loopRx, loopRy, outward);
   });
   return top;
 }
 
 // Builds the full power-cord path as a flat list of draw commands (one
-// initial M, then a run of C's) — coiled slack hanging just past the UPS
-// exit point, then one clean curve up to the PDU's bottom tip — rather
-// than the single sweeping bezier this used to be. Kept as a plain
-// command list (not a ready-made `d` string) so cordPathD can still
-// apply an arbitrary X shift to every point in it afterward, the same
-// way it always has.
+// initial M, then a run of C's) — a vertical coil of slack (like a
+// length of cable wound and stood on end) climbing up from just past the
+// UPS's own exit point, then one clean curve to the PDU's bottom tip —
+// rather than the single sweeping bezier this used to be. Kept as a
+// plain command list (not a ready-made `d` string) so cordPathD can
+// still apply an arbitrary X shift to every point in it afterward, the
+// same way it always has.
 //
 // The coil's size scales with the cord's overall length, same reasoning
 // as the old curve's reach/droop did: a short cord between a closely-
@@ -121,12 +128,13 @@ function buildCordPath(upsX, upsY, pduX, pduY, outward) {
   const commands = [{ cmd: 'M', x: upsX, y: upsY }];
 
   // Small lead-in so the coil hangs just clear of the UPS's own exit
-  // point rather than starting right on top of it.
+  // point (a brief dip) before climbing back up through the loops,
+  // rather than starting right on top of the exit point.
   const coilStartX = upsX + outward * baseR * 0.4;
   const coilStartY = upsY + baseR * 0.5;
   appendConnector(commands, upsX, upsY, coilStartX, coilStartY);
 
-  const coilExit = appendCoil(commands, coilStartX, coilStartY, outward, baseR);
+  const coilExit = appendVerticalCoil(commands, coilStartX, coilStartY, outward, baseR);
 
   // One clean curve from the top of the coil to the PDU's bottom tip —
   // a gentle, fairly symmetric bow (whichever direction it actually has
