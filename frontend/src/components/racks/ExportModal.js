@@ -205,9 +205,9 @@ function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
 
   const clone = live.cloneNode(true);
   clone.removeAttribute('id');
-  // Exports show only the rack diagram — the name/U-counter live above
-  // the frame on screen but have no place in a cropped export image.
-  clone.querySelectorAll('.rack-name-label, .rack-name-input, .rack-u-counter').forEach((el) => el.remove());
+  // Keep the rack name label so it appears in the export; remove only the
+  // editable input (not relevant outside edit mode) and the U counter.
+  clone.querySelectorAll('.rack-name-input, .rack-u-counter').forEach((el) => el.remove());
   if (theme === 'light') clone.classList.add('rack-capture-light');
 
   const frame = clone.querySelector('.rack-dual-frame');
