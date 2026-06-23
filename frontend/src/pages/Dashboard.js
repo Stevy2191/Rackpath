@@ -7,17 +7,14 @@ import {
   Warehouse,
   Percent,
   Camera,
-  AlertTriangle,
-  ChevronDown,
-  ChevronRight,
   Download,
   FileText,
-  Activity,
   Building2,
   MapPin,
   Pencil,
   X,
   Check,
+  Plus,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -95,6 +92,44 @@ function formatTimestamp(value) {
 
 function fileBaseName(project) {
   return (project?.name || 'project').trim().replace(/\s+/g, '_').toLowerCase();
+}
+
+const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
+];
+
+// Phone fields store raw digits; this formats them as (xxx) xxx-xxxx for
+// display, including while the user is mid-typing (a partial number still
+// gets partial formatting).
+function formatPhoneNumber(digits) {
+  const d = (digits || '').replace(/\D/g, '').slice(0, 10);
+  if (d.length === 0) return '';
+  if (d.length < 4) return `(${d}`;
+  if (d.length < 7) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+function onlyDigits(value) {
+  return (value || '').replace(/\D/g, '').slice(0, 10);
+}
+
+// dns_servers is stored as a comma-separated string; split it into a list
+// for the editable rows, always showing at least the default Primary/Secondary pair.
+function parseDnsList(value) {
+  const list = (value || '').split(',').map((s) => s.trim()).filter(Boolean);
+  while (list.length < 2) list.push('');
+  return list;
+}
+
+function composeAddress(project) {
+  if (!project) return '';
+  const stateZip = [project.address_state, project.address_zip].filter(Boolean).join(' ');
+  const structured = [project.address_street, project.address_city, stateZip].filter(Boolean).join(', ');
+  return structured || project.address || '';
 }
 
 function buildMarkdown(project, overview, activity) {
@@ -306,7 +341,6 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [activity, setActivity] = useState([]);
-  const [expanded, setExpanded] = useState({});
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editingSiteInfo, setEditingSiteInfo] = useState(false);
@@ -355,34 +389,53 @@ export default function DashboardPage() {
     };
   }, [projectId, navigate, removeProject]);
 
-  const toggleWarning = (key) => {
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   const startEditSiteInfo = () => {
     setSiteInfoDraft({
-      address:                   currentProject?.address                    || '',
+      address_street:            currentProject?.address_street             || '',
+      address_city:              currentProject?.address_city               || '',
+      address_state:             currentProject?.address_state              || '',
+      address_zip:               currentProject?.address_zip                || '',
       site_contact_name:         currentProject?.site_contact_name          || '',
-      site_contact_phone:        currentProject?.site_contact_phone         || '',
+      site_contact_phone:        onlyDigits(currentProject?.site_contact_phone),
       site_contact_email:        currentProject?.site_contact_email         || '',
       primary_isp_name:          currentProject?.primary_isp_name           || '',
       primary_isp_circuit_id:    currentProject?.primary_isp_circuit_id     || '',
-      primary_isp_contact:       currentProject?.primary_isp_contact        || '',
+      primary_isp_contact:       onlyDigits(currentProject?.primary_isp_contact),
       secondary_isp_name:        currentProject?.secondary_isp_name         || '',
       secondary_isp_circuit_id:  currentProject?.secondary_isp_circuit_id   || '',
-      secondary_isp_contact:     currentProject?.secondary_isp_contact      || '',
+      secondary_isp_contact:     onlyDigits(currentProject?.secondary_isp_contact),
       wan_ip:                    currentProject?.wan_ip                     || '',
-      wan_subnet:                currentProject?.wan_subnet                  || '',
-      wan_gateway:               currentProject?.wan_gateway                 || '',
-      dns_servers:               currentProject?.dns_servers                 || '',
+      wan_subnet:                currentProject?.wan_subnet                 || '',
+      wan_gateway:               currentProject?.wan_gateway                || '',
+      lan_ip:                    currentProject?.lan_ip                     || '',
+      lan_subnet:                currentProject?.lan_subnet                 || '',
+      lan_gateway:               currentProject?.lan_gateway                || '',
+      dns_servers:               parseDnsList(currentProject?.dns_servers),
     });
     setEditingSiteInfo(true);
+  };
+
+  const updateDnsServer = (index, value) => {
+    setSiteInfoDraft((prev) => {
+      const dns_servers = [...prev.dns_servers];
+      dns_servers[index] = value;
+      return { ...prev, dns_servers };
+    });
+  };
+
+  const addDnsServer = () => {
+    setSiteInfoDraft((prev) => ({ ...prev, dns_servers: [...prev.dns_servers, ''] }));
+  };
+
+  const removeDnsServer = (index) => {
+    setSiteInfoDraft((prev) => ({ ...prev, dns_servers: prev.dns_servers.filter((_, i) => i !== index) }));
   };
 
   const saveSiteInfo = async () => {
     setSiteInfoSaving(true);
     try {
-      await updateProject(currentProjectId, siteInfoDraft);
+      const dns_servers = siteInfoDraft.dns_servers.map((s) => s.trim()).filter(Boolean).join(', ');
+      await updateProject(currentProjectId, { ...siteInfoDraft, dns_servers });
       setEditingSiteInfo(false);
     } finally {
       setSiteInfoSaving(false);
@@ -405,7 +458,7 @@ export default function DashboardPage() {
   if (error) return <div className="page-error">{error}</div>;
   if (!overview) return null;
 
-  const { summary, warnings } = overview;
+  const { summary } = overview;
 
   return (
     <div className="dashboard-page">
@@ -442,38 +495,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="dashboard-section">
-        <h3>Warnings</h3>
-        <div className="dashboard-warnings">
-          {WARNING_DEFS.map((def) => {
-            const items = warnings[def.key] || [];
-            const isOpen = !!expanded[def.key] && items.length > 0;
-            return (
-              <div key={def.key} className="dashboard-warning">
-                <button
-                  type="button"
-                  className="dashboard-warning-header"
-                  onClick={() => toggleWarning(def.key)}
-                  disabled={items.length === 0}
-                >
-                  {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  <AlertTriangle size={16} className={`dashboard-warning-icon${items.length === 0 ? ' ok' : ''}`} />
-                  <span className="dashboard-warning-label">{def.label}</span>
-                  <span className={`dashboard-warning-badge${items.length === 0 ? ' zero' : ''}`}>{items.length}</span>
-                </button>
-                {isOpen && (
-                  <ul className="dashboard-warning-list">
-                    {items.map((item) => (
-                      <li key={item.id}>{def.render(item)}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="dashboard-section">
         <div className="dashboard-section-header">
           <h3>Site Info</h3>
           {!editingSiteInfo && (
@@ -486,19 +507,24 @@ export default function DashboardPage() {
           <div className="dashboard-site-info-form">
             <div className="dashboard-site-info-group">
               <div className="dashboard-site-info-group-title">Address</div>
-              <textarea
-                className="dashboard-site-info-textarea"
-                value={siteInfoDraft.address}
-                onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, address: e.target.value })}
-                placeholder="Street address, city, state, zip"
-                rows={2}
-              />
+              <div className="dashboard-site-info-fields dashboard-site-info-address-fields">
+                <label className="dashboard-site-info-field-wide">Street Address<input value={siteInfoDraft.address_street} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, address_street: e.target.value })} placeholder="123 Main St" /></label>
+                <label>City<input value={siteInfoDraft.address_city} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, address_city: e.target.value })} placeholder="City" /></label>
+                <label>
+                  State
+                  <select value={siteInfoDraft.address_state} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, address_state: e.target.value })}>
+                    <option value="">—</option>
+                    {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label>ZIP Code<input value={siteInfoDraft.address_zip} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, address_zip: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="00000" inputMode="numeric" maxLength={10} /></label>
+              </div>
             </div>
             <div className="dashboard-site-info-group">
               <div className="dashboard-site-info-group-title">Site Contact</div>
               <div className="dashboard-site-info-fields">
                 <label>Name<input value={siteInfoDraft.site_contact_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_name: e.target.value })} placeholder="Full name" /></label>
-                <label>Phone<input value={siteInfoDraft.site_contact_phone} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_phone: e.target.value })} placeholder="Phone number" /></label>
+                <label>Phone<input value={formatPhoneNumber(siteInfoDraft.site_contact_phone)} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_phone: onlyDigits(e.target.value) })} placeholder="(555) 555-5555" /></label>
                 <label>Email<input value={siteInfoDraft.site_contact_email} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_email: e.target.value })} placeholder="Email address" /></label>
               </div>
             </div>
@@ -507,7 +533,7 @@ export default function DashboardPage() {
               <div className="dashboard-site-info-fields">
                 <label>Name<input value={siteInfoDraft.primary_isp_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_name: e.target.value })} placeholder="ISP name" /></label>
                 <label>Circuit ID<input value={siteInfoDraft.primary_isp_circuit_id} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_circuit_id: e.target.value })} placeholder="Circuit ID" /></label>
-                <label>Contact<input value={siteInfoDraft.primary_isp_contact} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_contact: e.target.value })} placeholder="ISP contact" /></label>
+                <label>Contact<input value={formatPhoneNumber(siteInfoDraft.primary_isp_contact)} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_contact: onlyDigits(e.target.value) })} placeholder="(555) 555-5555" /></label>
               </div>
             </div>
             <div className="dashboard-site-info-group">
@@ -515,16 +541,45 @@ export default function DashboardPage() {
               <div className="dashboard-site-info-fields">
                 <label>Name<input value={siteInfoDraft.secondary_isp_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_name: e.target.value })} placeholder="ISP name" /></label>
                 <label>Circuit ID<input value={siteInfoDraft.secondary_isp_circuit_id} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_circuit_id: e.target.value })} placeholder="Circuit ID" /></label>
-                <label>Contact<input value={siteInfoDraft.secondary_isp_contact} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_contact: e.target.value })} placeholder="ISP contact" /></label>
+                <label>Contact<input value={formatPhoneNumber(siteInfoDraft.secondary_isp_contact)} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_contact: onlyDigits(e.target.value) })} placeholder="(555) 555-5555" /></label>
               </div>
             </div>
             <div className="dashboard-site-info-group">
-              <div className="dashboard-site-info-group-title">Network</div>
+              <div className="dashboard-site-info-group-title">WAN</div>
               <div className="dashboard-site-info-fields">
                 <label>WAN IP<input value={siteInfoDraft.wan_ip} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, wan_ip: e.target.value })} placeholder="x.x.x.x" /></label>
                 <label>Subnet<input value={siteInfoDraft.wan_subnet} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, wan_subnet: e.target.value })} placeholder="/24" /></label>
                 <label>Gateway<input value={siteInfoDraft.wan_gateway} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, wan_gateway: e.target.value })} placeholder="x.x.x.1" /></label>
-                <label>DNS Servers<input value={siteInfoDraft.dns_servers} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, dns_servers: e.target.value })} placeholder="8.8.8.8, 8.8.4.4" /></label>
+              </div>
+            </div>
+            <div className="dashboard-site-info-group">
+              <div className="dashboard-site-info-group-title">LAN</div>
+              <div className="dashboard-site-info-fields">
+                <label>LAN IP / Network<input value={siteInfoDraft.lan_ip} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, lan_ip: e.target.value })} placeholder="x.x.x.x" /></label>
+                <label>Subnet<input value={siteInfoDraft.lan_subnet} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, lan_subnet: e.target.value })} placeholder="/24" /></label>
+                <label>Gateway<input value={siteInfoDraft.lan_gateway} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, lan_gateway: e.target.value })} placeholder="x.x.x.1" /></label>
+              </div>
+            </div>
+            <div className="dashboard-site-info-group">
+              <div className="dashboard-site-info-group-title">DNS Servers</div>
+              <div className="dashboard-dns-list">
+                {siteInfoDraft.dns_servers.map((server, index) => (
+                  <div key={index} className="dashboard-dns-row">
+                    <input
+                      value={server}
+                      onChange={(e) => updateDnsServer(index, e.target.value)}
+                      placeholder="e.g. 8.8.8.8"
+                    />
+                    {index > 0 && (
+                      <button type="button" className="dashboard-dns-remove" onClick={() => removeDnsServer(index)} aria-label="Remove DNS server">
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button type="button" className="dashboard-dns-add" onClick={addDnsServer}>
+                  <Plus size={13} /> Add DNS Server
+                </button>
               </div>
             </div>
             <div className="dashboard-site-info-actions">
@@ -538,28 +593,28 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="dashboard-site-info-view">
-            {currentProject?.address && (
+            {composeAddress(currentProject) && (
               <div className="dashboard-site-info-item">
                 <MapPin size={14} />
-                <span>{currentProject.address}</span>
+                <span>{composeAddress(currentProject)}</span>
               </div>
             )}
             {currentProject?.site_contact_name && (
               <div className="dashboard-site-info-item">
                 <span className="dashboard-site-info-label">Contact:</span>
-                <span>{currentProject.site_contact_name}{currentProject.site_contact_phone ? ` — ${currentProject.site_contact_phone}` : ''}{currentProject.site_contact_email ? ` — ${currentProject.site_contact_email}` : ''}</span>
+                <span>{currentProject.site_contact_name}{currentProject.site_contact_phone ? ` — ${formatPhoneNumber(currentProject.site_contact_phone)}` : ''}{currentProject.site_contact_email ? ` — ${currentProject.site_contact_email}` : ''}</span>
               </div>
             )}
             {currentProject?.primary_isp_name && (
               <div className="dashboard-site-info-item">
                 <span className="dashboard-site-info-label">Primary ISP:</span>
-                <span>{currentProject.primary_isp_name}{currentProject.primary_isp_circuit_id ? ` — ${currentProject.primary_isp_circuit_id}` : ''}</span>
+                <span>{currentProject.primary_isp_name}{currentProject.primary_isp_circuit_id ? ` — ${currentProject.primary_isp_circuit_id}` : ''}{currentProject.primary_isp_contact ? ` — ${formatPhoneNumber(currentProject.primary_isp_contact)}` : ''}</span>
               </div>
             )}
             {currentProject?.secondary_isp_name && (
               <div className="dashboard-site-info-item">
                 <span className="dashboard-site-info-label">Secondary ISP:</span>
-                <span>{currentProject.secondary_isp_name}{currentProject.secondary_isp_circuit_id ? ` — ${currentProject.secondary_isp_circuit_id}` : ''}</span>
+                <span>{currentProject.secondary_isp_name}{currentProject.secondary_isp_circuit_id ? ` — ${currentProject.secondary_isp_circuit_id}` : ''}{currentProject.secondary_isp_contact ? ` — ${formatPhoneNumber(currentProject.secondary_isp_contact)}` : ''}</span>
               </div>
             )}
             {(currentProject?.wan_ip || currentProject?.wan_subnet || currentProject?.wan_gateway) && (
@@ -568,13 +623,19 @@ export default function DashboardPage() {
                 <span>{[currentProject.wan_ip, currentProject.wan_subnet, currentProject.wan_gateway].filter(Boolean).join(' / ')}</span>
               </div>
             )}
+            {(currentProject?.lan_ip || currentProject?.lan_subnet || currentProject?.lan_gateway) && (
+              <div className="dashboard-site-info-item">
+                <span className="dashboard-site-info-label">LAN:</span>
+                <span>{[currentProject.lan_ip, currentProject.lan_subnet, currentProject.lan_gateway].filter(Boolean).join(' / ')}</span>
+              </div>
+            )}
             {currentProject?.dns_servers && (
               <div className="dashboard-site-info-item">
                 <span className="dashboard-site-info-label">DNS:</span>
                 <span>{currentProject.dns_servers}</span>
               </div>
             )}
-            {!currentProject?.address && !currentProject?.site_contact_name && !currentProject?.primary_isp_name && (
+            {!composeAddress(currentProject) && !currentProject?.site_contact_name && !currentProject?.primary_isp_name && (
               <p className="dashboard-empty">No site info recorded. Click Edit to add details.</p>
             )}
           </div>
@@ -603,26 +664,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-
-      <div className="dashboard-section">
-        <h3>Recent Activity</h3>
-        {activity.length === 0 ? (
-          <p className="dashboard-empty">No activity recorded yet.</p>
-        ) : (
-          <ul className="dashboard-activity-list">
-            {activity.map((entry) => (
-              <li key={entry.id} className="dashboard-activity-item">
-                <Activity size={14} className="dashboard-activity-icon" />
-                <span className="dashboard-activity-text">
-                  <strong>{entry.username}</strong> {describeAction(entry.action)}
-                  {entry.details ? <> — {entry.details}</> : null}
-                </span>
-                <span className="dashboard-activity-time">{formatTimestamp(entry.created_at)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </div>
   );
 }

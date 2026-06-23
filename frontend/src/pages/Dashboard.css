@@ -124,115 +124,6 @@
   font-size: 1rem;
 }
 
-.dashboard-warnings {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  max-width: 700px;
-}
-
-.dashboard-warning {
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.dashboard-warning-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.6rem 0.85rem;
-  border: none;
-  background-color: var(--color-bg-elevated);
-  color: var(--color-text);
-  font-size: 0.85rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.dashboard-warning-header:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-
-.dashboard-warning-icon {
-  color: var(--color-danger);
-}
-
-.dashboard-warning-icon.ok {
-  color: var(--color-text-faint);
-}
-
-.dashboard-warning-label {
-  flex: 1;
-}
-
-.dashboard-warning-badge {
-  min-width: 1.6rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  background-color: var(--color-danger-bg);
-  color: var(--color-danger);
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-align: center;
-}
-
-.dashboard-warning-badge.zero {
-  background-color: var(--color-bg-subtle);
-  color: var(--color-text-faint);
-}
-
-.dashboard-warning-list {
-  margin: 0;
-  padding: 0.5rem 0.85rem 0.75rem 2.5rem;
-  border-top: 1px solid var(--color-border);
-  background-color: var(--color-bg-subtle);
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-.dashboard-warning-list li {
-  padding: 0.15rem 0;
-}
-
-.dashboard-activity-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  max-width: 900px;
-}
-
-.dashboard-activity-item {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background-color: var(--color-bg-elevated);
-  font-size: 0.85rem;
-}
-
-.dashboard-activity-icon {
-  color: var(--color-text-faint);
-  flex-shrink: 0;
-}
-
-.dashboard-activity-text {
-  flex: 1;
-}
-
-.dashboard-activity-time {
-  color: var(--color-text-faint);
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
 .dashboard-empty {
   color: var(--color-text-muted);
   font-size: 0.85rem;
@@ -342,12 +233,12 @@
   outline: none;
 }
 
-.dashboard-site-info-fields input:focus {
+.dashboard-site-info-fields input:focus,
+.dashboard-site-info-fields select:focus {
   border-color: var(--color-accent);
 }
 
-.dashboard-site-info-textarea {
-  width: 100%;
+.dashboard-site-info-fields select {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -355,12 +246,76 @@
   font-size: 0.83rem;
   padding: 5px 8px;
   outline: none;
-  resize: vertical;
-  box-sizing: border-box;
 }
 
-.dashboard-site-info-textarea:focus {
+.dashboard-site-info-address-fields .dashboard-site-info-field-wide {
+  grid-column: 1 / -1;
+}
+
+.dashboard-dns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 320px;
+}
+
+.dashboard-dns-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dashboard-dns-row input {
+  flex: 1;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  font-size: 0.83rem;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.dashboard-dns-row input:focus {
   border-color: var(--color-accent);
+}
+
+.dashboard-dns-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.dashboard-dns-remove:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.dashboard-dns-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.dashboard-dns-add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .dashboard-site-info-actions {

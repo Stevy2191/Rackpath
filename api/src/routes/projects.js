@@ -80,6 +80,10 @@ router.patch('/:id', async (req, res, next) => {
       'name',
       'description',
       'address',
+      'address_street',
+      'address_city',
+      'address_state',
+      'address_zip',
       'site_contact_name',
       'site_contact_phone',
       'site_contact_email',
@@ -92,6 +96,9 @@ router.patch('/:id', async (req, res, next) => {
       'wan_ip',
       'wan_subnet',
       'wan_gateway',
+      'lan_ip',
+      'lan_subnet',
+      'lan_gateway',
       'dns_servers',
     ];
     const updates = [];
