@@ -300,8 +300,6 @@ export default function RackCanvas({
               isRenaming={renamingRackId === rack.id}
               onRenameSubmit={(name) => onRenameSubmit(rack.id, name)}
               onRenameCancel={onRenameCancel}
-              isFirst={idx === 0}
-              isLast={idx === sortedRacks.length - 1}
             />
           </React.Fragment>
         ))}

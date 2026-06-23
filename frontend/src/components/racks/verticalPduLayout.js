@@ -104,32 +104,14 @@ export function pduLeftPx({ side, stack }, frontWidth, hasGap) {
 // Returns Map<pduId, { side, stack, leftPx, top, height, cord: null | {
 //   upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY
 // } }>.
-export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frontWidth, frameHeight, hasGap, isFirst = false, isLast = false }) {
+export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frontWidth, frameHeight, hasGap }) {
   const assigned = computeVerticalPduPositions(verticalPdus);
   const { top, height } = pduBox(frameHeight);
   const pduBottomY = top + height;
 
-  // In a multi-rack row, route all cables for the leftmost rack to the left
-  // and all cables for the rightmost rack to the right, so no cord ever
-  // crosses into the inter-rack space. Re-stack all PDUs on that one side
-  // (stack 0, 1, 2…) since the original left/right split no longer applies.
-  // Single racks (isFirst && isLast) and middle racks keep normal assignment.
-  const forceLeft  = isFirst && !isLast;
-  const forceRight = isLast && !isFirst;
-
   const result = new Map();
-  let forcedStack = 0;
   for (const pdu of verticalPdus) {
-    let side, stack;
-    if (forceLeft) {
-      side = 'left';
-      stack = forcedStack++;
-    } else if (forceRight) {
-      side = 'right';
-      stack = forcedStack++;
-    } else {
-      ({ side, stack } = assigned.get(pdu.id));
-    }
+    const { side, stack } = assigned.get(pdu.id);
     const leftPx = pduLeftPx({ side, stack }, frontWidth, hasGap);
 
     let cord = null;

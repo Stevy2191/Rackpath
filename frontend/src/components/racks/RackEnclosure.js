@@ -353,8 +353,6 @@ export default function RackEnclosure({
   isRenaming,
   onRenameSubmit,
   onRenameCancel,
-  isFirst = false,
-  isLast = false,
 }) {
   const uRows = Array.from({ length: rack.u_height }, (_, i) => rack.u_height - i);
   const usedU = countUsedU(slots, rack.id);
@@ -422,8 +420,6 @@ export default function RackEnclosure({
     frontWidth,
     frameHeight: frameSize.height,
     hasGap: showRear,
-    isFirst,
-    isLast,
   });
 
   // Stop rendering the cords' traveling pulse while this rack is scrolled
