@@ -18,9 +18,18 @@
 .rack-canvas-content {
   display: inline-flex;
   align-items: flex-start;
-  gap: 40px;
+  gap: 0;
   padding: 24px;
   /* transform and opacity set by inline styles */
+}
+
+/* ─── Vertical separator between rack columns ────────────────── */
+.rack-column-separator {
+  width: 1px;
+  align-self: stretch;
+  background: #2a2e38;
+  margin: 0 80px;
+  flex-shrink: 0;
 }
 
 /* ─── Zoom controls (bottom-right overlay) ──────────────────── */

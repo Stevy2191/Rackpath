@@ -280,26 +280,30 @@ export default function RackCanvas({
           transition: 'opacity 0.15s ease',
         }}
       >
-        {sortedRacks.map((rack) => (
-          <RackEnclosure
-            key={rack.id}
-            rack={rack}
-            slots={allSlots.filter((s) => s.rack_id === rack.id)}
-            highlightedSlotId={highlightedSlotId}
-            selectedSlotId={selectedSlotId}
-            actions={actions}
-            draggingMeta={draggingMeta}
-            setDraggingMeta={setDraggingMeta}
-            onDrop={handleDrop}
-            onFocus={() => onFocusRack(rack.id)}
-            onEditRackRequest={() => onOpenRackEdit(rack.id)}
-            isFocused={focusedRackId === rack.id}
-            uHeight={U_HEIGHT}
-            onSelectSlot={onSelectSlot}
-            isRenaming={renamingRackId === rack.id}
-            onRenameSubmit={(name) => onRenameSubmit(rack.id, name)}
-            onRenameCancel={onRenameCancel}
-          />
+        {sortedRacks.map((rack, idx) => (
+          <React.Fragment key={rack.id}>
+            {idx > 0 && <div className="rack-column-separator" />}
+            <RackEnclosure
+              rack={rack}
+              slots={allSlots.filter((s) => s.rack_id === rack.id)}
+              highlightedSlotId={highlightedSlotId}
+              selectedSlotId={selectedSlotId}
+              actions={actions}
+              draggingMeta={draggingMeta}
+              setDraggingMeta={setDraggingMeta}
+              onDrop={handleDrop}
+              onFocus={() => onFocusRack(rack.id)}
+              onEditRackRequest={() => onOpenRackEdit(rack.id)}
+              isFocused={focusedRackId === rack.id}
+              uHeight={U_HEIGHT}
+              onSelectSlot={onSelectSlot}
+              isRenaming={renamingRackId === rack.id}
+              onRenameSubmit={(name) => onRenameSubmit(rack.id, name)}
+              onRenameCancel={onRenameCancel}
+              isFirst={idx === 0}
+              isLast={idx === sortedRacks.length - 1}
+            />
+          </React.Fragment>
         ))}
       </div>
 
