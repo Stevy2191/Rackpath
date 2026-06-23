@@ -135,7 +135,7 @@ router.get('/', async (req, res, next) => {
   try {
     const { rack_id } = req.query;
     let query = `
-      SELECT rs.*, d.hostname, d.ip, d.type AS device_type, d.status AS device_status
+      SELECT rs.*, d.hostname, d.ip, d.type AS inv_device_type, d.status AS device_status
       FROM rack_slots rs
       LEFT JOIN devices d ON d.id = rs.device_id
       WHERE rs.project_id = ?`;
@@ -169,6 +169,9 @@ router.post('/', async (req, res, next) => {
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
       port_count, bay_count, capacity_va, capacity_w,
+      device_type,
+      ups_va_rating, ups_watt_rating, ups_runtime_full, ups_runtime_half, ups_max_ebm_slots,
+      ebm_connected_ups_id, ebm_runtime_full, ebm_runtime_half,
       power_source_slot_id, power_source_outlet, mount_side,
       psu2_source_slot_id, psu2_source_outlet,
     } = req.body;
@@ -245,9 +248,12 @@ router.post('/', async (req, res, next) => {
           half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes,
           outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
           port_count, bay_count, capacity_va, capacity_w,
+          device_type,
+          ups_va_rating, ups_watt_rating, ups_runtime_full, ups_runtime_half, ups_max_ebm_slots,
+          ebm_connected_ups_id, ebm_runtime_full, ebm_runtime_half,
           power_source_slot_id, power_source_outlet, mount_side,
           psu2_source_slot_id, psu2_source_outlet)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
@@ -259,13 +265,17 @@ router.post('/', async (req, res, next) => {
         outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
         input_plug_type || null, capacity_value || null, capacity_unit || null,
         port_count || null, bay_count || null, capacity_va || null, capacity_w || null,
+        device_type || null,
+        ups_va_rating || null, ups_watt_rating || null, ups_runtime_full || null,
+        ups_runtime_half || null, ups_max_ebm_slots || null,
+        ebm_connected_ups_id || null, ebm_runtime_full || null, ebm_runtime_half || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
         psu2_source_slot_id || null, psu2_source_outlet || null,
       ]
     );
 
     const [rows] = await pool.query(
-      `SELECT rs.*, d.hostname, d.ip, d.type AS device_type, d.status AS device_status
+      `SELECT rs.*, d.hostname, d.ip, d.type AS inv_device_type, d.status AS device_status
        FROM rack_slots rs LEFT JOIN devices d ON d.id = rs.device_id WHERE rs.id = ?`,
       [result.insertId]
     );
@@ -291,6 +301,9 @@ router.put('/:id', async (req, res, next) => {
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
       port_count, bay_count, capacity_va, capacity_w,
+      device_type,
+      ups_va_rating, ups_watt_rating, ups_runtime_full, ups_runtime_half, ups_max_ebm_slots,
+      ebm_connected_ups_id, ebm_runtime_full, ebm_runtime_half,
       power_source_slot_id, power_source_outlet, mount_side,
       psu2_source_slot_id, psu2_source_outlet,
     } = req.body;
@@ -356,6 +369,9 @@ router.put('/:id', async (req, res, next) => {
            ip_address=?, slot_notes=?,
            outlet_groups=?, input_voltage=?, input_plug_type=?, capacity_value=?, capacity_unit=?,
            port_count=?, bay_count=?, capacity_va=?, capacity_w=?,
+           device_type=?,
+           ups_va_rating=?, ups_watt_rating=?, ups_runtime_full=?, ups_runtime_half=?, ups_max_ebm_slots=?,
+           ebm_connected_ups_id=?, ebm_runtime_full=?, ebm_runtime_half=?,
            power_source_slot_id=?, power_source_outlet=?, mount_side=?,
            psu2_source_slot_id=?, psu2_source_outlet=?
        WHERE id=? AND project_id=?`,
@@ -370,6 +386,10 @@ router.put('/:id', async (req, res, next) => {
         outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
         input_plug_type || null, capacity_value || null, capacity_unit || null,
         port_count || null, bay_count || null, capacity_va || null, capacity_w || null,
+        device_type || null,
+        ups_va_rating || null, ups_watt_rating || null, ups_runtime_full || null,
+        ups_runtime_half || null, ups_max_ebm_slots || null,
+        ebm_connected_ups_id || null, ebm_runtime_full || null, ebm_runtime_half || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
         psu2_source_slot_id || null, psu2_source_outlet || null,
         req.params.id, req.projectId,
@@ -378,7 +398,7 @@ router.put('/:id', async (req, res, next) => {
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack slot not found' });
 
     const [rows] = await pool.query(
-      `SELECT rs.*, d.hostname, d.ip, d.type AS device_type, d.status AS device_status
+      `SELECT rs.*, d.hostname, d.ip, d.type AS inv_device_type, d.status AS device_status
        FROM rack_slots rs LEFT JOIN devices d ON d.id = rs.device_id WHERE rs.id = ?`,
       [req.params.id]
     );
@@ -398,6 +418,9 @@ router.patch('/:id', async (req, res, next) => {
       'front_image_url', 'rear_image_url',
       'outlet_groups', 'input_voltage', 'input_plug_type', 'capacity_value', 'capacity_unit',
       'port_count', 'bay_count', 'capacity_va', 'capacity_w',
+      'device_type',
+      'ups_va_rating', 'ups_watt_rating', 'ups_runtime_full', 'ups_runtime_half', 'ups_max_ebm_slots',
+      'ebm_connected_ups_id', 'ebm_runtime_full', 'ebm_runtime_half',
       'power_source_slot_id', 'power_source_outlet', 'mount_side',
       'psu2_source_slot_id', 'psu2_source_outlet',
     ];
@@ -503,7 +526,7 @@ router.patch('/:id', async (req, res, next) => {
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack slot not found' });
 
     const [rows] = await pool.query(
-      `SELECT rs.*, d.hostname, d.ip, d.type AS device_type, d.status AS device_status
+      `SELECT rs.*, d.hostname, d.ip, d.type AS inv_device_type, d.status AS device_status
        FROM rack_slots rs LEFT JOIN devices d ON d.id = rs.device_id WHERE rs.id = ?`,
       [req.params.id]
     );

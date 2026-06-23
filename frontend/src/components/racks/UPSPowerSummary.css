@@ -1,0 +1,260 @@
+.ups-summary-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ups-summary-modal {
+  background: #12141a;
+  border: 1px solid #2a2e38;
+  border-radius: 12px;
+  width: 560px;
+  max-width: calc(100vw - 48px);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+  color: #d4d8e0;
+}
+
+.ups-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a2e38;
+  flex-shrink: 0;
+}
+
+.ups-summary-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #4adede;
+}
+
+.ups-summary-close {
+  background: none;
+  border: none;
+  color: #8b91a1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+.ups-summary-close:hover { color: #d4d8e0; }
+
+.ups-summary-body {
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ups-summary-empty {
+  color: #8b91a1;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* Per-UPS block */
+.ups-summary-block {
+  background: #0d0f14;
+  border: 1px solid #2a2e38;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ups-summary-ups-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #e6e9f0;
+}
+
+.ups-summary-spec-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.ups-summary-spec {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ups-summary-spec-label {
+  font-size: 0.68rem;
+  color: #8b91a1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ups-summary-spec-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #4adede;
+}
+
+.ups-summary-ebm-names {
+  font-size: 0.76rem;
+  color: #8b91a1;
+  font-style: italic;
+}
+
+.ups-summary-runtime-grid {
+  display: flex;
+  gap: 24px;
+}
+
+.ups-summary-runtime-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ups-summary-runtime-total {
+  border-left: 1px solid #2a2e38;
+  padding-left: 24px;
+}
+
+.ups-summary-runtime-header {
+  font-size: 0.68rem;
+  color: #8b91a1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.ups-summary-runtime-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: #c8cdd8;
+}
+
+.ups-summary-muted {
+  font-size: 0.72rem;
+  color: #6b7180;
+}
+
+.ups-summary-est {
+  font-size: 0.8rem;
+  color: #8b91a1;
+  padding-top: 4px;
+  border-top: 1px solid #1e2230;
+}
+
+.ups-summary-est strong { color: #4adede; }
+
+/* Totals section */
+.ups-summary-totals-section {
+  background: #0a0c11;
+  border: 1px solid #3a3f4a;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ups-summary-totals-label {
+  font-size: 0.68rem;
+  color: #8b91a1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.ups-summary-totals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.ups-summary-tl {
+  font-size: 0.68rem;
+  color: #8b91a1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+.ups-summary-tv {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e6e9f0;
+}
+
+/* Load slider */
+.ups-summary-slider-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ups-summary-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ups-summary-slider-label {
+  font-size: 0.78rem;
+  color: #8b91a1;
+  white-space: nowrap;
+  min-width: 32px;
+}
+
+.ups-summary-slider {
+  flex: 1;
+  accent-color: #4adede;
+  cursor: pointer;
+}
+
+.ups-summary-slider-pct {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #4adede;
+  min-width: 36px;
+  text-align: right;
+}
+
+.ups-summary-est-total {
+  font-size: 0.82rem;
+  color: #8b91a1;
+}
+.ups-summary-est-total strong { color: #4adede; }
+
+/* Redundancy note */
+.ups-summary-redundancy {
+  font-size: 0.8rem;
+  color: #8b91a1;
+  padding: 8px 10px;
+  background: rgba(74, 222, 222, 0.05);
+  border: 1px solid rgba(74, 222, 222, 0.2);
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
+.ups-summary-redundancy-val {
+  color: #4adede;
+  font-weight: 600;
+}

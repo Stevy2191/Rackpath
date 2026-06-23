@@ -86,6 +86,15 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
       capacity_unit:        slot.capacity_unit         || 'A',
       port_count:           slot.port_count           ?? '',
       bay_count:            slot.bay_count            ?? '',
+      device_type:              slot.device_type              || null,
+      ups_va_rating:            slot.ups_va_rating            ?? '',
+      ups_watt_rating:          slot.ups_watt_rating          ?? '',
+      ups_runtime_full:         slot.ups_runtime_full         ?? '',
+      ups_runtime_half:         slot.ups_runtime_half         ?? '',
+      ups_max_ebm_slots:        slot.ups_max_ebm_slots        ?? '',
+      ebm_connected_ups_id:     slot.ebm_connected_ups_id     || null,
+      ebm_runtime_full:         slot.ebm_runtime_full         ?? '',
+      ebm_runtime_half:         slot.ebm_runtime_half         ?? '',
       half_width:    !!slot.half_width,
       half_depth:    !!slot.half_depth,
       power_source_slot_id: slot.power_source_slot_id || null,
@@ -665,6 +674,130 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
               <>
                 <div className="props-section-divider">Configuration</div>
                 <DeviceConfigFields schema={configSchema} values={fields} onChange={setField} />
+              </>
+            )}
+
+            {!passive && (
+              <>
+                <div className="props-section-divider">Type Classification</div>
+                <div className="props-field">
+                  <label className="props-field-label">Device Type</label>
+                  <select
+                    className="props-input"
+                    value={fields.device_type || ''}
+                    onChange={(e) => setFieldNow('device_type', e.target.value || null)}
+                  >
+                    <option value="">None</option>
+                    <option value="ups">UPS</option>
+                    <option value="ebm">EBM (Extended Battery Module)</option>
+                  </select>
+                </div>
+
+                {fields.device_type === 'ups' && (
+                  <>
+                    <div className="props-section-divider">Power Capacity</div>
+                    <div className="props-field">
+                      <label className="props-field-label">VA Rating</label>
+                      <input
+                        className="props-input"
+                        type="number"
+                        min="0"
+                        value={fields.ups_va_rating}
+                        onChange={(e) => setField('ups_va_rating', e.target.value === '' ? null : Number(e.target.value))}
+                        placeholder="e.g. 5000"
+                      />
+                    </div>
+                    <div className="props-field">
+                      <label className="props-field-label">Watt Rating</label>
+                      <input
+                        className="props-input"
+                        type="number"
+                        min="0"
+                        value={fields.ups_watt_rating}
+                        onChange={(e) => setField('ups_watt_rating', e.target.value === '' ? null : Number(e.target.value))}
+                        placeholder="e.g. 4500"
+                      />
+                    </div>
+                    <div className="props-field">
+                      <label className="props-field-label">Runtime at 100% Load (min)</label>
+                      <input
+                        className="props-input"
+                        type="number"
+                        min="0"
+                        value={fields.ups_runtime_full}
+                        onChange={(e) => setField('ups_runtime_full', e.target.value === '' ? null : Number(e.target.value))}
+                        placeholder="e.g. 10"
+                      />
+                    </div>
+                    <div className="props-field">
+                      <label className="props-field-label">Runtime at 50% Load (min)</label>
+                      <input
+                        className="props-input"
+                        type="number"
+                        min="0"
+                        value={fields.ups_runtime_half}
+                        onChange={(e) => setField('ups_runtime_half', e.target.value === '' ? null : Number(e.target.value))}
+                        placeholder="e.g. 25"
+                      />
+                    </div>
+                    <div className="props-field">
+                      <label className="props-field-label">Max EBM Slots</label>
+                      <input
+                        className="props-input"
+                        type="number"
+                        min="0"
+                        value={fields.ups_max_ebm_slots}
+                        onChange={(e) => setField('ups_max_ebm_slots', e.target.value === '' ? null : Number(e.target.value))}
+                        placeholder="e.g. 4"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {fields.device_type === 'ebm' && (
+                  <>
+                    <div className="props-section-divider">Battery Extension</div>
+                    <div className="props-field">
+                      <label className="props-field-label">Connected To (UPS)</label>
+                      <select
+                        className="props-input"
+                        value={fields.ebm_connected_ups_id || ''}
+                        onChange={(e) => setFieldNow('ebm_connected_ups_id', e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">Not connected</option>
+                        {(rackSlots || [])
+                          .filter((s) => s.device_type === 'ups' && s.id !== slot.id)
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.item_label || s.hostname || `Slot ${s.id}`}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="props-field">
+                      <label className="props-field-label">Added Runtime at 100% Load (min)</label>
+                      <input
+                        className="props-input"
+                        type="number"
+                        min="0"
+                        value={fields.ebm_runtime_full}
+                        onChange={(e) => setField('ebm_runtime_full', e.target.value === '' ? null : Number(e.target.value))}
+                        placeholder="e.g. 8"
+                      />
+                    </div>
+                    <div className="props-field">
+                      <label className="props-field-label">Added Runtime at 50% Load (min)</label>
+                      <input
+                        className="props-input"
+                        type="number"
+                        min="0"
+                        value={fields.ebm_runtime_half}
+                        onChange={(e) => setField('ebm_runtime_half', e.target.value === '' ? null : Number(e.target.value))}
+                        placeholder="e.g. 20"
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
 

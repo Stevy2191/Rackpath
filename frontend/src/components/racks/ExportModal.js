@@ -689,7 +689,7 @@ function buildCsvRows(targetRacks, allSlots) {
         s.u_position,
         s.u_size,
         s.mounted_face || 'front',
-        s.custom_type || s.device_type || s.item_type || '',
+        s.custom_type || s.inv_device_type || s.item_type || '',
         s.ip_address || s.ip || '',
         (s.slot_notes || '').replace(/"/g, '""'),
       ];

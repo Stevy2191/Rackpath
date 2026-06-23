@@ -92,7 +92,7 @@ const KEYWORD_RULES = [
 ];
 
 export function resolveRenderType(slot) {
-  const raw = slot.custom_type || slot.device_type || slot.item_type || '';
+  const raw = slot.custom_type || slot.inv_device_type || slot.item_type || '';
   const lower = String(raw).toLowerCase();
   if (CATEGORY_CONFIG[lower]) return lower;
   for (const [re, type] of KEYWORD_RULES) {

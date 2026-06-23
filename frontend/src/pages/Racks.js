@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, LayoutGrid, Plus } from 'lucide-react';
+import { Download, LayoutGrid, Plus, Zap } from 'lucide-react';
 import client from '../api/client';
 import PortEditorModal from '../components/PortEditorModal';
 import RackCanvas from '../components/racks/RackCanvas';
@@ -14,6 +14,7 @@ import AddRackModal from '../components/racks/AddRackModal';
 import RackDeviceContextMenu from '../components/racks/RackDeviceContextMenu';
 import RackContextMenu from '../components/racks/RackContextMenu';
 import ExportModal from '../components/racks/ExportModal';
+import UPSPowerSummary from '../components/racks/UPSPowerSummary';
 import ConfirmModal from '../components/racks/ConfirmModal';
 import { getDeviceLabel } from '../components/racks/DeviceBlock';
 import './Racks.css';
@@ -46,6 +47,7 @@ export default function RacksPage() {
   const [addRackOpen, setAddRackOpen] = useState(false);
   const [deleteConfirmSlot, setDeleteConfirmSlot] = useState(null);
   const [deleteConfirmRack, setDeleteConfirmRack] = useState(null);
+  const [upsSummaryOpen, setUpsSummaryOpen] = useState(false);
   const racksMainRef = useRef(null);
 
   const loadRacks = useCallback(() => {
@@ -99,6 +101,7 @@ export default function RacksPage() {
       setRackEditOpen(false);
       setRackContextMenu(null);
       setExportModal(null);
+      setUpsSummaryOpen(false);
       setRenamingRackId(null);
       setDeleteConfirmSlot(null);
       setDeleteConfirmRack(null);
@@ -170,6 +173,15 @@ export default function RacksPage() {
           capacity_unit: slot.capacity_unit,
           capacity_va: slot.capacity_va,
           capacity_w: slot.capacity_w,
+          device_type: slot.device_type,
+          ups_va_rating: slot.ups_va_rating,
+          ups_watt_rating: slot.ups_watt_rating,
+          ups_runtime_full: slot.ups_runtime_full,
+          ups_runtime_half: slot.ups_runtime_half,
+          ups_max_ebm_slots: slot.ups_max_ebm_slots,
+          ebm_connected_ups_id: slot.ebm_connected_ups_id,
+          ebm_runtime_full: slot.ebm_runtime_full,
+          ebm_runtime_half: slot.ebm_runtime_half,
           port_count: slot.port_count,
           bay_count: slot.bay_count,
           power_source_slot_id: slot.power_source_slot_id,
@@ -242,6 +254,16 @@ export default function RacksPage() {
           input_plug_type: slot.input_plug_type,
           capacity_va: slot.capacity_va,
           capacity_w: slot.capacity_w,
+          device_type: slot.device_type,
+          ups_va_rating: slot.ups_va_rating,
+          ups_watt_rating: slot.ups_watt_rating,
+          ups_runtime_full: slot.ups_runtime_full,
+          ups_runtime_half: slot.ups_runtime_half,
+          ups_max_ebm_slots: slot.ups_max_ebm_slots,
+          // ebm_connected_ups_id intentionally omitted — it references a slot
+          // ID in the original rack that won't exist in the duplicated context.
+          ebm_runtime_full: slot.ebm_runtime_full,
+          ebm_runtime_half: slot.ebm_runtime_half,
           capacity_value: slot.capacity_value,
           capacity_unit: slot.capacity_unit,
           port_count: slot.port_count,
@@ -313,6 +335,15 @@ export default function RacksPage() {
             input_plug_type: slot.input_plug_type,
             capacity_va: slot.capacity_va,
             capacity_w: slot.capacity_w,
+            device_type: slot.device_type,
+            ups_va_rating: slot.ups_va_rating,
+            ups_watt_rating: slot.ups_watt_rating,
+            ups_runtime_full: slot.ups_runtime_full,
+            ups_runtime_half: slot.ups_runtime_half,
+            ups_max_ebm_slots: slot.ups_max_ebm_slots,
+            // ebm_connected_ups_id intentionally omitted — references original rack slot IDs.
+            ebm_runtime_full: slot.ebm_runtime_full,
+            ebm_runtime_half: slot.ebm_runtime_half,
             capacity_value: slot.capacity_value,
             capacity_unit: slot.capacity_unit,
             port_count: slot.port_count,
@@ -338,6 +369,12 @@ export default function RacksPage() {
   const requestPlacement = (pending) => setPendingPlacement(pending);
   const cancelPlacement = () => setPendingPlacement(null);
 
+  const inferDeviceType = (renderType, label) => {
+    if (renderType === 'ups' || /\bups\b/i.test(label || '')) return 'ups';
+    if (renderType === 'ebm' || /\bebm\b|battery module|extended battery/i.test(label || '')) return 'ebm';
+    return null;
+  };
+
   const confirmPlacement = (fields) => {
     if (!pendingPlacement) return;
     const { source, entry, target } = pendingPlacement;
@@ -360,6 +397,7 @@ export default function RacksPage() {
       input_plug_type: fields.input_plug_type || null,
       capacity_va: fields.capacity_va || null,
       capacity_w: fields.capacity_w || null,
+      device_type: inferDeviceType(renderType, fields.label),
       capacity_value: fields.capacity_value || null,
       capacity_unit: fields.capacity_unit || null,
       port_count: fields.port_count || null,
@@ -450,7 +488,7 @@ export default function RacksPage() {
         color: s.color,
         ip_address: s.ip_address,
         slot_notes: s.slot_notes,
-        ...(s.hostname ? { device: { hostname: s.hostname, ip: s.ip, type: s.device_type } } : {}),
+        ...(s.hostname ? { device: { hostname: s.hostname, ip: s.ip, type: s.inv_device_type } } : {}),
       }));
     const data = {
       version: '1.0',
@@ -565,6 +603,14 @@ export default function RacksPage() {
           >
             <Download size={14} /> Export…
           </button>
+          <button
+            type="button"
+            disabled={!focusedRack}
+            onClick={() => setUpsSummaryOpen(true)}
+            title={focusedRack ? `UPS summary for ${focusedRack.name}` : 'Focus a rack to view UPS summary'}
+          >
+            <Zap size={14} /> Power Summary
+          </button>
           <button type="button" className={catalogOpen ? 'active' : ''} onClick={() => setCatalogOpen((v) => !v)}>
             <LayoutGrid size={14} /> Device Catalog
           </button>
@@ -660,6 +706,14 @@ export default function RacksPage() {
           targetRacks={exportModal.targetRacks}
           allSlots={allSlots}
           onClose={() => setExportModal(null)}
+        />
+      )}
+
+      {upsSummaryOpen && focusedRack && (
+        <UPSPowerSummary
+          rack={focusedRack}
+          allSlots={allSlots}
+          onClose={() => setUpsSummaryOpen(false)}
         />
       )}
 
