@@ -33,6 +33,8 @@ const SCOPED_TABLES = [
   'device_tag_assignments',
   'device_tags',
   'project_access_devices',
+  'rooms',
+  'locations',
   // Children of racks
   'rack_slots',
   'rack_custom_devices',
@@ -74,7 +76,24 @@ router.post('/', async (req, res, next) => {
 // PATCH /api/projects/:id - rename / update a project
 router.patch('/:id', async (req, res, next) => {
   try {
-    const allowed = ['name', 'description'];
+    const allowed = [
+      'name',
+      'description',
+      'address',
+      'site_contact_name',
+      'site_contact_phone',
+      'site_contact_email',
+      'primary_isp_name',
+      'primary_isp_circuit_id',
+      'primary_isp_contact',
+      'secondary_isp_name',
+      'secondary_isp_circuit_id',
+      'secondary_isp_contact',
+      'wan_ip',
+      'wan_subnet',
+      'wan_gateway',
+      'dns_servers',
+    ];
     const updates = [];
     const values = [];
     for (const field of allowed) {
@@ -236,6 +255,8 @@ router.get('/:id/overview', async (req, res, next) => {
       racks,
       vlans,
       links,
+      locations,
+      rooms,
     ] = await Promise.all([
       scalar('SELECT COUNT(*) AS count FROM devices WHERE project_id = ?', [projectId]),
       scalar('SELECT COUNT(*) AS count FROM project_cameras WHERE project_id = ?', [projectId]),
@@ -261,7 +282,7 @@ router.get('/:id/overview', async (req, res, next) => {
       pool.query("SELECT id, label, type FROM topology_nodes WHERE project_id = ? AND device_id IS NULL", [projectId]),
       pool.query('SELECT id, hostname, ip, type, location, make, model FROM devices WHERE project_id = ? ORDER BY hostname', [projectId]),
       pool.query(
-        `SELECT r.id, r.name, r.location, r.u_height,
+        `SELECT r.id, r.name, r.location, r.u_height, r.location_id, r.room_id,
                 COALESCE(SUM(rs.u_size), 0) AS used_u
          FROM racks r
          LEFT JOIN rack_slots rs ON rs.rack_id = r.id AND rs.device_id IS NOT NULL
@@ -281,6 +302,26 @@ router.get('/:id/overview', async (req, res, next) => {
          LEFT JOIN topology_nodes tn ON tn.id = e.target_node_id
          LEFT JOIN devices td ON td.id = tn.device_id
          WHERE e.project_id = ?`,
+        [projectId]
+      ),
+      pool.query(
+        `SELECT l.id, l.name, l.building_number,
+                COUNT(DISTINCT r2.id) AS room_count,
+                COUNT(DISTINCT rk.id) AS rack_count
+         FROM locations l
+         LEFT JOIN rooms r2 ON r2.location_id = l.id
+         LEFT JOIN racks rk ON rk.location_id = l.id
+         WHERE l.project_id = ?
+         GROUP BY l.id
+         ORDER BY l.name`,
+        [projectId]
+      ),
+      pool.query(
+        `SELECT r.*, l.name AS location_name
+         FROM rooms r
+         JOIN locations l ON l.id = r.location_id
+         WHERE l.project_id = ?
+         ORDER BY l.name, r.name`,
         [projectId]
       ),
     ]);
@@ -309,6 +350,8 @@ router.get('/:id/overview', async (req, res, next) => {
         racks: racks[0],
         vlans: vlans[0],
         links: links[0],
+        locations: locations[0],
+        rooms: rooms[0],
       },
     });
   } catch (err) {

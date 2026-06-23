@@ -41,7 +41,9 @@ const COLUMN_DEFS = [
   { key: 'ip', label: 'IP Address' },
   { key: 'mac', label: 'MAC Address' },
   { key: 'type', label: 'Type' },
-  { key: 'location', label: 'Location' },
+  { key: 'location', label: 'Custom Location' },
+  { key: 'location_name', label: 'Location' },
+  { key: 'room_name', label: 'Room' },
   { key: 'make', label: 'Make' },
   { key: 'model', label: 'Model' },
   { key: 'serial_number', label: 'Serial Number' },
@@ -54,7 +56,9 @@ const DEFAULT_VISIBLE_COLUMNS = {
   ip: true,
   mac: true,
   type: true,
-  location: true,
+  location: false,
+  location_name: true,
+  room_name: true,
   make: false,
   model: true,
   serial_number: false,
@@ -110,6 +114,9 @@ export default function DevicesPage() {
   const [tags, setTags] = useState([]);
   const [macros, setMacros] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [roomsList, setRoomsList] = useState([]);
+  const [locationIdFilter, setLocationIdFilter] = useState('');
+  const [roomIdFilter, setRoomIdFilter] = useState('');
   const [scanningId, setScanningId] = useState(null);
   const [scanResult, setScanResult] = useState(null); // { device, result }
   const [toast, setToast] = useState(null);
@@ -145,6 +152,8 @@ export default function DevicesPage() {
     if (search.trim()) params.search = search.trim();
     if (typeFilter) params.type = typeFilter;
     if (locationFilter) params.location = locationFilter;
+    if (locationIdFilter) params.location_id = locationIdFilter;
+    if (roomIdFilter) params.room_id = roomIdFilter;
     if (tagFilterIds.length) params.tag = tagFilterIds.join(',');
     return params;
   };
@@ -197,16 +206,19 @@ export default function DevicesPage() {
   };
 
   const loadLocations = () => {
+    if (!currentProjectId) return;
     client
-      .get('/devices')
-      .then((res) => {
-        const set = new Set();
-        (res.data || []).forEach((d) => {
-          if (d.location) set.add(d.location);
-        });
-        setLocations(Array.from(set).sort());
-      })
-      .catch(() => {});
+      .get(`/projects/${currentProjectId}/locations`)
+      .then((res) => setLocations(res.data || []))
+      .catch(() => setLocations([]));
+  };
+
+  const loadRoomsForLocation = (locationId) => {
+    if (!locationId) { setRoomsList([]); return; }
+    client
+      .get(`/locations/${locationId}/rooms`)
+      .then((res) => setRoomsList(res.data || []))
+      .catch(() => setRoomsList([]));
   };
 
   const loadInterfaces = (device) => {
@@ -224,7 +236,8 @@ export default function DevicesPage() {
 
   useEffect(() => {
     loadLocations();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId]);
 
   useEffect(() => {
     loadTags();
@@ -241,7 +254,7 @@ export default function DevicesPage() {
     }, 250);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, typeFilter, locationFilter, tagFilterIds]);
+  }, [search, typeFilter, locationFilter, locationIdFilter, roomIdFilter, tagFilterIds]);
 
   useEffect(() => {
     if (id) setSelectedDeviceId(Number(id));
@@ -526,6 +539,9 @@ export default function DevicesPage() {
     setSearch('');
     setTypeFilter('');
     setLocationFilter('');
+    setLocationIdFilter('');
+    setRoomIdFilter('');
+    setRoomsList([]);
     setTagFilterIds([]);
   };
 
@@ -538,7 +554,7 @@ export default function DevicesPage() {
     loadDevices(buildParams());
   };
 
-  const filtersActive = !!(search || typeFilter || locationFilter || tagFilterIds.length);
+  const filtersActive = !!(search || typeFilter || locationFilter || locationIdFilter || roomIdFilter || tagFilterIds.length);
 
   // Access devices live in a separate table, so they're fetched separately
   // and merged into the All Devices view as read-only rows with an "Access"
@@ -613,14 +629,31 @@ export default function DevicesPage() {
             ))}
           </select>
 
-          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
-            <option value="">All Locations</option>
-            {locations.map((loc) => (
-              <option key={loc} value={loc}>
-                {loc}
-              </option>
-            ))}
-          </select>
+          {locations.length > 0 && (
+            <select
+              value={locationIdFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setLocationIdFilter(val);
+                setRoomIdFilter('');
+                loadRoomsForLocation(val);
+              }}
+            >
+              <option value="">All Locations</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+          )}
+
+          {locationIdFilter && roomsList.length > 0 && (
+            <select value={roomIdFilter} onChange={(e) => setRoomIdFilter(e.target.value)}>
+              <option value="">All Rooms</option>
+              {roomsList.map((room) => (
+                <option key={room.id} value={room.id}>{room.name}</option>
+              ))}
+            </select>
+          )}
 
           <div className="devices-tag-filters">
             {tags.map((tag) => (
@@ -778,7 +811,9 @@ export default function DevicesPage() {
               {visibleColumns.ip && <th>IP Address</th>}
               {visibleColumns.mac && <th>MAC Address</th>}
               {visibleColumns.type && <th>Type</th>}
-              {visibleColumns.location && <th>Location</th>}
+              {visibleColumns.location && <th>Custom Location</th>}
+              {visibleColumns.location_name && <th>Location</th>}
+              {visibleColumns.room_name && <th>Room</th>}
               {visibleColumns.make && <th>Make</th>}
               {visibleColumns.model && <th>Model</th>}
               {visibleColumns.serial_number && <th>Serial Number</th>}
@@ -867,6 +902,8 @@ export default function DevicesPage() {
                       )}
                     </td>
                   )}
+                  {visibleColumns.location_name && <td>{device.location_name || '—'}</td>}
+                  {visibleColumns.room_name && <td>{device.room_name || '—'}</td>}
                   {visibleColumns.make && <td>{device.make || ''}</td>}
                   {visibleColumns.model && <td>{device.model || ''}</td>}
                   {visibleColumns.serial_number && <td>{device.serial_number || ''}</td>}

@@ -40,10 +40,13 @@ router.get('/', async (req, res, next) => {
 
     if (includeDevices) {
       let query =
-        'SELECT d.*, tn.id AS topology_node_id, pi.platform AS source_integration_platform, pi.name AS source_integration_name ' +
+        'SELECT d.*, tn.id AS topology_node_id, pi.platform AS source_integration_platform, pi.name AS source_integration_name, ' +
+        'l.name AS location_name, r.name AS room_name ' +
         'FROM devices d ' +
         'LEFT JOIN topology_nodes tn ON tn.device_id = d.id ' +
-        'LEFT JOIN project_integrations pi ON pi.id = d.source_integration_id';
+        'LEFT JOIN project_integrations pi ON pi.id = d.source_integration_id ' +
+        'LEFT JOIN locations l ON l.id = d.location_id ' +
+        'LEFT JOIN rooms r ON r.id = d.room_id';
 
       const conditions = ['d.project_id = ?'];
       const params = [req.projectId];
@@ -58,6 +61,14 @@ router.get('/', async (req, res, next) => {
       if (req.query.location) {
         conditions.push('d.location = ?');
         params.push(req.query.location);
+      }
+      if (req.query.location_id) {
+        conditions.push('d.location_id = ?');
+        params.push(parseInt(req.query.location_id, 10));
+      }
+      if (req.query.room_id) {
+        conditions.push('d.room_id = ?');
+        params.push(parseInt(req.query.room_id, 10));
       }
       if (req.query.search) {
         conditions.push('(d.hostname LIKE ? OR d.ip LIKE ? OR d.model LIKE ? OR d.serial_number LIKE ?)');
@@ -434,11 +445,12 @@ router.post('/', async (req, res, next) => {
 // PUT /api/devices/:id - update device
 router.put('/:id', async (req, res, next) => {
   try {
-    const { hostname, ip, mac, type, snmp_community, notes, location, make, model, serial_number, purchase_date, warranty_expiry } = req.body;
+    const { hostname, ip, mac, type, snmp_community, notes, location, make, model, serial_number, purchase_date, warranty_expiry, location_id, room_id } = req.body;
     const [result] = await pool.query(
       `UPDATE devices
        SET hostname = ?, ip = ?, mac = ?, type = ?, snmp_community = ?, notes = ?, location = ?,
-           make = ?, model = ?, serial_number = ?, purchase_date = ?, warranty_expiry = ?
+           make = ?, model = ?, serial_number = ?, purchase_date = ?, warranty_expiry = ?,
+           location_id = ?, room_id = ?
        WHERE id = ? AND project_id = ?`,
       [
         hostname || null,
@@ -453,6 +465,8 @@ router.put('/:id', async (req, res, next) => {
         serial_number || null,
         purchase_date || null,
         warranty_expiry || null,
+        location_id || null,
+        room_id || null,
         req.params.id,
         req.projectId,
       ]
@@ -486,6 +500,8 @@ router.patch('/:id', async (req, res, next) => {
       'purchase_date',
       'warranty_expiry',
       'credential_macro_id',
+      'location_id',
+      'room_id',
     ];
     const updates = [];
     const values = [];

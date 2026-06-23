@@ -10,6 +10,7 @@ import DevicesPage from './pages/Devices';
 import MacrosPage from './pages/Macros';
 import CamerasPage from './pages/Cameras';
 import AccessDevicesPage from './pages/AccessDevices';
+import LocationsPage from './pages/Locations';
 import IntegrationsPage from './pages/Integrations';
 import NetworkToolsPage from './pages/NetworkTools';
 import ScanPage from './pages/Scan';
@@ -166,6 +167,14 @@ function AppShell() {
             element={
               <RequireAuth>
                 <NetworkToolsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/locations"
+            element={
+              <RequireAuth>
+                <LocationsPage />
               </RequireAuth>
             }
           />

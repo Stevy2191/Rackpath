@@ -12,6 +12,7 @@ const links = [
   { to: '/topology', label: 'Topology' },
   { to: '/vlans', label: 'VLANs' },
   { to: '/racks', label: 'Racks' },
+  { to: '/locations', label: 'Locations' },
 ];
 
 const afterLinks = [

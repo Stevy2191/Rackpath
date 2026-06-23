@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Download, Trash2 } from 'lucide-react';
+import client from '../../api/client';
 import './RackEditPanel.css';
 
 const RACK_TYPES = [
@@ -29,7 +30,7 @@ const ANNOTATION_FIELDS = [
   { value: 'manufacturer', label: 'Manufacturer' },
 ];
 
-export default function RackEditPanel({ rack, usedU = 0, onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
+export default function RackEditPanel({ rack, usedU = 0, locations = [], onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
   const [edits, setEdits] = useState({
     name:             rack.name,
     location:         rack.location         || '',
@@ -39,9 +40,12 @@ export default function RackEditPanel({ rack, usedU = 0, onClose, onSave, onDupl
     notes:            rack.notes             || '',
     show_rear:        rack.show_rear !== undefined ? rack.show_rear : 1,
     annotation_field: rack.annotation_field  || 'none',
+    location_id:      rack.location_id       || '',
+    room_id:          rack.room_id           || '',
   });
 
   const [saving, setSaving] = useState(false);
+  const [roomsList, setRoomsList] = useState([]);
 
   useEffect(() => {
     setEdits({
@@ -53,8 +57,17 @@ export default function RackEditPanel({ rack, usedU = 0, onClose, onSave, onDupl
       notes:            rack.notes             || '',
       show_rear:        rack.show_rear !== undefined ? rack.show_rear : 1,
       annotation_field: rack.annotation_field  || 'none',
+      location_id:      rack.location_id       || '',
+      room_id:          rack.room_id           || '',
     });
   }, [rack.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!edits.location_id) { setRoomsList([]); return; }
+    client.get(`/locations/${edits.location_id}/rooms`)
+      .then((res) => setRoomsList(res.data || []))
+      .catch(() => setRoomsList([]));
+  }, [edits.location_id]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -114,6 +127,38 @@ export default function RackEditPanel({ rack, usedU = 0, onClose, onSave, onDupl
               placeholder="e.g. DC1 Row 3"
             />
           </div>
+
+          {locations.length > 0 && (
+            <div className="rep-field">
+              <label className="rep-label">BUILDING / LOCATION</label>
+              <select
+                className="rep-input"
+                value={edits.location_id}
+                onChange={(e) => setEdits({ ...edits, location_id: e.target.value || '', room_id: '' })}
+              >
+                <option value="">— Unassigned —</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {edits.location_id && roomsList.length > 0 && (
+            <div className="rep-field">
+              <label className="rep-label">ROOM</label>
+              <select
+                className="rep-input"
+                value={edits.room_id}
+                onChange={(e) => setEdits({ ...edits, room_id: e.target.value || '' })}
+              >
+                <option value="">— Unassigned —</option>
+                {roomsList.map((room) => (
+                  <option key={room.id} value={room.id}>{room.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="rep-field">
             <label className="rep-label">WIDTH</label>

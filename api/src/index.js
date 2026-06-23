@@ -22,6 +22,7 @@ const macrosRouter = require('./routes/macros');
 const camerasRouter = require('./routes/cameras');
 const accessDevicesRouter = require('./routes/access-devices');
 const toolsRouter = require('./routes/tools');
+const locationsRouter = require('./routes/locations');
 const { requireAuth } = require('./auth/middleware');
 const { projectScope } = require('./middleware/projectScope');
 const { migrate } = require('./db/migrate');
@@ -63,6 +64,7 @@ app.use('/api', macrosRouter);
 app.use('/api', camerasRouter);
 app.use('/api', accessDevicesRouter);
 app.use('/api/tools', toolsRouter);
+app.use('/api', locationsRouter);
 
 // Fallback error handler
 app.use((err, req, res, next) => {

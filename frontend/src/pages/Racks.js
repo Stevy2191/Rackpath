@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Download, LayoutGrid, Plus, Zap } from 'lucide-react';
 import client from '../api/client';
+import { useProject } from '../project/ProjectContext';
 import PortEditorModal from '../components/PortEditorModal';
 import RackCanvas from '../components/racks/RackCanvas';
 import DeviceCatalog from '../components/racks/DeviceCatalog';
@@ -26,8 +27,10 @@ function scrollRackIntoView(rackId) {
 }
 
 export default function RacksPage() {
+  const { currentProjectId } = useProject();
   const [searchParams, setSearchParams] = useSearchParams();
   const [racks, setRacks] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [devices, setDevices] = useState([]);
   const [allSlots, setAllSlots] = useState([]);
   const [userCatalogEntries, setUserCatalogEntries] = useState([]);
@@ -72,6 +75,13 @@ export default function RacksPage() {
     loadAllSlots();
     loadUserCatalogEntries();
   }, [loadRacks, loadDevices, loadAllSlots, loadUserCatalogEntries]);
+
+  useEffect(() => {
+    if (!currentProjectId) return;
+    client.get(`/projects/${currentProjectId}/locations`)
+      .then((res) => setLocations(res.data || []))
+      .catch(() => setLocations([]));
+  }, [currentProjectId]);
 
   // Cross-link from Topology: ?highlightDevice=<id>
   useEffect(() => {
@@ -578,6 +588,7 @@ export default function RacksPage() {
     <RackEditPanel
       rack={focusedRack}
       usedU={countUsedU(allSlots, focusedRack.id)}
+      locations={locations}
       onClose={() => setRackEditOpen(false)}
       onSave={(edits) => actions.onRackSave(focusedRackId, edits)}
       onDuplicate={() => actions.onRackDuplicate(focusedRackId)}

@@ -1,0 +1,463 @@
+/* =========================================================
+   Locations page
+   ========================================================= */
+
+.locations-page {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  overflow-y: auto;
+}
+
+/* ----- Header --------------------------------------------- */
+
+.locations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.locations-header h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.locations-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 1rem;
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.locations-add-btn:hover {
+  opacity: 0.88;
+}
+
+/* ----- Grid of location cards ----------------------------- */
+
+.locations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+/* ----- Location card -------------------------------------- */
+
+.locations-card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  overflow: hidden;
+}
+
+.locations-card-main {
+  padding: 1rem 1.25rem;
+}
+
+.locations-card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
+.locations-card-pin-icon {
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.locations-card-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.25;
+}
+
+.locations-card-building {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.3rem;
+  margin-left: 1.3rem;
+}
+
+.locations-card-notes {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: 0.35rem;
+  margin-left: 1.3rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ----- Badges --------------------------------------------- */
+
+.locations-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.locations-badge {
+  display: inline-block;
+  border: 1px solid var(--color-border);
+  border-radius: 99px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle);
+  white-space: nowrap;
+}
+
+/* ----- Card action buttons -------------------------------- */
+
+.locations-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.locations-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.3rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.locations-btn:hover {
+  background: var(--color-bg-subtle);
+}
+
+.locations-btn-danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+.locations-btn-danger:hover {
+  background: var(--color-danger-bg);
+}
+
+.locations-btn-accent {
+  color: var(--color-link);
+  border-color: var(--color-border-strong);
+}
+
+.locations-btn-accent:hover {
+  background: var(--color-bg-subtle);
+}
+
+.locations-manage-rooms-btn {
+  margin-left: auto;
+}
+
+.locations-confirm-text {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+/* When confirm is shown, pull the whole confirm group to the right */
+.locations-card-actions .locations-confirm-text ~ .locations-btn {
+  margin-left: 0;
+}
+
+/* ----- Rooms section (expanded inside card) --------------- */
+
+.locations-rooms-section {
+  border-top: 1px solid var(--color-border);
+  padding: 0.75rem 1.25rem;
+  background: var(--color-bg-subtle);
+}
+
+.locations-rooms-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.locations-rooms-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.locations-add-room-btn {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.55rem;
+}
+
+.locations-room-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.locations-room-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.locations-room-item:last-child {
+  border-bottom: none;
+}
+
+.locations-room-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.locations-room-name {
+  display: block;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  margin-bottom: 0.15rem;
+}
+
+.locations-room-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.locations-room-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.locations-room-error {
+  color: var(--color-danger);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.locations-room-loading,
+.locations-rooms-empty {
+  font-size: 0.8rem;
+  color: var(--color-text-faint);
+  padding: 0.4rem 0;
+}
+
+/* ----- Empty state ---------------------------------------- */
+
+.locations-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.locations-empty-icon {
+  color: var(--color-text-faint);
+  margin-bottom: 0.75rem;
+}
+
+.locations-empty p {
+  margin: 0.2rem 0;
+  font-size: 0.9rem;
+}
+
+/* ----- Modal overlay -------------------------------------- */
+
+.locations-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.locations-modal {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem 1.5rem;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 8px 32px var(--color-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.locations-modal-wide {
+  max-width: 560px;
+}
+
+.locations-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.locations-modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.locations-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 4px;
+}
+
+.locations-modal-close:hover {
+  color: var(--color-text);
+  background: var(--color-bg-subtle);
+}
+
+.locations-modal-error {
+  font-size: 0.82rem;
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: 4px;
+  padding: 0.4rem 0.65rem;
+}
+
+/* ----- Form fields ---------------------------------------- */
+
+.locations-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.locations-form-field-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.locations-form-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.locations-form-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.locations-form-required {
+  color: var(--color-danger);
+}
+
+.locations-form-input,
+.locations-form-textarea {
+  padding: 0.45rem 0.65rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.locations-form-input:focus,
+.locations-form-textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.locations-form-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+/* ----- Modal footer --------------------------------------- */
+
+.locations-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.locations-modal-cancel {
+  padding: 0.45rem 1rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.locations-modal-cancel:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.locations-modal-save {
+  padding: 0.45rem 1.1rem;
+  background: var(--color-accent);
+  border: none;
+  border-radius: 5px;
+  color: var(--color-accent-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.locations-modal-save:hover {
+  opacity: 0.88;
+}
+
+.locations-modal-save:disabled,
+.locations-modal-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -563,6 +563,11 @@ export default function RackEnclosure({
       ) : (
         <div className="rack-name-label">{rack.name}</div>
       )}
+      {(rack.location_name || rack.room_name) && (
+        <div className="rack-location-label">
+          {[rack.location_name, rack.room_name].filter(Boolean).join(' › ')}
+        </div>
+      )}
       <div className={`rack-u-counter${freeU === 0 ? ' rack-u-counter-full' : ''}`}>
         {usedU}U used &middot; {freeU}U free
       </div>

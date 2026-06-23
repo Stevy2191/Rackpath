@@ -13,6 +13,11 @@ import {
   Download,
   FileText,
   Activity,
+  Building2,
+  MapPin,
+  Pencil,
+  X,
+  Check,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -297,13 +302,16 @@ function buildPdf(project, overview, activity) {
 
 export default function DashboardPage() {
   const { id } = useParams();
-  const { currentProjectId, currentProject, switchProject, removeProject } = useProject();
+  const { currentProjectId, currentProject, updateProject, switchProject, removeProject } = useProject();
   const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [activity, setActivity] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editingSiteInfo, setEditingSiteInfo] = useState(false);
+  const [siteInfoDraft, setSiteInfoDraft] = useState({});
+  const [siteInfoSaving, setSiteInfoSaving] = useState(false);
 
   const projectId = id || currentProjectId;
 
@@ -349,6 +357,36 @@ export default function DashboardPage() {
 
   const toggleWarning = (key) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const startEditSiteInfo = () => {
+    setSiteInfoDraft({
+      address:                   currentProject?.address                    || '',
+      site_contact_name:         currentProject?.site_contact_name          || '',
+      site_contact_phone:        currentProject?.site_contact_phone         || '',
+      site_contact_email:        currentProject?.site_contact_email         || '',
+      primary_isp_name:          currentProject?.primary_isp_name           || '',
+      primary_isp_circuit_id:    currentProject?.primary_isp_circuit_id     || '',
+      primary_isp_contact:       currentProject?.primary_isp_contact        || '',
+      secondary_isp_name:        currentProject?.secondary_isp_name         || '',
+      secondary_isp_circuit_id:  currentProject?.secondary_isp_circuit_id   || '',
+      secondary_isp_contact:     currentProject?.secondary_isp_contact      || '',
+      wan_ip:                    currentProject?.wan_ip                     || '',
+      wan_subnet:                currentProject?.wan_subnet                  || '',
+      wan_gateway:               currentProject?.wan_gateway                 || '',
+      dns_servers:               currentProject?.dns_servers                 || '',
+    });
+    setEditingSiteInfo(true);
+  };
+
+  const saveSiteInfo = async () => {
+    setSiteInfoSaving(true);
+    try {
+      await updateProject(currentProjectId, siteInfoDraft);
+      setEditingSiteInfo(false);
+    } finally {
+      setSiteInfoSaving(false);
+    }
   };
 
   const exportMarkdown = () => {
@@ -434,6 +472,137 @@ export default function DashboardPage() {
           })}
         </div>
       </div>
+
+      <div className="dashboard-section">
+        <div className="dashboard-section-header">
+          <h3>Site Info</h3>
+          {!editingSiteInfo && (
+            <button type="button" className="dashboard-section-edit-btn" onClick={startEditSiteInfo}>
+              <Pencil size={13} /> Edit
+            </button>
+          )}
+        </div>
+        {editingSiteInfo ? (
+          <div className="dashboard-site-info-form">
+            <div className="dashboard-site-info-group">
+              <div className="dashboard-site-info-group-title">Address</div>
+              <textarea
+                className="dashboard-site-info-textarea"
+                value={siteInfoDraft.address}
+                onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, address: e.target.value })}
+                placeholder="Street address, city, state, zip"
+                rows={2}
+              />
+            </div>
+            <div className="dashboard-site-info-group">
+              <div className="dashboard-site-info-group-title">Site Contact</div>
+              <div className="dashboard-site-info-fields">
+                <label>Name<input value={siteInfoDraft.site_contact_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_name: e.target.value })} placeholder="Full name" /></label>
+                <label>Phone<input value={siteInfoDraft.site_contact_phone} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_phone: e.target.value })} placeholder="Phone number" /></label>
+                <label>Email<input value={siteInfoDraft.site_contact_email} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_email: e.target.value })} placeholder="Email address" /></label>
+              </div>
+            </div>
+            <div className="dashboard-site-info-group">
+              <div className="dashboard-site-info-group-title">Primary ISP</div>
+              <div className="dashboard-site-info-fields">
+                <label>Name<input value={siteInfoDraft.primary_isp_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_name: e.target.value })} placeholder="ISP name" /></label>
+                <label>Circuit ID<input value={siteInfoDraft.primary_isp_circuit_id} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_circuit_id: e.target.value })} placeholder="Circuit ID" /></label>
+                <label>Contact<input value={siteInfoDraft.primary_isp_contact} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_contact: e.target.value })} placeholder="ISP contact" /></label>
+              </div>
+            </div>
+            <div className="dashboard-site-info-group">
+              <div className="dashboard-site-info-group-title">Secondary ISP</div>
+              <div className="dashboard-site-info-fields">
+                <label>Name<input value={siteInfoDraft.secondary_isp_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_name: e.target.value })} placeholder="ISP name" /></label>
+                <label>Circuit ID<input value={siteInfoDraft.secondary_isp_circuit_id} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_circuit_id: e.target.value })} placeholder="Circuit ID" /></label>
+                <label>Contact<input value={siteInfoDraft.secondary_isp_contact} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_contact: e.target.value })} placeholder="ISP contact" /></label>
+              </div>
+            </div>
+            <div className="dashboard-site-info-group">
+              <div className="dashboard-site-info-group-title">Network</div>
+              <div className="dashboard-site-info-fields">
+                <label>WAN IP<input value={siteInfoDraft.wan_ip} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, wan_ip: e.target.value })} placeholder="x.x.x.x" /></label>
+                <label>Subnet<input value={siteInfoDraft.wan_subnet} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, wan_subnet: e.target.value })} placeholder="/24" /></label>
+                <label>Gateway<input value={siteInfoDraft.wan_gateway} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, wan_gateway: e.target.value })} placeholder="x.x.x.1" /></label>
+                <label>DNS Servers<input value={siteInfoDraft.dns_servers} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, dns_servers: e.target.value })} placeholder="8.8.8.8, 8.8.4.4" /></label>
+              </div>
+            </div>
+            <div className="dashboard-site-info-actions">
+              <button type="button" className="dashboard-site-info-cancel" onClick={() => setEditingSiteInfo(false)}>
+                <X size={13} /> Cancel
+              </button>
+              <button type="button" className="dashboard-site-info-save" onClick={saveSiteInfo} disabled={siteInfoSaving}>
+                <Check size={13} /> {siteInfoSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="dashboard-site-info-view">
+            {currentProject?.address && (
+              <div className="dashboard-site-info-item">
+                <MapPin size={14} />
+                <span>{currentProject.address}</span>
+              </div>
+            )}
+            {currentProject?.site_contact_name && (
+              <div className="dashboard-site-info-item">
+                <span className="dashboard-site-info-label">Contact:</span>
+                <span>{currentProject.site_contact_name}{currentProject.site_contact_phone ? ` — ${currentProject.site_contact_phone}` : ''}{currentProject.site_contact_email ? ` — ${currentProject.site_contact_email}` : ''}</span>
+              </div>
+            )}
+            {currentProject?.primary_isp_name && (
+              <div className="dashboard-site-info-item">
+                <span className="dashboard-site-info-label">Primary ISP:</span>
+                <span>{currentProject.primary_isp_name}{currentProject.primary_isp_circuit_id ? ` — ${currentProject.primary_isp_circuit_id}` : ''}</span>
+              </div>
+            )}
+            {currentProject?.secondary_isp_name && (
+              <div className="dashboard-site-info-item">
+                <span className="dashboard-site-info-label">Secondary ISP:</span>
+                <span>{currentProject.secondary_isp_name}{currentProject.secondary_isp_circuit_id ? ` — ${currentProject.secondary_isp_circuit_id}` : ''}</span>
+              </div>
+            )}
+            {(currentProject?.wan_ip || currentProject?.wan_subnet || currentProject?.wan_gateway) && (
+              <div className="dashboard-site-info-item">
+                <span className="dashboard-site-info-label">WAN:</span>
+                <span>{[currentProject.wan_ip, currentProject.wan_subnet, currentProject.wan_gateway].filter(Boolean).join(' / ')}</span>
+              </div>
+            )}
+            {currentProject?.dns_servers && (
+              <div className="dashboard-site-info-item">
+                <span className="dashboard-site-info-label">DNS:</span>
+                <span>{currentProject.dns_servers}</span>
+              </div>
+            )}
+            {!currentProject?.address && !currentProject?.site_contact_name && !currentProject?.primary_isp_name && (
+              <p className="dashboard-empty">No site info recorded. Click Edit to add details.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {overview.details.locations?.length > 0 && (
+        <div className="dashboard-section">
+          <h3>Locations</h3>
+          <div className="dashboard-locations-grid">
+            {overview.details.locations.map((loc) => (
+              <div key={loc.id} className="dashboard-location-card">
+                <Building2 size={16} className="dashboard-location-icon" />
+                <div className="dashboard-location-body">
+                  <div className="dashboard-location-name">{loc.name}</div>
+                  {loc.building_number && (
+                    <div className="dashboard-location-sub">Building {loc.building_number}</div>
+                  )}
+                  <div className="dashboard-location-counts">
+                    <span>{loc.room_count} room{loc.room_count !== 1 ? 's' : ''}</span>
+                    <span>{loc.rack_count} rack{loc.rack_count !== 1 ? 's' : ''}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="dashboard-section">
         <h3>Recent Activity</h3>
