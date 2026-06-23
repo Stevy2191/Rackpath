@@ -69,6 +69,14 @@ export const RACK_CATALOG = [
   e('ats', 'ATS - Automatic Transfer Switch', 'POWER', 'ats', 1, {
     outletCount: 1, outletType: 'NEMA 5-15R',
   }),
+  // Step-down transformer: converts 208V/240V feed to 120V and re-distributes
+  // it to downstream devices via its own bank of outlets.
+  e('stepdown-transformer', 'Stepdown Transformer', 'POWER', 'transformer', 2, {
+    outletCount: 8, outletType: 'NEMA 5-15R', inputVoltage: '208V',
+  }),
+  // Extended Battery Module: attaches to a compatible UPS to extend its
+  // runtime; occupies its own U slots but provides no outlets of its own.
+  e('ebm', 'Extended Battery Module', 'POWER', 'ebm', 2, { capacityVa: 1500 }),
 
   // ─── STORAGE ────────────────────────────────────────────────────────────────
   e('nas-storage-array', 'NAS / Storage Array', 'STORAGE', 'storage', 2, { bayCount: 12 }),

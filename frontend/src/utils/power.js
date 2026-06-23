@@ -11,10 +11,10 @@ export function isPassiveItem(slot) {
   return PASSIVE_RENDER_TYPES.has(resolveRenderType(slot));
 }
 
-// PDU/UPS/ATS: provides outlets that other devices can be plugged into.
+// PDU/UPS/ATS/Transformer: provides outlets that other devices can be plugged into.
 export function isPowerDevice(slot) {
   const type = resolveRenderType(slot);
-  return type === 'ups' || type === 'pdu' || type === 'pdu-vertical' || type === 'ats';
+  return type === 'ups' || type === 'pdu' || type === 'pdu-vertical' || type === 'ats' || type === 'transformer';
 }
 
 // UPS specifically — the only device type that can host vertical PDUs.

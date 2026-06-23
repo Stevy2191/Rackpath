@@ -1,7 +1,7 @@
 import {
   Server, Network, Shield, HardDrive, Zap, Plug, Cable, Monitor, Wifi, Box, Minus,
   ServerCog, Scale, Archive, Shuffle, CircleDot, Terminal, MonitorCog, Volume2,
-  PlayCircle, MonitorPlay, Inbox, PackageOpen, ArrowLeftRight,
+  PlayCircle, MonitorPlay, Inbox, PackageOpen, ArrowLeftRight, PlugZap, BatteryFull,
 } from 'lucide-react';
 
 export const CATEGORY_CONFIG = {
@@ -16,6 +16,8 @@ export const CATEGORY_CONFIG = {
   pdu:                    '#D97706',
   'pdu-vertical':         '#D97706',
   ats:                    '#C2410C',
+  transformer:            '#7C2D12',
+  ebm:                    '#B45309',
   'patch-panel':          '#7C3AED',
   'patch-panel-copper':   '#7C3AED',
   'patch-panel-fiber':    '#9333EA',
@@ -48,6 +50,8 @@ export const CATEGORY_ICONS = {
   pdu:                    Plug,
   'pdu-vertical':         Plug,
   ats:                    ArrowLeftRight,
+  transformer:            PlugZap,
+  ebm:                    BatteryFull,
   'patch-panel':          Cable,
   'patch-panel-copper':   Cable,
   'patch-panel-fiber':    Cable,
@@ -76,6 +80,8 @@ const KEYWORD_RULES = [
   [/switch/i, 'switch'],
   [/poweredge|proliant|thinksystem|superserver|^server$/i, 'server'],
   [/storage|^nas$|rackstation|powervault|netapp/i, 'storage'],
+  [/\bebm\b|extended battery/i, 'ebm'],
+  [/transformer|step.?down/i, 'transformer'],
   [/ups|battery/i, 'ups'],
   [/pdu|power distribution/i, 'pdu'],
   [/patch/i, 'patch-panel'],
