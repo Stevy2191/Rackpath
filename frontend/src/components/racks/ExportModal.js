@@ -215,7 +215,21 @@ function measurePduOverflow(frame) {
     left = Math.max(left, -el.offsetLeft);
     right = Math.max(right, el.offsetLeft + el.offsetWidth - frame.offsetWidth);
   }
-  return { left: Math.max(0, Math.ceil(left)), right: Math.max(0, Math.ceil(right)) };
+  // The bezier cord path's outward-reach control points extend further from
+  // the rack than the PDU strip edge itself (up to ~40 px beyond). Include
+  // the SVG's full declared bounding box — already set by relayoutPdus just
+  // before this call — so the margin/width expansion covers the entire cable
+  // arc, not just the strip, and prevents html-to-image from clipping the
+  // path mid-curve.
+  const cordsSvg = frame.querySelector('.rack-power-cords');
+  if (cordsSvg) {
+    const svgLeft = parseFloat(cordsSvg.style.left) || 0;
+    const svgWidth = parseFloat(cordsSvg.getAttribute('width')) || 0;
+    if (svgLeft < 0) left = Math.max(left, Math.ceil(-svgLeft));
+    const svgRight = svgLeft + svgWidth;
+    if (svgRight > frame.offsetWidth) right = Math.max(right, Math.ceil(svgRight - frame.offsetWidth));
+  }
+  return { left: Math.max(0, left), right: Math.max(0, right) };
 }
 
 // Builds a detached, off-screen clone of the rack matching exactly the

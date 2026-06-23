@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
+import CopySettingsModal from './CopySettingsModal';
 import { useScrollOverflow } from './useScrollOverflow';
 import client from '../../api/client';
 import {
@@ -37,6 +38,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
   const [savingToCatalog, setSavingToCatalog] = useState(false);
   const [catalogName, setCatalogName] = useState('');
   const [tab, setTab] = useState('general');
+  const [showCopyModal, setShowCopyModal] = useState(false);
   // PSU 2 is optional and hidden by default — only shown once the user
   // explicitly adds it, or it already has a value (don't hide existing
   // data just because the UI default changed). Reset alongside the rest
@@ -323,10 +325,29 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     </>
   );
 
+  // Devices in the same rack with the same catalog type (built-in catalog_id
+  // or custom_type when catalog_id is absent) — shown in Copy Settings modal.
+  const sameTypeSlots = !isVerticalPdu ? (rackSlots || []).filter((s) => {
+    if (s.id === slot.id) return false;
+    if (s.rack_id !== slot.rack_id) return false;
+    if (s.item_type === 'vertical-pdu') return false;
+    if (slot.catalog_id) return s.catalog_id === slot.catalog_id;
+    return slot.custom_type && s.custom_type === slot.custom_type;
+  }) : [];
+
   const actionsSection = (
     <>
       <div className="props-section-divider">Actions</div>
       <div className="props-danger-zone">
+        {sameTypeSlots.length > 0 && (
+          <button
+            type="button"
+            className="props-upload-btn"
+            onClick={() => setShowCopyModal(true)}
+          >
+            <Copy size={12} /> Copy Settings To…
+          </button>
+        )}
         {savingToCatalog ? (
           <div className="props-save-catalog-row">
             <input
@@ -990,6 +1011,16 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
           </div>
         )}
       </div>
+
+      {showCopyModal && (
+        <CopySettingsModal
+          slot={slot}
+          fields={fields}
+          targets={sameTypeSlots}
+          onUpdated={onUpdated}
+          onClose={() => setShowCopyModal(false)}
+        />
+      )}
     </div>
   );
 }

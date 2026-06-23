@@ -1,0 +1,213 @@
+.copy-settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-settings-modal {
+  background: #12141a;
+  border: 1px solid #2a2e38;
+  border-radius: 10px;
+  width: 320px;
+  max-width: calc(100vw - 48px);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7);
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 0.75rem;
+  color: #d4d8e0;
+  overflow: hidden;
+}
+
+.copy-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #2a2e38;
+  flex-shrink: 0;
+}
+
+.copy-settings-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #4adede;
+  letter-spacing: 0.04em;
+}
+
+.copy-settings-close {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 2px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.copy-settings-close:hover { color: #d4d8e0; }
+
+.copy-settings-source {
+  padding: 10px 14px 4px;
+  font-size: 0.73rem;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.copy-settings-source strong { color: #d4d8e0; }
+
+.copy-settings-desc {
+  padding: 0 14px 10px;
+  font-size: 0.68rem;
+  color: #6b7280;
+  line-height: 1.45;
+  border-bottom: 1px solid #1e2128;
+  flex-shrink: 0;
+}
+
+.copy-settings-list-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px 6px;
+  font-size: 0.68rem;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.copy-settings-toggle-all {
+  background: none;
+  border: none;
+  color: #4adede;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.68rem;
+  padding: 0;
+}
+
+.copy-settings-toggle-all:hover { text-decoration: underline; }
+
+.copy-settings-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+
+.copy-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #0e0f13;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.copy-settings-item:hover { background: #181b22; }
+
+.copy-settings-item input[type="checkbox"] {
+  accent-color: #4adede;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.copy-settings-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.73rem;
+}
+
+.copy-settings-item-pos {
+  color: #6b7280;
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.copy-settings-error {
+  margin: 0 14px 4px;
+  padding: 6px 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  color: #ef4444;
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.copy-settings-footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid #2a2e38;
+  flex-shrink: 0;
+}
+
+.copy-settings-cancel {
+  background: transparent;
+  border: 1px solid #2a2e38;
+  border-radius: 4px;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.copy-settings-cancel:hover {
+  border-color: #4a5568;
+  color: #9ca3af;
+}
+
+.copy-settings-confirm {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(74, 222, 222, 0.08);
+  border: 1px solid rgba(74, 222, 222, 0.4);
+  border-radius: 4px;
+  color: #4adede;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.copy-settings-confirm:hover:not(:disabled) {
+  background: rgba(74, 222, 222, 0.16);
+  border-color: #4adede;
+}
+
+.copy-settings-confirm:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.copy-settings-success {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 36px 20px;
+  color: #4adede;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
