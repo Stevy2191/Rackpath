@@ -132,6 +132,49 @@ function composeAddress(project) {
   return structured || project.address || '';
 }
 
+// Groups Site Info into labeled sections of [label, value] rows for the PDF
+// export, dropping any field that's empty and any group that ends up with
+// no rows at all.
+function buildSiteInfoGroups(project) {
+  const groups = [];
+
+  const address = composeAddress(project);
+  if (address) groups.push({ title: 'Address', rows: [['Address', address]] });
+
+  const contactRows = [];
+  if (project?.site_contact_name) contactRows.push(['Name', project.site_contact_name]);
+  if (project?.site_contact_phone) contactRows.push(['Phone', formatPhoneNumber(project.site_contact_phone)]);
+  if (project?.site_contact_email) contactRows.push(['Email', project.site_contact_email]);
+  if (contactRows.length) groups.push({ title: 'Site Contact', rows: contactRows });
+
+  const primaryIspRows = [];
+  if (project?.primary_isp_name) primaryIspRows.push(['Name', project.primary_isp_name]);
+  if (project?.primary_isp_circuit_id) primaryIspRows.push(['Circuit ID', project.primary_isp_circuit_id]);
+  if (project?.primary_isp_contact) primaryIspRows.push(['Contact', formatPhoneNumber(project.primary_isp_contact)]);
+  if (primaryIspRows.length) groups.push({ title: 'Primary ISP', rows: primaryIspRows });
+
+  const secondaryIspRows = [];
+  if (project?.secondary_isp_name) secondaryIspRows.push(['Name', project.secondary_isp_name]);
+  if (project?.secondary_isp_circuit_id) secondaryIspRows.push(['Circuit ID', project.secondary_isp_circuit_id]);
+  if (project?.secondary_isp_contact) secondaryIspRows.push(['Contact', formatPhoneNumber(project.secondary_isp_contact)]);
+  if (secondaryIspRows.length) groups.push({ title: 'Secondary ISP', rows: secondaryIspRows });
+
+  const wanRows = [];
+  if (project?.wan_ip) wanRows.push(['WAN IP', project.wan_ip]);
+  if (project?.wan_subnet) wanRows.push(['Subnet', project.wan_subnet]);
+  if (project?.wan_gateway) wanRows.push(['Gateway', project.wan_gateway]);
+  if (project?.dns_servers) wanRows.push(['DNS Servers', project.dns_servers]);
+  if (wanRows.length) groups.push({ title: 'WAN Network', rows: wanRows });
+
+  const lanRows = [];
+  if (project?.lan_ip) lanRows.push(['LAN IP / Network', project.lan_ip]);
+  if (project?.lan_subnet) lanRows.push(['Subnet', project.lan_subnet]);
+  if (project?.lan_gateway) lanRows.push(['Gateway', project.lan_gateway]);
+  if (lanRows.length) groups.push({ title: 'LAN Network', rows: lanRows });
+
+  return groups;
+}
+
 function buildMarkdown(project, overview, activity) {
   const { summary, warnings, details } = overview;
   const lines = [];
@@ -229,8 +272,8 @@ function downloadBlob(content, type, filename) {
   URL.revokeObjectURL(url);
 }
 
-function buildPdf(project, overview, activity) {
-  const { summary, warnings, details } = overview;
+function buildPdf(project, overview) {
+  const { summary, details } = overview;
   const doc = new jsPDF();
   const margin = 14;
   let y = 16;
@@ -249,6 +292,33 @@ function buildPdf(project, overview, activity) {
   doc.text(`Generated ${new Date().toLocaleString()}`, margin, y);
   y += 8;
 
+  const siteInfoGroups = buildSiteInfoGroups(project);
+  if (siteInfoGroups.length) {
+    ensureSpace(14);
+    doc.setFontSize(13);
+    doc.text('Site Info', margin, y);
+    y += 6;
+    siteInfoGroups.forEach((group) => {
+      ensureSpace(12);
+      doc.setFontSize(10);
+      doc.text(group.title, margin, y);
+      y += 3;
+      autoTable(doc, {
+        startY: y,
+        body: group.rows,
+        theme: 'plain',
+        styles: { fontSize: 9, cellPadding: 1.5 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35 } },
+      });
+      y = doc.lastAutoTable.finalY + 5;
+    });
+    y += 3;
+  }
+
+  ensureSpace(14);
+  doc.setFontSize(12);
+  doc.text('Summary', margin, y);
+  y += 4;
   autoTable(doc, {
     startY: y,
     head: [['Metric', 'Value']],
@@ -304,32 +374,6 @@ function buildPdf(project, overview, activity) {
     startY: y,
     head: [['Source', 'Target', 'Label', 'Speed', 'Cable Type', 'VLAN']],
     body: details.links.map((l) => [l.source_name, l.target_name, l.label || '', l.speed || '', l.cable_type || '', l.vlan || '']),
-  });
-  y = doc.lastAutoTable.finalY + 10;
-
-  ensureSpace(14);
-  doc.setFontSize(12);
-  doc.text('Warnings', margin, y);
-  y += 4;
-  autoTable(doc, {
-    startY: y,
-    head: [['Warning', 'Count', 'Affected Items']],
-    body: WARNING_DEFS.map((def) => {
-      const items = warnings[def.key] || [];
-      return [def.label, String(items.length), items.map((item) => def.render(item)).join(', ') || '—'];
-    }),
-    columnStyles: { 2: { cellWidth: 90 } },
-  });
-  y = doc.lastAutoTable.finalY + 10;
-
-  ensureSpace(14);
-  doc.setFontSize(12);
-  doc.text('Recent Activity', margin, y);
-  y += 4;
-  autoTable(doc, {
-    startY: y,
-    head: [['Time', 'User', 'Action', 'Details']],
-    body: activity.map((entry) => [formatTimestamp(entry.created_at), entry.username, describeAction(entry.action), entry.details || '']),
   });
 
   return doc;
@@ -450,7 +494,7 @@ export default function DashboardPage() {
 
   const exportPdf = () => {
     if (!overview) return;
-    const doc = buildPdf(currentProject, overview, activity);
+    const doc = buildPdf(currentProject, overview);
     doc.save(`${fileBaseName(currentProject)}-overview.pdf`);
   };
 
