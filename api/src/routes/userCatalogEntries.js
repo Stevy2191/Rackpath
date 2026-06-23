@@ -9,7 +9,7 @@ const MOUNTED_FACES = ['front', 'rear', 'both'];
 const COLUMNS = [
   'name', 'render_type', 'u_size', 'color', 'half_width', 'half_depth', 'mounted_face',
   'outlet_groups', 'input_voltage', 'input_plug_type', 'capacity_value', 'capacity_unit',
-  'capacity_va', 'port_count', 'bay_count',
+  'capacity_va', 'capacity_w', 'port_count', 'bay_count',
 ];
 
 // GET /api/user-catalog-entries - list the current user's saved catalog entries
@@ -31,7 +31,7 @@ router.post('/', async (req, res, next) => {
     const {
       name, render_type, u_size, color, half_width, half_depth, mounted_face,
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
-      capacity_va, port_count, bay_count,
+      capacity_va, capacity_w, port_count, bay_count,
     } = req.body;
 
     if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
@@ -43,14 +43,14 @@ router.post('/', async (req, res, next) => {
       `INSERT INTO user_catalog_entries
          (user_id, name, render_type, u_size, color, half_width, half_depth, mounted_face,
           outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
-          capacity_va, port_count, bay_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          capacity_va, capacity_w, port_count, bay_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id, name.trim(), render_type || 'other', u_size || 1, color || null,
         half_width ? 1 : 0, half_depth ? 1 : 0, mounted_face || 'front',
         outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
         input_plug_type || null, capacity_value || null, capacity_unit || null,
-        capacity_va || null, port_count || null, bay_count || null,
+        capacity_va || null, capacity_w || null, port_count || null, bay_count || null,
       ]
     );
     const [rows] = await pool.query('SELECT * FROM user_catalog_entries WHERE id = ?', [result.insertId]);

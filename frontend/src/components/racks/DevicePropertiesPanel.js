@@ -81,6 +81,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
       input_voltage:        slot.input_voltage        || '',
       input_plug_type:      slot.input_plug_type       || '',
       capacity_va:          slot.capacity_va          ?? '',
+      capacity_w:           slot.capacity_w           ?? '',
       capacity_value:       slot.capacity_value       ?? '',
       capacity_unit:        slot.capacity_unit         || 'A',
       port_count:           slot.port_count           ?? '',
@@ -766,19 +767,32 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
               </select>
             </div>
 
-            {/* Capacity — UPS keeps VA; PDU/PDU-vertical get a value + unit (A/W) */}
+            {/* Capacity — UPS keeps VA + W; PDU/PDU-vertical get a value + unit (A/W) */}
             {isUpsSlot ? (
-              <div className="props-field">
-                <label className="props-field-label">Capacity (VA)</label>
-                <input
-                  className="props-input"
-                  type="number"
-                  min="0"
-                  value={fields.capacity_va}
-                  onChange={(e) => setField('capacity_va', e.target.value === '' ? null : Number(e.target.value))}
-                  placeholder="e.g. 1500"
-                />
-              </div>
+              <>
+                <div className="props-field">
+                  <label className="props-field-label">Capacity (VA)</label>
+                  <input
+                    className="props-input"
+                    type="number"
+                    min="0"
+                    value={fields.capacity_va}
+                    onChange={(e) => setField('capacity_va', e.target.value === '' ? null : Number(e.target.value))}
+                    placeholder="e.g. 1500"
+                  />
+                </div>
+                <div className="props-field">
+                  <label className="props-field-label">Capacity (W)</label>
+                  <input
+                    className="props-input"
+                    type="number"
+                    min="0"
+                    value={fields.capacity_w}
+                    onChange={(e) => setField('capacity_w', e.target.value === '' ? null : Number(e.target.value))}
+                    placeholder="e.g. 1350"
+                  />
+                </div>
+              </>
             ) : (
               <div className="props-field">
                 <label className="props-field-label">Capacity</label>

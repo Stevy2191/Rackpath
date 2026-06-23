@@ -168,7 +168,7 @@ router.post('/', async (req, res, next) => {
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
-      port_count, bay_count, capacity_va,
+      port_count, bay_count, capacity_va, capacity_w,
       power_source_slot_id, power_source_outlet, mount_side,
       psu2_source_slot_id, psu2_source_outlet,
     } = req.body;
@@ -244,10 +244,10 @@ router.post('/', async (req, res, next) => {
           u_position, position_offset, u_size, side, front_back, mounted_face,
           half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes,
           outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
-          port_count, bay_count, capacity_va,
+          port_count, bay_count, capacity_va, capacity_w,
           power_source_slot_id, power_source_outlet, mount_side,
           psu2_source_slot_id, psu2_source_outlet)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
@@ -258,7 +258,7 @@ router.post('/', async (req, res, next) => {
         ip_address || null, slot_notes || null,
         outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
         input_plug_type || null, capacity_value || null, capacity_unit || null,
-        port_count || null, bay_count || null, capacity_va || null,
+        port_count || null, bay_count || null, capacity_va || null, capacity_w || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
         psu2_source_slot_id || null, psu2_source_outlet || null,
       ]
@@ -290,7 +290,7 @@ router.put('/:id', async (req, res, next) => {
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
-      port_count, bay_count, capacity_va,
+      port_count, bay_count, capacity_va, capacity_w,
       power_source_slot_id, power_source_outlet, mount_side,
       psu2_source_slot_id, psu2_source_outlet,
     } = req.body;
@@ -355,7 +355,7 @@ router.put('/:id', async (req, res, next) => {
            half_depth=?, half_width=?, half_position=?, catalog_id=?, custom_image_url=?, vendor=?,
            ip_address=?, slot_notes=?,
            outlet_groups=?, input_voltage=?, input_plug_type=?, capacity_value=?, capacity_unit=?,
-           port_count=?, bay_count=?, capacity_va=?,
+           port_count=?, bay_count=?, capacity_va=?, capacity_w=?,
            power_source_slot_id=?, power_source_outlet=?, mount_side=?,
            psu2_source_slot_id=?, psu2_source_outlet=?
        WHERE id=? AND project_id=?`,
@@ -369,7 +369,7 @@ router.put('/:id', async (req, res, next) => {
         ip_address || null, slot_notes || null,
         outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
         input_plug_type || null, capacity_value || null, capacity_unit || null,
-        port_count || null, bay_count || null, capacity_va || null,
+        port_count || null, bay_count || null, capacity_va || null, capacity_w || null,
         power_source_slot_id || null, power_source_outlet || null, mount_side || null,
         psu2_source_slot_id || null, psu2_source_outlet || null,
         req.params.id, req.projectId,
@@ -397,7 +397,7 @@ router.patch('/:id', async (req, res, next) => {
       'asset_tag', 'serial_number',
       'front_image_url', 'rear_image_url',
       'outlet_groups', 'input_voltage', 'input_plug_type', 'capacity_value', 'capacity_unit',
-      'port_count', 'bay_count', 'capacity_va',
+      'port_count', 'bay_count', 'capacity_va', 'capacity_w',
       'power_source_slot_id', 'power_source_outlet', 'mount_side',
       'psu2_source_slot_id', 'psu2_source_outlet',
     ];
