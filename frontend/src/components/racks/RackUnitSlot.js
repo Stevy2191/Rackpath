@@ -3,8 +3,11 @@ import { resolveUPosition } from './rackPlacement';
 
 // One empty rack-unit row: a drop target for devices/catalog items, with a
 // blue (ok) or red (collision) highlight while something is being dragged
-// over it.
-export default function RackUnitSlot({ u, band, is5th, draggingMeta, occupiedByU, rackUHeight, onDrop }) {
+// over it. `halfDepthStripe` marks this U as the opposite face of a
+// half-depth device — still a real, droppable empty slot (it only warns
+// that the near half of the rack's depth here is taken), unlike the
+// non-interactive stripe rendered behind a full-depth device.
+export default function RackUnitSlot({ u, band, is5th, halfDepthStripe, draggingMeta, occupiedByU, rackUHeight, onDrop }) {
   const [dragOverState, setDragOverState] = useState(null); // null | 'ok' | 'collision'
 
   const handleDragOver = (e) => {
@@ -32,7 +35,8 @@ export default function RackUnitSlot({ u, band, is5th, draggingMeta, occupiedByU
 
   return (
     <div
-      className={`rack-unit-slot rack-unit-band-${band}${is5th ? ' rack-unit-5th' : ''}${dragOverState ? ` drop-${dragOverState}` : ''}`}
+      className={`rack-unit-slot rack-unit-band-${band}${is5th ? ' rack-unit-5th' : ''}${halfDepthStripe ? ' rack-unit-halfdepth-stripe' : ''}${dragOverState ? ` drop-${dragOverState}` : ''}`}
+      title={halfDepthStripe ? 'Half-depth device on opposite face — accepts another half-depth device here' : undefined}
       onDragOver={handleDragOver}
       onDragLeave={() => setDragOverState(null)}
       onDrop={handleDrop}

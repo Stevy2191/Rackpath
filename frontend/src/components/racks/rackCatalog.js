@@ -59,7 +59,7 @@ export const RACK_CATALOG = [
   // ─── POWER ──────────────────────────────────────────────────────────────────
   e('ups', 'UPS', 'POWER', 'ups', 2, { outletCount: 6, outletType: 'NEMA 5-15R', inputVoltage: '120V', capacityVa: 1500, deviceType: 'ups' }),
   e('pdu-horizontal', 'PDU - Horizontal', 'POWER', 'pdu', 1, {
-    halfDepth: true, mountedFace: 'rear', outletCount: 8, outletType: 'IEC C13',
+    halfDepth: true, outletCount: 8, outletType: 'IEC C13',
   }),
   e('pdu-vertical', 'PDU - Vertical / 0U', 'POWER', 'pdu-vertical', 0, {
     outletCount: 8, outletType: 'IEC C13', floating: true,

@@ -136,9 +136,12 @@ function RackPanel({
   hwRenderU,
   covered,
   occupiedByU,
-  fullStripes,    // Map<topU, {u_position,u_size}> — full-width half-depth stripes from opp. face
-  hwStripesLeft,  // Map<topU, {u_position,u_size}> — ½W-left stripes
-  hwStripesRight, // Map<topU, {u_position,u_size}> — ½W-right stripes
+  fullStripesHard,    // Map<topU, {u_position,u_size}> — full-width FULL-depth no-go blocks from opp. face (hard, non-interactive)
+  hwStripesHardLeft,  // Map<topU, {u_position,u_size}> — ½W-left full-depth no-go blocks (hard)
+  hwStripesHardRight, // Map<topU, {u_position,u_size}> — ½W-right full-depth no-go blocks (hard)
+  softFullRows,       // Set<u> — full-width HALF-depth warning rows from opp. face (soft: still droppable)
+  softHwLeftRows,     // Set<u> — ½W-left half-depth warning rows (soft)
+  softHwRightRows,    // Set<u> — ½W-right half-depth warning rows (soft)
   highlightedSlotId,
   selectedSlotId,
   draggingMeta,
@@ -147,18 +150,24 @@ function RackPanel({
   onDrop,
   onSelectSlot,
 }) {
-  // Pre-compute which U rows are non-top rows of each stripe group (skip rendering there).
-  const fullStripesCovered = new Set();
-  for (const [topU, { u_position }] of fullStripes) {
-    for (let u = u_position; u < topU; u++) fullStripesCovered.add(u);
+  // Pre-compute which U rows are non-top rows of each *hard* stripe group
+  // (skip rendering there — the group's one tall block, drawn at its top
+  // row, already visually covers them). Soft rows are never merged into
+  // multi-row groups in the first place (see computeStripes below), so
+  // they need no such "covered" bookkeeping — each one renders and accepts
+  // drops entirely on its own, which is exactly what keeps a stripe from
+  // ever bleeding into a neighboring, genuinely empty U.
+  const fullStripesHardCovered = new Set();
+  for (const [topU, { u_position }] of fullStripesHard) {
+    for (let u = u_position; u < topU; u++) fullStripesHardCovered.add(u);
   }
-  const hwStripesLeftCovered = new Set();
-  for (const [topU, { u_position }] of hwStripesLeft) {
-    for (let u = u_position; u < topU; u++) hwStripesLeftCovered.add(u);
+  const hwStripesHardLeftCovered = new Set();
+  for (const [topU, { u_position }] of hwStripesHardLeft) {
+    for (let u = u_position; u < topU; u++) hwStripesHardLeftCovered.add(u);
   }
-  const hwStripesRightCovered = new Set();
-  for (const [topU, { u_position }] of hwStripesRight) {
-    for (let u = u_position; u < topU; u++) hwStripesRightCovered.add(u);
+  const hwStripesHardRightCovered = new Set();
+  for (const [topU, { u_position }] of hwStripesHardRight) {
+    for (let u = u_position; u < topU; u++) hwStripesHardRightCovered.add(u);
   }
 
   return (
@@ -196,32 +205,38 @@ function RackPanel({
             // ── Covered by a full-width multi-U device (non-top rows) ─────
             if (covered.has(u) && !hwAtU.has(u)) return null;
 
+            const leftHardStripe  = hwStripesHardLeft.get(u);
+            const rightHardStripe = hwStripesHardRight.get(u);
+            const leftSoft  = softHwLeftRows.has(u);
+            const rightSoft = softHwRightRows.has(u);
+
             // ── Half-width row: render a split container ──────────────────
             // Enter this branch for a real ½W device starting here (hwRenderU)
-            // *or* a ½W no-go stripe starting here — the latter needs no real
-            // device on this face at all (e.g. a ½W half-depth device whose
-            // projected stripe lands on an otherwise-empty opposite face), so
-            // it can't be gated behind hwAtU like the real-device case is.
-            if (hwRenderU.has(u) || hwStripesLeft.has(u) || hwStripesRight.has(u)) {
+            // *or* a ½W no-go stripe/warning starting here — those need no
+            // real device on this face at all (e.g. a ½W half-depth device
+            // whose projected stripe lands on an otherwise-empty opposite
+            // face), so they can't be gated behind hwAtU like the real-device
+            // case is.
+            if (hwRenderU.has(u) || leftHardStripe || rightHardStripe || leftSoft || rightSoft) {
               const pair = hwAtU.get(u) || {};
               const leftSlot  = pair.left;
               const rightSlot = pair.right;
               const leftAtTop  = leftSlot  && (leftSlot.u_position  + leftSlot.u_size  - 1 === u);
               const rightAtTop = rightSlot && (rightSlot.u_position + rightSlot.u_size - 1 === u);
 
-              const leftStripe   = hwStripesLeft.get(u);
-              const rightStripe  = hwStripesRight.get(u);
               const band = Math.floor((u - 1) / 5) % 2;
               const is5th = u % 5 === 0;
 
-              // Row height = max u_size of devices that START at this topU
+              // Row height = max u_size of devices/hard-blocks that START at
+              // this topU. Soft rows are always exactly 1U (never merged),
+              // so they never contribute to this.
               let rowUSize = 1;
-              if (leftAtTop)   rowUSize = Math.max(rowUSize, leftSlot.u_size);
-              if (rightAtTop)  rowUSize = Math.max(rowUSize, rightSlot.u_size);
-              if (leftStripe)  rowUSize = Math.max(rowUSize, leftStripe.u_size);
-              if (rightStripe) rowUSize = Math.max(rowUSize, rightStripe.u_size);
+              if (leftAtTop)       rowUSize = Math.max(rowUSize, leftSlot.u_size);
+              if (rightAtTop)      rowUSize = Math.max(rowUSize, rightSlot.u_size);
+              if (leftHardStripe)  rowUSize = Math.max(rowUSize, leftHardStripe.u_size);
+              if (rightHardStripe) rowUSize = Math.max(rowUSize, rightHardStripe.u_size);
 
-              const renderHalfContent = (slot, slotAtTop, stripe, stripeCovered) => {
+              const renderHalfContent = (slot, slotAtTop, hardStripe, hardStripeCovered, soft) => {
                 if (slot && slotAtTop) {
                   return (
                     <DeviceBlock
@@ -238,11 +253,11 @@ function RackPanel({
                   );
                 }
                 if (slot && !slotAtTop) return null; // covered by this half's multi-U device
-                if (stripe) {
+                if (hardStripe) {
                   return (
                     <DeviceBlock
                       key={`hw-stripe-${u}`}
-                      slot={{ id: `hw-stripe-${face}-${u}`, halfDepthStripe: true, u_position: stripe.u_position, u_size: stripe.u_size }}
+                      slot={{ id: `hw-stripe-${face}-${u}`, halfDepthStripe: true, u_position: hardStripe.u_position, u_size: hardStripe.u_size }}
                       side={face}
                       uHeight={uHeight}
                       highlighted={false}
@@ -252,13 +267,14 @@ function RackPanel({
                     />
                   );
                 }
-                if (stripeCovered) return null;
+                if (hardStripeCovered) return null;
                 return (
                   <RackUnitSlot
                     key={`hw-slot-${u}`}
                     u={u}
                     band={band}
                     is5th={is5th}
+                    halfDepthStripe={soft}
                     draggingMeta={draggingMeta}
                     occupiedByU={occupiedByU}
                     rackUHeight={rack.u_height}
@@ -267,8 +283,8 @@ function RackPanel({
                 );
               };
 
-              const leftContent  = renderHalfContent(leftSlot,  leftAtTop,  leftStripe,  hwStripesLeftCovered.has(u));
-              const rightContent = renderHalfContent(rightSlot, rightAtTop, rightStripe, hwStripesRightCovered.has(u));
+              const leftContent  = renderHalfContent(leftSlot,  leftAtTop,  leftHardStripe,  hwStripesHardLeftCovered.has(u),  leftSoft);
+              const rightContent = renderHalfContent(rightSlot, rightAtTop, rightHardStripe, hwStripesHardRightCovered.has(u), rightSoft);
 
               // If both halves are null (covered rows with no sibling), skip the row.
               if (leftContent === null && rightContent === null) return null;
@@ -284,15 +300,16 @@ function RackPanel({
             // ── Covered by a ½W device at a higher topU (no sibling here) ─
             if (hwAtU.has(u)) return null;
 
-            // ── Covered by a ½W no-go stripe at a higher topU, with no real
-            //    device on this face at all (same "no sibling" case as above,
-            //    just for a stripe instead of a real device) ────────────────
-            if (hwStripesLeftCovered.has(u) || hwStripesRightCovered.has(u)) return null;
+            // ── Covered by a ½W HARD no-go block at a higher topU, with no
+            //    real device on this face at all (same "no sibling" case as
+            //    above, just for a hard block instead of a real device) ────
+            if (hwStripesHardLeftCovered.has(u) || hwStripesHardRightCovered.has(u)) return null;
 
-            // ── Full-width half-depth stripe from opposite face ────────────
-            if (fullStripesCovered.has(u)) return null;
-            if (fullStripes.has(u)) {
-              const { u_position, u_size } = fullStripes.get(u);
+            // ── Full-width HARD no-go block from a full-depth device on the
+            //    opposite face — non-interactive, blocks this U entirely ───
+            if (fullStripesHardCovered.has(u)) return null;
+            if (fullStripesHard.has(u)) {
+              const { u_position, u_size } = fullStripesHard.get(u);
               return (
                 <DeviceBlock
                   key={`stripe-${u}`}
@@ -307,7 +324,11 @@ function RackPanel({
               );
             }
 
-            // ── Empty full-width slot ──────────────────────────────────────
+            // ── Empty full-width slot — still a real drop target even when
+            //    softFullRows marks it as the opposite face of a half-depth
+            //    device; halfDepthStripe just adds the warning visual. Never
+            //    merged across rows, so this can never bleed onto a
+            //    neighboring U that has nothing on either face. ────────────
             const band = Math.floor((u - 1) / 5) % 2;
             return (
               <RackUnitSlot
@@ -315,6 +336,7 @@ function RackPanel({
                 u={u}
                 band={band}
                 is5th={u % 5 === 0}
+                halfDepthStripe={softFullRows.has(u)}
                 draggingMeta={draggingMeta}
                 occupiedByU={occupiedByU}
                 rackUHeight={rack.u_height}
@@ -482,17 +504,32 @@ export default function RackEnclosure({
   const frontMap = buildUMap(uSlots, 'front');
   const rearMap  = buildUMap(uSlots, 'rear');
 
-  // Compute no-go stripes projected onto the opposite face:
-  //   • Half-depth devices: occupy only the near half of the rack depth, so
-  //     the opposite face still has room but gets a warning stripe.
-  //   • Full-depth single-face devices: fill the entire rack depth, so the
-  //     opposite face is completely blocked (stripe prevents drops there too).
-  //   • 'both'-face devices: already render on both panels — no stripe needed.
-  // ½W half-depth devices project onto the same half of the opposite face.
+  // Compute no-go/warning rows projected onto the opposite face, split into
+  // two independent categories that are never mixed together:
+  //   • "Hard" rows (from FULL-depth single-face devices): the device fills
+  //     the entire rack depth, so the opposite face has no room at all.
+  //     Grouped into multi-U blocks per device (groupStripeRows) and
+  //     rendered as a single non-interactive no-go block, same as before.
+  //   • "Soft" rows (from HALF-depth single-face devices): the device only
+  //     occupies the near half of the depth, so the opposite face still has
+  //     room for its own half-depth device — just a warning, not a block.
+  //     Tracked as a flat Set of individual U numbers, *never* grouped/
+  //     merged via groupStripeRows. That's deliberate: merging by numeric
+  //     adjacency alone would lump rows belonging to different devices (or
+  //     a soft row sitting next to an unrelated hard row) into one block,
+  //     which is exactly how a stripe could end up bleeding onto a U that
+  //     has nothing on either face. Each soft row is rendered and dropped
+  //     on independently, exactly like an ordinary empty U.
+  // 'both'-face devices already render on both panels, so they never
+  // contribute a stripe. ½W half-depth devices project onto the same half
+  // of the opposite face.
   function computeStripes(sourceFace, targetMap) {
-    const fullRows    = new Set();
-    const hwLeftRows  = new Set();
-    const hwRightRows = new Set();
+    const hardFullRows    = new Set();
+    const softFullRows    = new Set();
+    const hardHwLeftRows  = new Set();
+    const softHwLeftRows  = new Set();
+    const hardHwRightRows = new Set();
+    const softHwRightRows = new Set();
 
     for (const s of uSlots) {
       const mf = resolveface(s);
@@ -508,17 +545,23 @@ export default function RackEnclosure({
         if (targetMap.covered.has(u)) continue;
         if (s.half_width) {
           const hp = s.half_position === 'right' ? 'right' : 'left';
-          (hp === 'left' ? hwLeftRows : hwRightRows).add(u);
+          const rows = hp === 'left'
+            ? (s.half_depth ? softHwLeftRows : hardHwLeftRows)
+            : (s.half_depth ? softHwRightRows : hardHwRightRows);
+          rows.add(u);
         } else {
-          fullRows.add(u);
+          (s.half_depth ? softFullRows : hardFullRows).add(u);
         }
       }
     }
 
     return {
-      fullStripes:    groupStripeRows(fullRows),
-      hwStripesLeft:  groupStripeRows(hwLeftRows),
-      hwStripesRight: groupStripeRows(hwRightRows),
+      fullStripesHard:    groupStripeRows(hardFullRows),
+      hwStripesHardLeft:  groupStripeRows(hardHwLeftRows),
+      hwStripesHardRight: groupStripeRows(hardHwRightRows),
+      softFullRows,
+      softHwLeftRows,
+      softHwRightRows,
     };
   }
 
@@ -588,9 +631,12 @@ export default function RackEnclosure({
           hwRenderU={frontMap.hwRenderU}
           covered={frontMap.covered}
           occupiedByU={frontMap.occupiedByU}
-          fullStripes={frontStripes.fullStripes}
-          hwStripesLeft={frontStripes.hwStripesLeft}
-          hwStripesRight={frontStripes.hwStripesRight}
+          fullStripesHard={frontStripes.fullStripesHard}
+          hwStripesHardLeft={frontStripes.hwStripesHardLeft}
+          hwStripesHardRight={frontStripes.hwStripesHardRight}
+          softFullRows={frontStripes.softFullRows}
+          softHwLeftRows={frontStripes.softHwLeftRows}
+          softHwRightRows={frontStripes.softHwRightRows}
           {...panelProps}
         />
         {/* Always rendered, never conditionally omitted — Rear being
@@ -610,9 +656,12 @@ export default function RackEnclosure({
           hwRenderU={rearMap.hwRenderU}
           covered={rearMap.covered}
           occupiedByU={rearMap.occupiedByU}
-          fullStripes={rearStripes.fullStripes}
-          hwStripesLeft={rearStripes.hwStripesLeft}
-          hwStripesRight={rearStripes.hwStripesRight}
+          fullStripesHard={rearStripes.fullStripesHard}
+          hwStripesHardLeft={rearStripes.hwStripesHardLeft}
+          hwStripesHardRight={rearStripes.hwStripesHardRight}
+          softFullRows={rearStripes.softFullRows}
+          softHwLeftRows={rearStripes.softHwLeftRows}
+          softHwRightRows={rearStripes.softHwRightRows}
           {...panelProps}
         />
 

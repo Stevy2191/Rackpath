@@ -189,6 +189,30 @@
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
 }
 
+/* Opposite face of a half-depth device: still a real, droppable empty
+   slot (accepts another half-depth device) — the stripe is only a warning
+   that this U's near depth is already taken. Declared before drop-ok/
+   drop-collision below so an active drag's blue/red feedback still wins
+   over this idle-state stripe when both classes apply at once. */
+.rack-unit-slot.rack-unit-halfdepth-stripe {
+  background-color: rgba(55, 6, 6, 0.55);
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(185, 28, 28, 0.5) 0px,
+      rgba(185, 28, 28, 0.5) 2px,
+      transparent 2px,
+      transparent 10px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(185, 28, 28, 0.5) 0px,
+      rgba(185, 28, 28, 0.5) 2px,
+      transparent 2px,
+      transparent 10px
+    );
+}
+
 .rack-unit-slot.drop-ok        { background: rgba(74,158,255,0.2);  box-shadow: inset 0 0 0 1px rgba(74,158,255,0.7); }
 .rack-unit-slot.drop-collision { background: rgba(255,87,87,0.2);   box-shadow: inset 0 0 0 1px rgba(255,87,87,0.7); }
 

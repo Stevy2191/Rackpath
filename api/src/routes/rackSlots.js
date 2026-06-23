@@ -44,13 +44,13 @@ function mountedFaceToLegacy(mounted_face) {
   return { side: 'front', front_back: 'front' };
 }
 
-async function findCollision(rackId, projectId, uPosition, uSize, side, excludeId, halfWidth, halfPosition) {
+async function findCollision(rackId, projectId, uPosition, uSize, side, excludeId, halfWidth, halfPosition, halfDepth) {
   // Vertical PDUs are 0U floating elements alongside the frame, not real
   // U-grid occupants — they still carry a u_position/u_size in storage
   // (so a PDU strip has a slot to draw its cord from), but that range
   // must never block a real device from being placed over it. Excluded
   // here the same way the rack resize-fit check already excludes them.
-  let query = `SELECT id, u_position, u_size, side, half_width, half_position FROM rack_slots
+  let query = `SELECT id, u_position, u_size, side, half_width, half_position, half_depth FROM rack_slots
                WHERE rack_id = ? AND project_id = ? AND item_type != 'vertical-pdu'`;
   const params = [rackId, projectId];
   if (excludeId) {
@@ -64,8 +64,18 @@ async function findCollision(rackId, projectId, uPosition, uSize, side, excludeI
     const rowTop = row.u_position + row.u_size - 1;
     const overlaps = uPosition <= rowTop && top >= row.u_position;
     if (!overlaps) continue;
-    const sidesCollide = side === 'both' || row.side === 'both' || side === row.side;
-    if (!sidesCollide) continue;
+
+    const eitherBoth = side === 'both' || row.side === 'both';
+    const sameSide = side === row.side;
+    if (!eitherBoth && !sameSide) {
+      // Opposite faces (front vs. back) of the same U: a half-depth device
+      // only occupies the near half of the rack's depth, so the opposite
+      // face can independently hold its own half-depth device. They only
+      // collide if at least one of the two uses the full depth.
+      if (halfDepth && row.half_depth) continue;
+      return row;
+    }
+
     // Two half-width devices can share the same U rows when on opposite halves.
     if (halfWidth && row.half_width) {
       const rowHalf = row.half_position || 'left';
@@ -217,7 +227,7 @@ router.post('/', async (req, res, next) => {
         return res.status(409).json({ error: 'Both Left and Right vertical PDU positions are already in use on this rack' });
       }
     } else {
-      const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, null, half_width, resolvedHalfPos);
+      const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, null, half_width, resolvedHalfPos, half_depth);
       if (collision) {
         return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
       }
@@ -337,7 +347,7 @@ router.put('/:id', async (req, res, next) => {
     const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
     if (item_type !== 'vertical-pdu') {
-      const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id, half_width, resolvedHalfPos);
+      const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id, half_width, resolvedHalfPos, half_depth);
       if (collision) {
         return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
       }
@@ -446,10 +456,12 @@ router.patch('/:id', async (req, res, next) => {
       updates.front_back = legacy.front_back;
     }
 
-    // Collision check when position or size changes
-    if ('u_position' in updates || 'u_size' in updates) {
+    // Collision check when position, size, face, or half-width/depth changes
+    // — any of these can change which slots this one now overlaps/collides with.
+    const collisionFields = ['u_position', 'u_size', 'side', 'half_width', 'half_position', 'half_depth'];
+    if (collisionFields.some((f) => f in updates)) {
       const [[cur]] = await pool.query(
-        'SELECT rack_id, item_type, u_position, u_size, side FROM rack_slots WHERE id = ? AND project_id = ?',
+        'SELECT rack_id, item_type, u_position, u_size, side, half_width, half_position, half_depth FROM rack_slots WHERE id = ? AND project_id = ?',
         [req.params.id, req.projectId]
       );
       if (!cur) return res.status(404).json({ error: 'Rack slot not found' });
@@ -457,6 +469,9 @@ router.patch('/:id', async (req, res, next) => {
       const newPos  = 'u_position' in updates ? Number(updates.u_position) : cur.u_position;
       const newSize = 'u_size'     in updates ? Number(updates.u_size)     : cur.u_size;
       const checkSide = updates.side || cur.side;
+      const checkHalfWidth = 'half_width' in updates ? Boolean(updates.half_width) : Boolean(cur.half_width);
+      const checkHalfPosition = 'half_position' in updates ? updates.half_position : cur.half_position;
+      const checkHalfDepth = 'half_depth' in updates ? Boolean(updates.half_depth) : Boolean(cur.half_depth);
 
       if (newPos < 1 || newSize < 1) {
         return res.status(400).json({ error: 'Position and size must be at least 1' });
@@ -472,7 +487,10 @@ router.patch('/:id', async (req, res, next) => {
       }
 
       if (cur.item_type !== 'vertical-pdu') {
-        const collision = await findCollision(cur.rack_id, req.projectId, newPos, newSize, checkSide, req.params.id);
+        const collision = await findCollision(
+          cur.rack_id, req.projectId, newPos, newSize, checkSide, req.params.id,
+          checkHalfWidth, checkHalfPosition, checkHalfDepth
+        );
         if (collision) {
           return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
         }
