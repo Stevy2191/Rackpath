@@ -20,6 +20,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
+import { formatPhoneNumber, onlyDigits } from '../utils/phone';
+import PhoneInput from '../components/PhoneInput';
 import './Dashboard.css';
 
 const SUMMARY_CARDS = [
@@ -101,21 +103,6 @@ const US_STATES = [
   'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
   'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
 ];
-
-// Phone fields store raw digits; this formats them as (xxx) xxx-xxxx for
-// display, including while the user is mid-typing (a partial number still
-// gets partial formatting).
-function formatPhoneNumber(digits) {
-  const d = (digits || '').replace(/\D/g, '').slice(0, 10);
-  if (d.length === 0) return '';
-  if (d.length < 4) return `(${d}`;
-  if (d.length < 7) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-}
-
-function onlyDigits(value) {
-  return (value || '').replace(/\D/g, '').slice(0, 10);
-}
 
 // dns_servers is stored as a comma-separated string; split it into a list
 // for the editable rows, always showing at least the default Primary/Secondary pair.
@@ -568,7 +555,7 @@ export default function DashboardPage() {
               <div className="dashboard-site-info-group-title">Site Contact</div>
               <div className="dashboard-site-info-fields">
                 <label>Name<input value={siteInfoDraft.site_contact_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_name: e.target.value })} placeholder="Full name" /></label>
-                <label>Phone<input value={formatPhoneNumber(siteInfoDraft.site_contact_phone)} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_phone: onlyDigits(e.target.value) })} placeholder="(555) 555-5555" /></label>
+                <label>Phone<PhoneInput value={siteInfoDraft.site_contact_phone} onChange={(digits) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_phone: digits })} placeholder="(555) 555-5555" /></label>
                 <label>Email<input value={siteInfoDraft.site_contact_email} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, site_contact_email: e.target.value })} placeholder="Email address" /></label>
               </div>
             </div>
@@ -577,7 +564,7 @@ export default function DashboardPage() {
               <div className="dashboard-site-info-fields">
                 <label>Name<input value={siteInfoDraft.primary_isp_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_name: e.target.value })} placeholder="ISP name" /></label>
                 <label>Circuit ID<input value={siteInfoDraft.primary_isp_circuit_id} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_circuit_id: e.target.value })} placeholder="Circuit ID" /></label>
-                <label>Contact<input value={formatPhoneNumber(siteInfoDraft.primary_isp_contact)} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_contact: onlyDigits(e.target.value) })} placeholder="(555) 555-5555" /></label>
+                <label>Contact<PhoneInput value={siteInfoDraft.primary_isp_contact} onChange={(digits) => setSiteInfoDraft({ ...siteInfoDraft, primary_isp_contact: digits })} placeholder="(555) 555-5555" /></label>
               </div>
             </div>
             <div className="dashboard-site-info-group">
@@ -585,7 +572,7 @@ export default function DashboardPage() {
               <div className="dashboard-site-info-fields">
                 <label>Name<input value={siteInfoDraft.secondary_isp_name} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_name: e.target.value })} placeholder="ISP name" /></label>
                 <label>Circuit ID<input value={siteInfoDraft.secondary_isp_circuit_id} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_circuit_id: e.target.value })} placeholder="Circuit ID" /></label>
-                <label>Contact<input value={formatPhoneNumber(siteInfoDraft.secondary_isp_contact)} onChange={(e) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_contact: onlyDigits(e.target.value) })} placeholder="(555) 555-5555" /></label>
+                <label>Contact<PhoneInput value={siteInfoDraft.secondary_isp_contact} onChange={(digits) => setSiteInfoDraft({ ...siteInfoDraft, secondary_isp_contact: digits })} placeholder="(555) 555-5555" /></label>
               </div>
             </div>
             <div className="dashboard-site-info-group">

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
+import PhoneInput from '../components/PhoneInput';
 import './Locations.css';
 
 // ---------------------------------------------------------------------------
@@ -261,11 +262,11 @@ function RoomModal({ initial, onSave, onClose }) {
           </div>
           <div className="locations-form-field">
             <label className="locations-form-label">Contact Phone</label>
-            <input
+            <PhoneInput
               className="locations-form-input"
               value={form.contact_phone}
-              onChange={set('contact_phone')}
-              placeholder="+1 555 000 0000"
+              onChange={(digits) => setForm((f) => ({ ...f, contact_phone: digits }))}
+              placeholder="(555) 555-5555"
             />
           </div>
         </div>
