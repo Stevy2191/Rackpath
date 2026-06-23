@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, Copy, Check } from 'lucide-react';
 import client from '../../api/client';
 import './CopySettingsModal.css';
@@ -7,17 +7,50 @@ function deviceLabel(s) {
   return s.item_label || s.custom_type || `Device ${s.id}`;
 }
 
-export default function CopySettingsModal({ slot, fields, targets, onUpdated, onClose }) {
+export default function CopySettingsModal({ slot, fields, targets, racks, onUpdated, onClose }) {
   const [selected, setSelected] = useState(new Set(targets.map((t) => t.id)));
   const [copying, setCopying] = useState(false);
   const [copyCount, setCopyCount] = useState(null);
   const [error, setError] = useState(null);
 
-  const allSelected = selected.size === targets.length;
+  // Group targets by rack; source rack first, then alphabetical by name.
+  const groups = useMemo(() => {
+    const rackMap = new Map((racks || []).map((r) => [r.id, r]));
+    const byRack = new Map();
+    for (const t of targets) {
+      if (!byRack.has(t.rack_id)) byRack.set(t.rack_id, []);
+      byRack.get(t.rack_id).push(t);
+    }
+    const result = [];
+    for (const [rackId, devices] of byRack) {
+      const rack = rackMap.get(rackId) || { id: rackId, name: `Rack ${rackId}` };
+      result.push({ rack, devices });
+    }
+    result.sort((a, b) => {
+      if (a.rack.id === slot.rack_id) return -1;
+      if (b.rack.id === slot.rack_id) return 1;
+      return (a.rack.name || '').localeCompare(b.rack.name || '');
+    });
+    return result;
+  }, [targets, racks, slot.rack_id]);
+
+  const allIds = targets.map((t) => t.id);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
 
   const toggleAll = () => {
     if (allSelected) setSelected(new Set());
-    else setSelected(new Set(targets.map((t) => t.id)));
+    else setSelected(new Set(allIds));
+  };
+
+  const toggleGroup = (devices) => {
+    const ids = devices.map((d) => d.id);
+    const groupAll = ids.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (groupAll) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
   };
 
   const toggle = (id) => {
@@ -78,6 +111,9 @@ export default function CopySettingsModal({ slot, fields, targets, onUpdated, on
     }
   };
 
+  const rackCount = groups.length;
+  const deviceCount = targets.length;
+
   return (
     <div
       className="copy-settings-overlay"
@@ -106,26 +142,53 @@ export default function CopySettingsModal({ slot, fields, targets, onUpdated, on
             </div>
 
             <div className="copy-settings-list-hdr">
-              <span>{targets.length} matching device{targets.length !== 1 ? 's' : ''}</span>
+              <span>
+                {deviceCount} device{deviceCount !== 1 ? 's' : ''} across{' '}
+                {rackCount} rack{rackCount !== 1 ? 's' : ''}
+              </span>
               <button type="button" className="copy-settings-toggle-all" onClick={toggleAll}>
                 {allSelected ? 'Deselect All' : 'Select All'}
               </button>
             </div>
 
             <div className="copy-settings-list">
-              {targets.map((t) => (
-                <label key={t.id} className="copy-settings-item">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(t.id)}
-                    onChange={() => toggle(t.id)}
-                  />
-                  <span className="copy-settings-item-name">{deviceLabel(t)}</span>
-                  {t.u_position != null && (
-                    <span className="copy-settings-item-pos">U{t.u_position}</span>
-                  )}
-                </label>
-              ))}
+              {groups.map(({ rack, devices }) => {
+                const groupIds = devices.map((d) => d.id);
+                const groupAllSelected = groupIds.every((id) => selected.has(id));
+                const groupSomeSelected = !groupAllSelected && groupIds.some((id) => selected.has(id));
+                return (
+                  <div key={rack.id} className="copy-settings-group">
+                    <div className="copy-settings-group-hdr">
+                      <span className="copy-settings-group-name">
+                        {rack.name || `Rack ${rack.id}`}
+                        {rack.id === slot.rack_id && (
+                          <span className="copy-settings-group-badge">current</span>
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        className="copy-settings-toggle-all"
+                        onClick={() => toggleGroup(devices)}
+                      >
+                        {groupAllSelected ? 'Deselect' : groupSomeSelected ? 'Select All' : 'Select All'}
+                      </button>
+                    </div>
+                    {devices.map((t) => (
+                      <label key={t.id} className="copy-settings-item">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(t.id)}
+                          onChange={() => toggle(t.id)}
+                        />
+                        <span className="copy-settings-item-name">{deviceLabel(t)}</span>
+                        {t.u_position != null && (
+                          <span className="copy-settings-item-pos">U{t.u_position}</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
 
             {error && <div className="copy-settings-error">{error}</div>}

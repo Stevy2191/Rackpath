@@ -93,6 +93,46 @@
 
 .copy-settings-toggle-all:hover { text-decoration: underline; }
 
+.copy-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.copy-settings-group:last-child { margin-bottom: 0; }
+
+.copy-settings-group-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 3px;
+  border-bottom: 1px solid #1e2128;
+  margin-bottom: 2px;
+}
+
+.copy-settings-group-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #9ca3af;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.copy-settings-group-badge {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: #4adede;
+  background: rgba(74, 222, 222, 0.1);
+  border: 1px solid rgba(74, 222, 222, 0.25);
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+}
+
 .copy-settings-list {
   overflow-y: auto;
   flex: 1;

@@ -325,11 +325,10 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     </>
   );
 
-  // Devices in the same rack with the same catalog type (built-in catalog_id
-  // or custom_type when catalog_id is absent) — shown in Copy Settings modal.
-  const sameTypeSlots = !isVerticalPdu ? (rackSlots || []).filter((s) => {
+  // All devices across all project racks with the same catalog type —
+  // shown in Copy Settings modal, grouped by rack.
+  const sameTypeSlots = !isVerticalPdu ? (allSlots || []).filter((s) => {
     if (s.id === slot.id) return false;
-    if (s.rack_id !== slot.rack_id) return false;
     if (s.item_type === 'vertical-pdu') return false;
     if (slot.catalog_id) return s.catalog_id === slot.catalog_id;
     return slot.custom_type && s.custom_type === slot.custom_type;
@@ -1017,6 +1016,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
           slot={slot}
           fields={fields}
           targets={sameTypeSlots}
+          racks={racks || []}
           onUpdated={onUpdated}
           onClose={() => setShowCopyModal(false)}
         />
