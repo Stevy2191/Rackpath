@@ -14,20 +14,39 @@ const PREVIEW_SCALE = 1;
 const PDF_DPI = 150;
 const PREVIEW_DEBOUNCE = 150;
 
-// Human-readable names for each device type key
+// Human-readable names for each device render type key
 const TYPE_LABELS = {
-  switch:          'Switch',
-  firewall:        'Firewall / Router',
-  server:          'Server',
-  storage:         'Storage / NAS',
-  ups:             'UPS',
-  pdu:             'PDU',
-  'patch-panel':   'Patch Panel',
-  'cable-manager': 'Cable Mgr',
-  blank:           'Blank Panel',
-  kvm:             'KVM',
-  ap:              'Access Point',
-  other:           'Device',
+  switch:                'Switch',
+  firewall:              'Firewall / Router',
+  server:                'Server',
+  'blade-chassis':       'Blade Chassis',
+  storage:               'Storage / NAS',
+  'tape-library':        'Tape Library',
+  'san-switch':          'SAN Switch',
+  ups:                   'UPS',
+  pdu:                   'PDU',
+  'pdu-vertical':        'PDU (Vertical)',
+  ats:                   'ATS',
+  transformer:           'Stepdown Transformer',
+  ebm:                   'Battery Module',
+  'patch-panel':         'Patch Panel',
+  'patch-panel-copper':  'Patch Panel (Copper)',
+  'patch-panel-fiber':   'Patch Panel (Fiber)',
+  'cable-manager':       'Cable Mgmt',
+  keystone:              'Keystone Panel',
+  blank:                 'Blank Panel',
+  kvm:                   'KVM',
+  'console-server':      'Console Server',
+  oob:                   'OOB Mgmt',
+  ap:                    'Access Point',
+  'wireless-controller': 'Wireless Controller',
+  'load-balancer':       'Load Balancer',
+  amplifier:             'Amplifier',
+  'media-player':        'Media Player',
+  'display-controller':  'Display Controller',
+  shelf:                 'Shelf',
+  drawer:                'Drawer',
+  other:                 'Device',
 };
 
 // ─── Canvas helpers ───────────────────────────────────────────────────────────
@@ -93,11 +112,19 @@ function downloadUrl(url, filename) {
 // natural size means a higher-resolution capture packs more image pixels
 // into the same page area instead, which is what actually makes text look
 // sharper at 100% zoom in a PDF viewer.
-function makePdf(dataUrl, cssW, cssH, filename) {
-  const pdfW = (cssW / PDF_DPI) * 72;
-  const pdfH = (cssH / PDF_DPI) * 72;
+function makePdf(pages, filename) {
+  const toPt = (px) => (px / PDF_DPI) * 72;
+  const [first, ...rest] = pages;
+  const pdfW = toPt(first.cssW);
+  const pdfH = toPt(first.cssH);
   const pdf = new jsPDF({ orientation: pdfW >= pdfH ? 'landscape' : 'portrait', unit: 'pt', format: [pdfW, pdfH] });
-  pdf.addImage(dataUrl, 'PNG', 0, 0, pdfW, pdfH);
+  pdf.addImage(first.dataUrl, 'PNG', 0, 0, pdfW, pdfH);
+  for (const page of rest) {
+    const pw = toPt(page.cssW);
+    const ph = toPt(page.cssH);
+    pdf.addPage([pw, ph]);
+    pdf.addImage(page.dataUrl, 'PNG', 0, 0, pw, ph);
+  }
   pdf.save(filename);
 }
 
@@ -336,7 +363,7 @@ function buildLegendItems(slots) {
     if (!seen.has(type)) {
       const color = CATEGORY_CONFIG[type] || CATEGORY_CONFIG.other;
       const label = TYPE_LABELS[type] || 'Device';
-      seen.set(type, { color, label, uSize: s.u_size });
+      seen.set(type, { color, label });
     }
   }
   return [...seen.values()];
@@ -377,7 +404,7 @@ function drawLegendPanel(ctx, x, y, panelW, items, { theme, scale }) {
   ctx.font = `${Math.round(LEG_FONT_SZ * s)}px monospace`;
 
   for (let i = 0; i < items.length; i++) {
-    const { color, label, uSize } = items[i];
+    const { color, label } = items[i];
     const rowTop = y + (LEG_PADV + LEG_HEADER_H + i * LEG_ROW_H) * s;
     const rowMid = rowTop + (LEG_ROW_H / 2) * s;
     const swX = x + LEG_PADH * s;
@@ -387,11 +414,9 @@ function drawLegendPanel(ctx, x, y, panelW, items, { theme, scale }) {
     roundRect(ctx, swX, swY, LEG_SWATCH * s, LEG_SWATCH * s, 3 * s);
     ctx.fill();
 
-    const fullLabel = `${label} (${uSize}U)`;
     ctx.fillStyle = txtColor;
     const maxW = panelW - (LEG_PADH * 2 + LEG_SWATCH + 8) * s;
-    const text = truncateToWidth(ctx, fullLabel, maxW);
-    ctx.fillText(text, swX + (LEG_SWATCH + 7) * s, rowMid + 4 * s);
+    ctx.fillText(truncateToWidth(ctx, label, maxW), swX + (LEG_SWATCH + 7) * s, rowMid + 4 * s);
   }
 }
 
@@ -505,6 +530,187 @@ function buildPowerSummaryModel(slots, allSlots) {
     }));
 
   return { outletBlocks, connections, hasContent: true };
+}
+
+// ─── Full-width Power Summary page (PDF page 2) ───────────────────────────────
+const P2_PAD     = 40;
+const P2_HDR_H   = 28;   // title line height
+const P2_SUB_LINE = 16;  // subtitle line height
+const P2_SEP_GAP = 16;   // gap below the separator line
+const P2_COLS    = 2;    // outlet block columns
+const P2_BGAP    = 20;   // gap between block columns/rows
+const P2_BPADH   = 14;   // block inner horizontal padding
+const P2_BPADV   = 12;   // block inner vertical padding
+const P2_FONT_TITLE  = 18;
+const P2_FONT_LABEL  = 11;
+const P2_FONT_BODY   = 9;
+const P2_FONT_SM     = 8;
+const P2_LH_SUB  = 18;   // device label row height
+const P2_LH_INP  = 14;   // input line height
+const P2_LH_TYPE = 13;   // outlet-type header height
+const P2_LH_OUTL = 12;   // per-outlet row height
+const P2_LH_ROW  = 13;   // connection table row height
+
+function p2BlockHeight(block) {
+  let h = P2_BPADV * 2 + P2_LH_SUB + P2_LH_INP;
+  block.groups.forEach((g) => { h += P2_LH_TYPE + g.rows.length * P2_LH_OUTL; });
+  return h;
+}
+
+async function buildPowerSummaryPageCanvas(model, racks, pageW, { theme, scale }) {
+  const s = scale;
+  const bg      = bgFor(theme);
+  const txtColor = theme === 'light' ? '#263040' : '#d4d8e0';
+  const dimColor = theme === 'light' ? '#8a96a8' : '#5a6170';
+  const hdrColor = theme === 'light' ? '#607080' : '#6b7280';
+  const sepColor = theme === 'light' ? '#a8b4c4' : '#2a2e38';
+  const accentColor = theme === 'light' ? '#3060a0' : '#4adede';
+  const panelBg  = theme === 'light' ? 'rgba(200,210,225,0.45)' : 'rgba(26,28,36,0.96)';
+  const panelBrd = theme === 'light' ? '#a8b4c4' : '#2a2e38';
+
+  const innerW   = pageW - P2_PAD * 2;
+  const colW     = (innerW - P2_BGAP * (P2_COLS - 1)) / P2_COLS;
+  const blocks   = model.outletBlocks;
+  const nRows    = Math.ceil(blocks.length / P2_COLS);
+
+  // Row heights: maximum block height per row (both cols sit at the same y)
+  const rowHs = [];
+  for (let r = 0; r < nRows; r++) {
+    let maxH = 0;
+    for (let c = 0; c < P2_COLS; c++) {
+      const idx = r * P2_COLS + c;
+      if (idx < blocks.length) maxH = Math.max(maxH, p2BlockHeight(blocks[idx]));
+    }
+    rowHs.push(maxH);
+  }
+  const gridH  = rowHs.reduce((a, b) => a + b, 0) + Math.max(0, nRows - 1) * P2_BGAP;
+  const tableH = model.connections.length > 0
+    ? P2_BGAP + P2_LH_ROW * 2 + model.connections.length * P2_LH_ROW
+    : 0;
+
+  // Total page height: header + separator gap + optional grid + optional table + bottom pad
+  const headerH = P2_PAD + P2_HDR_H + P2_SUB_LINE + P2_SEP_GAP;
+  const pageH   = headerH + (gridH > 0 ? gridH + P2_PAD : 0) + (tableH > 0 ? tableH + P2_PAD : 0) + P2_PAD;
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = pageW * s;
+  canvas.height = pageH * s;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, pageW * s, pageH * s);
+
+  // ── Header ──────────────────────────────────────────────────────────────
+  let cy = P2_PAD * s;
+
+  ctx.font      = `bold ${Math.round(P2_FONT_TITLE * s)}px monospace`;
+  ctx.fillStyle = accentColor;
+  ctx.fillText('POWER SUMMARY', P2_PAD * s, cy + P2_FONT_TITLE * s);
+  cy += P2_HDR_H * s;
+
+  const rackNames = racks.map((r) => r.name).join(', ');
+  const dateStr   = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  ctx.font      = `${Math.round(P2_FONT_BODY * s)}px monospace`;
+  ctx.fillStyle = dimColor;
+  ctx.fillText(`${rackNames}  ·  ${dateStr}`, P2_PAD * s, cy + P2_FONT_BODY * s);
+  cy += P2_SUB_LINE * s;
+
+  ctx.fillStyle = sepColor;
+  ctx.fillRect(P2_PAD * s, cy, innerW * s, Math.max(1, Math.round(s)));
+  cy += P2_SEP_GAP * s;
+
+  // ── Outlet block grid ─────────────────────────────────────────────────────
+  if (blocks.length > 0) {
+    let rowY = cy;
+    for (let r = 0; r < nRows; r++) {
+      for (let c = 0; c < P2_COLS; c++) {
+        const idx = r * P2_COLS + c;
+        if (idx >= blocks.length) continue;
+        const block = blocks[idx];
+        const bx  = (P2_PAD + c * (colW + P2_BGAP)) * s;
+        const bh  = rowHs[r] * s;
+        const bw  = colW * s;
+        const maxBW = (colW - P2_BPADH * 2) * s;
+
+        ctx.fillStyle = panelBg;
+        roundRect(ctx, bx, rowY, bw, bh, 6 * s);
+        ctx.fill();
+        ctx.strokeStyle = panelBrd;
+        ctx.lineWidth = Math.max(1, Math.round(s));
+        roundRect(ctx, bx, rowY, bw, bh, 6 * s);
+        ctx.stroke();
+
+        let iy = rowY + P2_BPADV * s;
+
+        ctx.font      = `bold ${Math.round(P2_FONT_LABEL * s)}px monospace`;
+        ctx.fillStyle = txtColor;
+        ctx.fillText(truncateToWidth(ctx, block.label, maxBW), bx + P2_BPADH * s, iy + P2_FONT_LABEL * s);
+        iy += P2_LH_SUB * s;
+
+        ctx.font      = `${Math.round(P2_FONT_SM * s)}px monospace`;
+        ctx.fillStyle = dimColor;
+        ctx.fillText(truncateToWidth(ctx, block.inputLine, maxBW), bx + P2_BPADH * s, iy + P2_FONT_SM * s);
+        iy += P2_LH_INP * s;
+
+        block.groups.forEach((grp) => {
+          ctx.font      = `bold ${Math.round(P2_FONT_SM * s)}px monospace`;
+          ctx.fillStyle = hdrColor;
+          ctx.fillText(truncateToWidth(ctx, grp.type, maxBW), bx + P2_BPADH * s, iy + P2_FONT_SM * s);
+          iy += P2_LH_TYPE * s;
+
+          ctx.font = `${Math.round(P2_FONT_SM * s)}px monospace`;
+          grp.rows.forEach((outlet) => {
+            ctx.fillStyle = hdrColor;
+            ctx.fillText(String(outlet.index), bx + P2_BPADH * s, iy + P2_FONT_SM * s);
+            ctx.fillStyle = outlet.empty ? dimColor : txtColor;
+            ctx.fillText(truncateToWidth(ctx, outlet.label, maxBW - 20 * s), bx + (P2_BPADH + 20) * s, iy + P2_FONT_SM * s);
+            iy += P2_LH_OUTL * s;
+          });
+        });
+      }
+      rowY += (rowHs[r] + P2_BGAP) * s;
+    }
+    cy = rowY - P2_BGAP * s + P2_PAD * s;
+  }
+
+  // ── Device power connections table ─────────────────────────────────────────
+  if (model.connections.length > 0) {
+    const col1x = P2_PAD * s;
+    const col2x = (P2_PAD + innerW * 0.30) * s;
+    const col3x = (P2_PAD + innerW * 0.65) * s;
+    const c1max = (innerW * 0.28) * s;
+    const c2max = (innerW * 0.33) * s;
+    const c3max = (innerW * 0.33) * s;
+
+    ctx.font      = `bold ${Math.round(P2_FONT_LABEL * s)}px monospace`;
+    ctx.fillStyle = hdrColor;
+    ctx.fillText('DEVICE POWER CONNECTIONS', col1x, cy + P2_FONT_LABEL * s);
+    cy += P2_LH_ROW * 1.5 * s;
+
+    ctx.fillStyle = sepColor;
+    ctx.fillRect(col1x, cy, innerW * s, Math.max(1, Math.round(s)));
+    cy += (1 + 6) * s;
+
+    ctx.font      = `bold ${Math.round(P2_FONT_BODY * s)}px monospace`;
+    ctx.fillStyle = hdrColor;
+    ctx.fillText('DEVICE', col1x, cy + P2_FONT_BODY * s);
+    ctx.fillText('PSU 1',  col2x, cy + P2_FONT_BODY * s);
+    ctx.fillText('PSU 2',  col3x, cy + P2_FONT_BODY * s);
+    cy += P2_LH_ROW * s;
+
+    ctx.font = `${Math.round(P2_FONT_BODY * s)}px monospace`;
+    model.connections.forEach((row) => {
+      ctx.fillStyle = txtColor;
+      ctx.fillText(truncateToWidth(ctx, row.device, c1max), col1x, cy + P2_FONT_BODY * s);
+      ctx.fillStyle = row.psu1Dim ? dimColor : txtColor;
+      ctx.fillText(truncateToWidth(ctx, row.psu1, c2max), col2x, cy + P2_FONT_BODY * s);
+      ctx.fillStyle = row.psu2Dim ? dimColor : txtColor;
+      ctx.fillText(truncateToWidth(ctx, row.psu2, c3max), col3x, cy + P2_FONT_BODY * s);
+      cy += P2_LH_ROW * s;
+    });
+  }
+
+  return { dataUrl: canvas.toDataURL('image/png'), cssW: pageW, cssH: pageH };
 }
 
 function measurePowerSummaryHeight(model) {
@@ -732,9 +938,15 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
 
   let { dataUrl, cssW, cssH } = result;
 
-  if ((includeLegend || includePowerSummary) && format !== 'svg') {
+  // For PDF, power summary goes on its own page 2 — only the legend goes in
+  // the side column on page 1.  For all other visual formats the existing
+  // side-column layout is used unchanged.
+  const powerSummaryInSidebar = includePowerSummary && format !== 'pdf';
+  if ((includeLegend || powerSummaryInSidebar) && format !== 'svg') {
     const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-    const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, { theme, scale, includeLegend, includePowerSummary });
+    const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, {
+      theme, scale, includeLegend, includePowerSummary: powerSummaryInSidebar,
+    });
     ({ dataUrl, cssW, cssH } = sideResult);
   }
 
@@ -743,7 +955,16 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
     : 'racks-export';
 
   if (format === 'pdf') {
-    makePdf(dataUrl, cssW, cssH, `${filename}.pdf`);
+    const pages = [{ dataUrl, cssW, cssH }];
+    if (includePowerSummary) {
+      const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
+      const model = buildPowerSummaryModel(slots, allSlots);
+      if (model.hasContent) {
+        const p2 = await buildPowerSummaryPageCanvas(model, targetRacks, Math.max(cssW, 600), { theme, scale });
+        pages.push(p2);
+      }
+    }
+    makePdf(pages, `${filename}.pdf`);
   } else if (format === 'svg') {
     const base64 = dataUrl.split(',')[1];
     const blob = new Blob([atob(base64)], { type: 'image/svg+xml' });
@@ -792,9 +1013,13 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
       if (!result) { setPreviewError(true); return; }
 
       let { dataUrl, cssW, cssH } = result;
-      if (il || ips) {
+      // For PDF, power summary goes on page 2 — preview shows page 1 only.
+      const previewIncludePower = ips && f !== 'pdf';
+      if (il || previewIncludePower) {
         const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-        const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, { theme: t, scale: PREVIEW_SCALE, includeLegend: il, includePowerSummary: ips });
+        const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, {
+          theme: t, scale: PREVIEW_SCALE, includeLegend: il, includePowerSummary: previewIncludePower,
+        });
         dataUrl = sideResult.dataUrl;
       }
       setPreviewUrl(dataUrl);
