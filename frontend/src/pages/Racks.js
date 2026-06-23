@@ -318,7 +318,6 @@ export default function RacksPage() {
       try {
         const res = await client.post('/racks', {
           name: `${rack.name} (copy)`,
-          location: rack.location,
           u_height: rack.u_height,
           rack_type: rack.rack_type,
           notes: rack.notes,
@@ -506,7 +505,7 @@ export default function RacksPage() {
     const data = {
       version: '1.0',
       exportedAt: new Date().toISOString(),
-      rack: { name: rack.name, location: rack.location, u_height: rack.u_height, rack_type: rack.rack_type, notes: rack.notes, show_rear: rack.show_rear, slots },
+      rack: { name: rack.name, u_height: rack.u_height, rack_type: rack.rack_type, notes: rack.notes, show_rear: rack.show_rear, slots },
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -772,7 +771,7 @@ export default function RacksPage() {
         />
       )}
 
-      {addRackOpen && <AddRackModal onClose={() => setAddRackOpen(false)} onCreate={handleAddRack} />}
+      {addRackOpen && <AddRackModal locations={locations} onClose={() => setAddRackOpen(false)} onCreate={handleAddRack} />}
 
       {pendingPlacement && (
         <QuickConfigModal pending={pendingPlacement} onConfirm={confirmPlacement} onCancel={cancelPlacement} />

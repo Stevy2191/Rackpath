@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import client from '../../api/client';
 
 const RACK_TYPES = [
   { value: '4-post', label: '4-Post Rack' },
@@ -19,20 +20,29 @@ const HEIGHT_PRESETS = [8, 12, 16, 24, 32, 42, 47];
 
 const EMPTY = {
   name: '',
-  location: '',
+  location_id: '',
+  room_id: '',
   u_height: 42,
   rack_type: '4-post',
   rack_width: '19"',
   notes: '',
 };
 
-export default function AddRackModal({ onClose, onCreate }) {
+export default function AddRackModal({ locations = [], onClose, onCreate }) {
   const [step, setStep] = useState(1);
   const [rack, setRack] = useState(EMPTY);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [roomsList, setRoomsList] = useState([]);
 
   const set = (key, val) => setRack((r) => ({ ...r, [key]: val }));
+
+  useEffect(() => {
+    if (!rack.location_id) { setRoomsList([]); return; }
+    client.get(`/locations/${rack.location_id}/rooms`)
+      .then((res) => setRoomsList(res.data || []))
+      .catch(() => setRoomsList([]));
+  }, [rack.location_id]);
 
   const handleSubmit = async () => {
     if (!rack.name.trim()) { setError('Name is required'); return; }
@@ -71,14 +81,36 @@ export default function AddRackModal({ onClose, onCreate }) {
               />
             </label>
 
-            <label>
-              Location
-              <input
-                value={rack.location}
-                onChange={(e) => set('location', e.target.value)}
-                placeholder="e.g. Server Room A"
-              />
-            </label>
+            {locations.length > 0 && (
+              <label>
+                Building / Location
+                <select
+                  value={rack.location_id}
+                  onChange={(e) => { set('location_id', e.target.value || ''); set('room_id', ''); }}
+                >
+                  <option value="">— Unassigned —</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {locations.length > 0 && (
+              <label>
+                Room
+                <select
+                  value={rack.room_id}
+                  onChange={(e) => set('room_id', e.target.value || '')}
+                  disabled={!rack.location_id}
+                >
+                  <option value="">— Unassigned —</option>
+                  {roomsList.map((room) => (
+                    <option key={room.id} value={room.id}>{room.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label>
               Rack Type

@@ -194,10 +194,10 @@ function buildMarkdown(project, overview, activity) {
 
   lines.push('## Racks');
   lines.push('');
-  lines.push('| Name | Location | Used U | Total U |');
-  lines.push('| --- | --- | --- | --- |');
+  lines.push('| Name | Used U | Total U |');
+  lines.push('| --- | --- | --- |');
   details.racks.forEach((r) => {
-    lines.push(`| ${r.name} | ${r.location || ''} | ${r.used_u} | ${r.u_height} |`);
+    lines.push(`| ${r.name} | ${r.used_u} | ${r.u_height} |`);
   });
   lines.push('');
 
@@ -337,8 +337,8 @@ function buildPdf(project, overview) {
   y += 4;
   autoTable(doc, {
     startY: y,
-    head: [['Name', 'Location', 'Used U', 'Total U']],
-    body: details.racks.map((r) => [r.name, r.location || '', String(r.used_u), String(r.u_height)]),
+    head: [['Name', 'Used U', 'Total U']],
+    body: details.racks.map((r) => [r.name, String(r.used_u), String(r.u_height)]),
   });
   y = doc.lastAutoTable.finalY + 10;
 

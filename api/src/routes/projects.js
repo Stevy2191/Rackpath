@@ -289,7 +289,7 @@ router.get('/:id/overview', async (req, res, next) => {
       pool.query("SELECT id, label, type FROM topology_nodes WHERE project_id = ? AND device_id IS NULL", [projectId]),
       pool.query('SELECT id, hostname, ip, type, location, make, model FROM devices WHERE project_id = ? ORDER BY hostname', [projectId]),
       pool.query(
-        `SELECT r.id, r.name, r.location, r.u_height, r.location_id, r.room_id,
+        `SELECT r.id, r.name, r.u_height, r.location_id, r.room_id,
                 COALESCE(SUM(rs.u_size), 0) AS used_u
          FROM racks r
          LEFT JOIN rack_slots rs ON rs.rack_id = r.id AND rs.device_id IS NOT NULL

@@ -33,7 +33,6 @@ const ANNOTATION_FIELDS = [
 export default function RackEditPanel({ rack, usedU = 0, locations = [], onClose, onSave, onDuplicate, onDelete, onExport, onExportJson }) {
   const [edits, setEdits] = useState({
     name:             rack.name,
-    location:         rack.location         || '',
     u_height:         rack.u_height,
     rack_width:       rack.rack_width        || '19"',
     rack_type:        rack.rack_type         || '4-post',
@@ -50,7 +49,6 @@ export default function RackEditPanel({ rack, usedU = 0, locations = [], onClose
   useEffect(() => {
     setEdits({
       name:             rack.name,
-      location:         rack.location         || '',
       u_height:         rack.u_height,
       rack_width:       rack.rack_width        || '19"',
       rack_type:        rack.rack_type         || '4-post',
@@ -115,16 +113,6 @@ export default function RackEditPanel({ rack, usedU = 0, locations = [], onClose
               value={edits.name}
               onChange={(e) => setEdits({ ...edits, name: e.target.value })}
               required
-            />
-          </div>
-
-          <div className="rep-field">
-            <label className="rep-label">LOCATION</label>
-            <input
-              className="rep-input"
-              value={edits.location}
-              onChange={(e) => setEdits({ ...edits, location: e.target.value })}
-              placeholder="e.g. DC1 Row 3"
             />
           </div>
 

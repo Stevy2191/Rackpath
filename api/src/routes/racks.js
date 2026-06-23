@@ -7,6 +7,16 @@ const router = express.Router();
 
 const RACK_TYPES = ['4-post', '2-post', 'wall-mount', 'open-frame', 'blade-enclosure'];
 
+// `location` is a legacy free-text column, superseded by the
+// location_id/room_id hierarchy - the column stays in the DB (no
+// migration needed) but is no longer read from requests or exposed in
+// responses.
+function omitLegacyLocation(row) {
+  if (!row) return row;
+  const { location, ...rest } = row;
+  return rest;
+}
+
 function validateRackFields(body) {
   const { rack_type, u_height } = body;
   if (rack_type !== undefined && rack_type !== null && !RACK_TYPES.includes(rack_type)) {
@@ -30,7 +40,7 @@ router.get('/', async (req, res, next) => {
        ORDER BY rk.name`,
       [req.projectId]
     );
-    res.json(rows);
+    res.json(rows.map(omitLegacyLocation));
   } catch (err) {
     next(err);
   }
@@ -55,7 +65,7 @@ router.get('/:id', async (req, res, next) => {
       [req.params.id]
     );
 
-    res.json({ ...racks[0], slots: parseRowsOutletGroups(slots) });
+    res.json({ ...omitLegacyLocation(racks[0]), slots: parseRowsOutletGroups(slots) });
   } catch (err) {
     next(err);
   }
@@ -64,19 +74,19 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/racks - create rack
 router.post('/', async (req, res, next) => {
   try {
-    const { name, location, u_height, rack_type, notes, rack_width, location_id, room_id } = req.body;
+    const { name, u_height, rack_type, notes, rack_width, location_id, room_id } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const validationError = validateRackFields(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
     const [result] = await pool.query(
-      'INSERT INTO racks (project_id, name, location, u_height, rack_type, notes, rack_width, location_id, room_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [req.projectId, name, location || null, u_height || 42, rack_type || '4-post', notes || null, rack_width || '19"', location_id || null, room_id || null]
+      'INSERT INTO racks (project_id, name, u_height, rack_type, notes, rack_width, location_id, room_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.projectId, name, u_height || 42, rack_type || '4-post', notes || null, rack_width || '19"', location_id || null, room_id || null]
     );
     const [rows] = await pool.query('SELECT * FROM racks WHERE id = ?', [result.insertId]);
     logActivity(req.projectId, req.user.id, 'rack.created', rows[0].name);
-    res.status(201).json(rows[0]);
+    res.status(201).json(omitLegacyLocation(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -85,7 +95,7 @@ router.post('/', async (req, res, next) => {
 // PUT /api/racks/:id - update rack
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, location, u_height, rack_type, notes, show_rear, rack_width, annotation_field, show_annotations, location_id, room_id } = req.body;
+    const { name, u_height, rack_type, notes, show_rear, rack_width, annotation_field, show_annotations, location_id, room_id } = req.body;
 
     const validationError = validateRackFields(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
@@ -176,8 +186,8 @@ router.put('/:id', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      'UPDATE racks SET name = ?, location = ?, u_height = ?, rack_type = ?, notes = ?, show_rear = ?, rack_width = ?, annotation_field = ?, show_annotations = ?, location_id = ?, room_id = ? WHERE id = ? AND project_id = ?',
-      [name, location || null, resolvedHeight, rack_type || '4-post', notes || null, show_rear !== undefined ? show_rear : 1, rack_width || '19"', annotation_field || null, show_annotations ? 1 : 0, location_id || null, room_id || null, req.params.id, req.projectId]
+      'UPDATE racks SET name = ?, u_height = ?, rack_type = ?, notes = ?, show_rear = ?, rack_width = ?, annotation_field = ?, show_annotations = ?, location_id = ?, room_id = ? WHERE id = ? AND project_id = ?',
+      [name, resolvedHeight, rack_type || '4-post', notes || null, show_rear !== undefined ? show_rear : 1, rack_width || '19"', annotation_field || null, show_annotations ? 1 : 0, location_id || null, room_id || null, req.params.id, req.projectId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Rack not found' });
 
@@ -188,7 +198,7 @@ router.put('/:id', async (req, res, next) => {
     );
 
     const [rows] = await pool.query('SELECT * FROM racks WHERE id = ?', [req.params.id]);
-    res.json(rows[0]);
+    res.json(omitLegacyLocation(rows[0]));
   } catch (err) {
     next(err);
   }
