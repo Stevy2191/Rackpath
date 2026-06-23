@@ -105,5 +105,6 @@ export function normalizeCatalogEntry(entry, source) {
     capacity_unit: null,
     port_count: entry.portCount ?? null,
     bay_count: entry.bayCount ?? null,
+    device_type: entry.deviceType ?? null,
   };
 }

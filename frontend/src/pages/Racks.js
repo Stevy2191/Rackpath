@@ -397,7 +397,7 @@ export default function RacksPage() {
       input_plug_type: fields.input_plug_type || null,
       capacity_va: fields.capacity_va || null,
       capacity_w: fields.capacity_w || null,
-      device_type: inferDeviceType(renderType, fields.label),
+      device_type: fields.device_type ?? inferDeviceType(renderType, fields.label),
       capacity_value: fields.capacity_value || null,
       capacity_unit: fields.capacity_unit || null,
       port_count: fields.port_count || null,

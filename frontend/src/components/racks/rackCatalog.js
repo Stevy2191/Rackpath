@@ -41,6 +41,7 @@ function e(id, name, category, renderType, uSize, opts = {}) {
     portCount:    opts.portCount,
     bayCount:     opts.bayCount,
     floating:     opts.floating || false,
+    deviceType:   opts.deviceType || null,
   };
 }
 
@@ -56,7 +57,7 @@ export const RACK_CATALOG = [
   e('load-balancer',       'Load Balancer',         'NETWORKING', 'load-balancer', 1),
 
   // ─── POWER ──────────────────────────────────────────────────────────────────
-  e('ups', 'UPS', 'POWER', 'ups', 2, { outletCount: 6, outletType: 'NEMA 5-15R', inputVoltage: '120V', capacityVa: 1500 }),
+  e('ups', 'UPS', 'POWER', 'ups', 2, { outletCount: 6, outletType: 'NEMA 5-15R', inputVoltage: '120V', capacityVa: 1500, deviceType: 'ups' }),
   e('pdu-horizontal', 'PDU - Horizontal', 'POWER', 'pdu', 1, {
     halfDepth: true, mountedFace: 'rear', outletCount: 8, outletType: 'IEC C13',
   }),
@@ -76,7 +77,7 @@ export const RACK_CATALOG = [
   }),
   // Extended Battery Module: attaches to a compatible UPS to extend its
   // runtime; occupies its own U slots but provides no outlets of its own.
-  e('ebm', 'Extended Battery Module', 'POWER', 'ebm', 2, { capacityVa: 1500 }),
+  e('ebm', 'Extended Battery Module', 'POWER', 'ebm', 2, { capacityVa: 1500, deviceType: 'ebm' }),
 
   // ─── STORAGE ────────────────────────────────────────────────────────────────
   e('nas-storage-array', 'NAS / Storage Array', 'STORAGE', 'storage', 2, { bayCount: 12 }),

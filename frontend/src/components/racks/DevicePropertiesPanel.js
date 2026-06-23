@@ -369,9 +369,10 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     </>
   );
 
-  // Passive items (patch panels, shelves, cable management, etc.) have no
-  // power cord at all, so they get no Power tab — just the General fields.
-  const showPowerTab = !passive;
+  // Passive items (patch panels, shelves, etc.) and EBM battery modules have
+  // no wall power connection, so they get no Power tab — just General fields.
+  const isEbm = resolveRenderType(slot) === 'ebm' || fields.device_type === 'ebm';
+  const showPowerTab = !passive && !isEbm;
   const showGeneral = !showPowerTab || tab === 'general';
   const showPower = showPowerTab && tab === 'power';
   const powerSourceGroups = groupPowerSourcesByRack(allSlots || [], racks || [], slot.id);
