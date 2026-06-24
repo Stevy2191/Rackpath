@@ -13,7 +13,7 @@ export const COLOR_SWATCHES = [
 ];
 
 export const PORT_COUNT_PRESETS = [8, 12, 24, 48, 96];
-export const PATCH_PORT_PRESETS = [12, 24, 48];
+export const PATCH_PORT_PRESETS = [24, 48];
 // "Other" isn't listed here — TypeSelect always appends its own "Other…"
 // option (which reveals a free-text input), so including it in the preset
 // list too would show it twice.
@@ -42,9 +42,6 @@ export const DEVICE_FIELD_SCHEMAS = {
     { key: 'bay_count', label: 'Bay Count', kind: 'number', min: 1, max: 60, default: 12 },
   ],
   'patch-panel-copper': [
-    { key: 'port_count', label: 'Port Count', kind: 'select', options: PATCH_PORT_PRESETS, allowCustom: true, default: 24 },
-  ],
-  'patch-panel-fiber': [
     { key: 'port_count', label: 'Port Count', kind: 'select', options: PATCH_PORT_PRESETS, allowCustom: true, default: 24 },
   ],
   kvm: [

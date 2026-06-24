@@ -117,8 +117,7 @@ export const RACK_CATALOG = [
   e('nvr', 'NVR', 'SECURITY', 'nvr', 1, { color: '#1F2937' }),
 
   // ─── PATCHING & CABLING ─────────────────────────────────────────────────────
-  e('patch-panel-copper', 'Patch Panel - Copper', 'PATCHING & CABLING', 'patch-panel-copper', 1, { portCount: 24 }),
-  e('patch-panel-fiber',  'Patch Panel - Fiber',  'PATCHING & CABLING', 'patch-panel-fiber', 1, { halfDepth: true, portCount: 24 }),
+  e('patch-panel-copper', 'Patch Panel', 'PATCHING & CABLING', 'patch-panel-copper', 1, { portCount: 24 }),
   e('cable-management',   'Cable Management',     'PATCHING & CABLING', 'cable-manager', 1),
   e('keystone-panel',     'Keystone Panel',       'PATCHING & CABLING', 'keystone', 1),
 
