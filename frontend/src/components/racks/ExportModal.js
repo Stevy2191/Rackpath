@@ -6,7 +6,7 @@ import {
   isPowerDevice, isPassiveItem, isUps, getPowerLabel, flattenOutlets, verticalPdusForUps, listPowerSources,
   getPowerSourceLabel,
 } from '../../utils/power';
-import { layoutVerticalPdus, cordPathD, DEFAULT_U_HEIGHT } from './verticalPduLayout';
+import { layoutVerticalPdus, computeChannelBoxes, cordPathD, DEFAULT_U_HEIGHT, STRIP_WIDTH, CHANNEL_PADDING } from './verticalPduLayout';
 import './ExportModal.css';
 
 const EXPORT_SCALE = Math.max(window.devicePixelRatio || 1, 3);
@@ -122,7 +122,11 @@ function makePdf(pages, filename) {
   for (const page of rest) {
     const pw = toPt(page.cssW);
     const ph = toPt(page.cssH);
-    pdf.addPage([pw, ph]);
+    // Orientation must be passed explicitly — jsPDF's addPage defaults to
+    // portrait and silently swaps a landscape-shaped [w, h] array (as the
+    // power summary page often is: wide outlet-block grid, short table)
+    // to match, leaving the image stretched into the wrong box.
+    pdf.addPage([pw, ph], pw >= ph ? 'landscape' : 'portrait');
     pdf.addImage(page.dataUrl, 'PNG', 0, 0, pw, ph);
   }
   pdf.save(filename);
@@ -171,6 +175,20 @@ function relayoutPdus(clone, rack, verticalPdus, uSlots, view) {
     el.classList.add(`rack-vertical-pdu-${entry.side}`);
   }
 
+  // Side rail channels are positioned off the exact same frontWidth/hasGap
+  // inputs as the PDU strips above, so they go stale the same way when the
+  // clone's column composition differs from the live render's.
+  const channelBoxes = computeChannelBoxes({ verticalPdus, frontWidth, frameHeight, hasGap });
+  for (const side of ['left', 'right']) {
+    const el = clone.querySelector(`.rack-pdu-channel-${side}`);
+    if (!el) continue;
+    const box = channelBoxes[side];
+    el.style.left = `${box.leftPx - CHANNEL_PADDING}px`;
+    el.style.top = `${box.top}px`;
+    el.style.height = `${box.height}px`;
+    el.style.width = `${STRIP_WIDTH + CHANNEL_PADDING * 2}px`;
+  }
+
   const svg = clone.querySelector('.rack-power-cords');
   if (!svg) return;
 
@@ -210,7 +228,11 @@ function relayoutPdus(clone, rack, verticalPdus, uSlots, view) {
 function measurePduOverflow(frame) {
   let left = 0;
   let right = 0;
-  for (const el of frame.querySelectorAll('.rack-vertical-pdu')) {
+  // Channels are included too — they're always rendered (even empty), and
+  // their padding box reaches slightly further out than the strip placed
+  // inside them ever would (see CHANNEL_PADDING), so a rack with no
+  // vertical PDUs at all still needs this to avoid clipping the bare rail.
+  for (const el of frame.querySelectorAll('.rack-vertical-pdu, .rack-pdu-channel')) {
     if (el.offsetParent !== frame) continue;
     left = Math.max(left, -el.offsetLeft);
     right = Math.max(right, el.offsetLeft + el.offsetWidth - frame.offsetWidth);
@@ -495,7 +517,9 @@ function describeConnection(sourceId, outlet, allSlots, unsetLabel) {
 // `slots` is the devices actually being exported (rows in the table);
 // `allSlots` is every rack in the project, used only to resolve what a
 // cross-rack PSU connection or outlet occupant actually points at.
-function buildPowerSummaryModel(slots, allSlots) {
+// `racks` (id -> name) is only needed to spell out the other rack's name
+// when a vertical PDU's UPS connection crosses rack boundaries.
+function buildPowerSummaryModel(slots, allSlots, racks) {
   const powerDevices = orderPowerDevices(slots);
   if (powerDevices.length === 0) return { outletBlocks: [], connections: [], hasContent: false };
 
@@ -521,27 +545,39 @@ function buildPowerSummaryModel(slots, allSlots) {
       }
     }
     return {
-      label: getPowerLabel(dev),
+      label: getPowerLabel(dev) + (dev.item_type === 'vertical-pdu' ? ' (Vertical PDU)' : ''),
       inputLine: `Input: ${dev.input_plug_type || '—'} · ${dev.input_voltage || '—'}`,
       groups,
     };
   });
 
   // Every non-power, non-passive device (passive items like blanks/patch
-  // panels/shelves have no power cord, so they're not relevant here).
+  // panels/shelves have no power cord, so they're not relevant here) plus
+  // vertical PDUs, which are power devices themselves but still have their
+  // own upstream "Plugged Into" connection worth listing.
   // Each row shows both independent power connections — PSU2 is optional,
   // so an unset one reads as "Not connected" rather than "Wall (Direct)"
   // (which specifically means "this cord really does go to the wall").
   const connections = slots
-    .filter((s) => !isPowerDevice(s) && !isPassiveItem(s) && s.item_type !== 'vertical-pdu')
+    .filter((s) => (!isPowerDevice(s) && !isPassiveItem(s)) || s.item_type === 'vertical-pdu')
     .sort((a, b) => b.u_position - a.u_position)
-    .map((s) => ({
-      device: getPowerLabel(s),
-      psu1: describeConnection(s.power_source_slot_id, s.power_source_outlet, allSlots, 'Wall (Direct)'),
-      psu1Dim: !s.power_source_slot_id,
-      psu2: describeConnection(s.psu2_source_slot_id, s.psu2_source_outlet, allSlots, 'Not connected'),
-      psu2Dim: !s.psu2_source_slot_id,
-    }));
+    .map((s) => {
+      let psu1 = describeConnection(s.power_source_slot_id, s.power_source_outlet, allSlots, 'Wall (Direct)');
+      if (s.item_type === 'vertical-pdu' && s.power_source_slot_id) {
+        const source = allSlots.find((x) => x.id === s.power_source_slot_id);
+        const sourceRack = source && source.rack_id !== s.rack_id
+          ? (racks || []).find((r) => r.id === source.rack_id)
+          : null;
+        if (sourceRack) psu1 += ` — Connected to UPS in ${sourceRack.name}`;
+      }
+      return {
+        device: getPowerLabel(s),
+        psu1,
+        psu1Dim: !s.power_source_slot_id,
+        psu2: describeConnection(s.psu2_source_slot_id, s.psu2_source_outlet, allSlots, 'Not connected'),
+        psu2Dim: !s.psu2_source_slot_id,
+      };
+    });
 
   return { outletBlocks, connections, hasContent: true };
 }
@@ -837,9 +873,9 @@ function drawPowerSummaryPanel(ctx, x, y, panelW, model, { theme, scale }) {
 
 // ─── Composite the legend and/or power summary, stacked in one side column ────
 // Returns { dataUrl, cssW, cssH } with updated (expanded) dimensions.
-async function compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, { theme, scale, includeLegend, includePowerSummary }) {
+async function compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, racks, { theme, scale, includeLegend, includePowerSummary }) {
   const legendItems = includeLegend ? buildLegendItems(slots) : [];
-  const powerModel = includePowerSummary ? buildPowerSummaryModel(slots, allSlots) : { hasContent: false };
+  const powerModel = includePowerSummary ? buildPowerSummaryModel(slots, allSlots, racks) : { hasContent: false };
 
   const legendH = legendItems.length > 0 ? measureLegendHeight(legendItems) : 0;
   const powerH = powerModel.hasContent ? measurePowerSummaryHeight(powerModel) : 0;
@@ -933,7 +969,7 @@ function downloadCsv(targetRacks, allSlots) {
 
 // ─── Main export orchestration ────────────────────────────────────────────────
 
-async function performExport(targetRacks, allSlots, { format, view, theme, includeLegend, includePowerSummary }) {
+async function performExport(targetRacks, allSlots, racks, { format, view, theme, includeLegend, includePowerSummary }) {
   if (format === 'csv') { downloadCsv(targetRacks, allSlots); return; }
 
   const scale = EXPORT_SCALE;
@@ -958,7 +994,7 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
   const powerSummaryInSidebar = includePowerSummary && format !== 'pdf';
   if ((includeLegend || powerSummaryInSidebar) && format !== 'svg') {
     const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-    const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, {
+    const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, racks, {
       theme, scale, includeLegend, includePowerSummary: powerSummaryInSidebar,
     });
     ({ dataUrl, cssW, cssH } = sideResult);
@@ -972,7 +1008,7 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
     const pages = [{ dataUrl, cssW, cssH }];
     if (includePowerSummary) {
       const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-      const model = buildPowerSummaryModel(slots, allSlots);
+      const model = buildPowerSummaryModel(slots, allSlots, racks);
       if (model.hasContent) {
         const p2 = await buildPowerSummaryPageCanvas(model, targetRacks, Math.max(cssW, 600), { theme, scale });
         pages.push(p2);
@@ -994,7 +1030,7 @@ async function performExport(targetRacks, allSlots, { format, view, theme, inclu
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ExportModal({ targetRacks, allSlots, onClose }) {
+export default function ExportModal({ targetRacks, allSlots, racks, onClose }) {
   const [format, setFormat] = useState('png');
   const [view, setView] = useState('side-by-side');
   const [theme, setTheme] = useState('dark');
@@ -1031,7 +1067,7 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
       const previewIncludePower = ips && f !== 'pdf';
       if (il || previewIncludePower) {
         const slots = allSlots.filter((s) => targetRacks.some((r) => r.id === s.rack_id));
-        const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, {
+        const sideResult = await compositeSidePanel(dataUrl, cssW, cssH, slots, allSlots, racks, {
           theme: t, scale: PREVIEW_SCALE, includeLegend: il, includePowerSummary: previewIncludePower,
         });
         dataUrl = sideResult.dataUrl;
@@ -1044,7 +1080,7 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
     } finally {
       setPreviewLoading(false);
     }
-  }, [targetRacks, allSlots]);
+  }, [targetRacks, allSlots, racks]);
 
   useEffect(() => {
     if (!isVisual) { setPreviewUrl(null); return; }
@@ -1056,7 +1092,7 @@ export default function ExportModal({ targetRacks, allSlots, onClose }) {
   const handleExport = async () => {
     setExporting(true);
     try {
-      await performExport(targetRacks, allSlots, { format, view, theme, includeLegend, includePowerSummary });
+      await performExport(targetRacks, allSlots, racks, { format, view, theme, includeLegend, includePowerSummary });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Export failed', err);

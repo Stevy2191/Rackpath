@@ -3,7 +3,7 @@ import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
 import { countUsedU, normalizeSlotWidth, SLOT_WIDTH_COLUMNS, FRACTIONAL_WIDTHS } from './rackPlacement';
-import { layoutVerticalPdus, cordPathD } from './verticalPduLayout';
+import { layoutVerticalPdus, computeChannelBoxes, cordPathD, STRIP_WIDTH, CHANNEL_PADDING } from './verticalPduLayout';
 import './RackEnclosure.css';
 
 // Composite key for the per-width-per-column stripe/warning maps below —
@@ -12,6 +12,38 @@ import './RackEnclosure.css';
 // than nesting two more Maps.
 function fracKey(width, position) {
   return `${width}:${position}`;
+}
+
+// A side rail channel — always rendered, even with nothing mounted, so it
+// reads as a permanent fixture of the rack rather than appearing out of
+// nowhere only once a PDU lands there. Tracks its own drag-over state
+// (CSS :hover doesn't reliably fire during native HTML5 drag-and-drop)
+// for a clear "you can drop here" highlight while something's being
+// dragged over it, the same pattern RackUnitSlot uses for U-row drops.
+function PduChannel({ side, box, onDrop }) {
+  const [dragOver, setDragOver] = useState(false);
+  const empty = box.count === 0;
+
+  return (
+    <div
+      className={`rack-pdu-channel rack-pdu-channel-${side}${empty ? ' rack-pdu-channel-empty' : ''}${dragOver ? ' rack-pdu-channel-drag-over' : ''}`}
+      style={{
+        left: box.leftPx - CHANNEL_PADDING,
+        top: box.top,
+        height: box.height,
+        width: STRIP_WIDTH + CHANNEL_PADDING * 2,
+      }}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        onDrop(e);
+      }}
+    >
+      {empty && <span className="rack-pdu-channel-placeholder">PDU&nbsp;Rail</span>}
+    </div>
+  );
 }
 
 // Power cord traveling pulse: a lead dot plus a short comet tail of
@@ -412,6 +444,8 @@ export default function RackEnclosure({
   draggingMeta,
   setDraggingMeta,
   onDrop,
+  onDropChannel,
+  showPowerConnections = true,
   onFocus,
   onEditRackRequest,
   isFocused,
@@ -484,6 +518,16 @@ export default function RackEnclosure({
     uSlots,
     rack,
     uHeight,
+    frontWidth,
+    frameHeight: frameSize.height,
+    hasGap: showRear,
+  });
+
+  // The two side rail channels themselves — always rendered (so an empty
+  // one still shows its drop-zone placeholder), independent of whatever
+  // PDUs currently float inside them.
+  const channelBoxes = computeChannelBoxes({
+    verticalPdus,
     frontWidth,
     frameHeight: frameSize.height,
     hasGap: showRear,
@@ -746,7 +790,7 @@ export default function RackEnclosure({
           </div>
         )}
 
-        {cords.length > 0 && (
+        {showPowerConnections && cords.length > 0 && (
           <svg
             className="rack-power-cords"
             style={{ left: cordsSvgLeft }}
@@ -812,6 +856,15 @@ export default function RackEnclosure({
             })}
           </svg>
         )}
+
+        {['left', 'right'].map((side) => (
+          <PduChannel
+            key={`pdu-channel-${side}`}
+            side={side}
+            box={channelBoxes[side]}
+            onDrop={(e) => onDropChannel?.(rack.id, side, e)}
+          />
+        ))}
 
         {verticalPdus.map((pdu) => {
           const { side, leftPx, top, height } = pduLayout.get(pdu.id);

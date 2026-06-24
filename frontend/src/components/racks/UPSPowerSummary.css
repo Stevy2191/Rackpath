@@ -163,6 +163,56 @@
 
 .ups-summary-est strong { color: #4adede; }
 
+/* Vertical PDU connections */
+.ups-summary-pdu-section {
+  background: #0a0c11;
+  border: 1px solid #3a3f4a;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ups-summary-pdu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ups-summary-pdu-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: #c8cdd8;
+}
+
+.ups-summary-pdu-name {
+  font-weight: 600;
+}
+
+.ups-summary-pdu-arrow {
+  color: #6b7180;
+}
+
+.ups-summary-pdu-target {
+  color: #c8cdd8;
+}
+
+.ups-summary-cross-rack-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
 /* Totals section */
 .ups-summary-totals-section {
   background: #0a0c11;

@@ -342,6 +342,45 @@
 }
 
 /* ─── Vertical PDU (floating strip alongside the frame) ──── */
+/* ─── Vertical PDU side rail channel ─────────────────────── */
+/* Always rendered (even with nothing mounted in it) so the two channels
+   read as a permanent, physical mounting rail flanking the rack — not
+   just empty space that happens to accept a PDU. Sits behind the PDU
+   strips themselves (lower z-index), which is what makes an occupied
+   channel look like the strip is mounted *into* a rail rather than just
+   floating in front of one. */
+.rack-pdu-channel {
+  position: absolute;
+  border: 1px dashed rgba(217, 119, 6, 0.25);
+  border-radius: 3px;
+  box-sizing: border-box;
+  z-index: 1;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.rack-pdu-channel-empty {
+  background: rgba(217, 119, 6, 0.04);
+}
+
+.rack-pdu-channel-drag-over {
+  border-color: rgba(217, 119, 6, 0.7);
+  background: rgba(217, 119, 6, 0.12);
+}
+
+.rack-pdu-channel-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  white-space: nowrap;
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 6px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: rgba(217, 119, 6, 0.4);
+  pointer-events: none;
+}
+
 /* Slim 0U strip — narrow enough to read as a real vertical PDU rail
    rather than a sidebar block. The diagonal highlight layered under the
    vertical gradient gives it a faint brushed-metal texture so it doesn't
@@ -381,6 +420,20 @@
 .rack-vertical-pdu-highlighted {
   border-color: #f59e0b;
   box-shadow: 0 0 10px rgba(245,158,11,0.6);
+}
+
+/* Drag handle + power indicator, stacked above the outlet ticks */
+.rack-vertical-pdu-grip {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: rgba(217, 119, 6, 0.5);
+  cursor: grab;
+}
+
+.rack-vertical-pdu-power-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #fbbf24;
 }
 
 .rack-vertical-pdu-ticks {

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, LayoutGrid, Plus, Zap } from 'lucide-react';
+import { Download, LayoutGrid, Plus, Zap, Cable } from 'lucide-react';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
 import PortEditorModal from '../components/PortEditorModal';
@@ -51,6 +51,10 @@ export default function RacksPage() {
   const [deleteConfirmSlot, setDeleteConfirmSlot] = useState(null);
   const [deleteConfirmRack, setDeleteConfirmRack] = useState(null);
   const [upsSummaryOpen, setUpsSummaryOpen] = useState(false);
+  // Gates both same-rack PDU cords (RackEnclosure) and the cross-rack
+  // overlay (RackCanvas) — on by default, since the connections are real
+  // wiring info, not a decorative extra.
+  const [showPowerConnections, setShowPowerConnections] = useState(true);
   const racksMainRef = useRef(null);
 
   const loadRacks = useCallback(() => {
@@ -667,6 +671,14 @@ export default function RacksPage() {
           >
             <Zap size={14} /> Power Summary
           </button>
+          <button
+            type="button"
+            className={showPowerConnections ? 'active' : ''}
+            onClick={() => setShowPowerConnections((v) => !v)}
+            title={showPowerConnections ? 'Hide power connection lines' : 'Show power connection lines'}
+          >
+            <Cable size={14} /> Show Power Connections
+          </button>
           <button type="button" className={catalogOpen ? 'active' : ''} onClick={() => setCatalogOpen((v) => !v)}>
             <LayoutGrid size={14} /> Device Catalog
           </button>
@@ -697,6 +709,7 @@ export default function RacksPage() {
           racks={racks}
           allSlots={allSlots}
           userCatalogEntries={userCatalogEntries}
+          showPowerConnections={showPowerConnections}
           highlightedSlotId={highlightedSlotId}
           selectedSlotId={selectedSlotId}
           actions={actions}
@@ -761,6 +774,7 @@ export default function RacksPage() {
         <ExportModal
           targetRacks={exportModal.targetRacks}
           allSlots={allSlots}
+          racks={racks}
           onClose={() => setExportModal(null)}
         />
       )}
@@ -768,6 +782,7 @@ export default function RacksPage() {
       {upsSummaryOpen && focusedRack && (
         <UPSPowerSummary
           rack={focusedRack}
+          racks={racks}
           allSlots={allSlots}
           onClose={() => setUpsSummaryOpen(false)}
         />

@@ -8,7 +8,10 @@ import { computeVerticalPduPositions } from './rackPlacement';
 
 export const STRIP_WIDTH = 9;
 export const STRIP_OFFSET_BASE = 40;
-export const STRIP_STACK_GAP = 24;
+// Thin gap between the top and bottom PDU when 2 share one side's rail
+// channel — they stack vertically (each gets half the channel's height),
+// not side-by-side, so this is a vertical gap, not a horizontal offset.
+export const STRIP_STACK_GAP = 6;
 // Must match .rack-dual-frame's CSS `gap` — both vertical PDUs mount
 // alongside the Front column (that's where the UPS they're plugged into
 // lives), so a Right-side PDU floats in this gap rather than past Rear's
@@ -26,21 +29,33 @@ export const DEFAULT_U_HEIGHT = 40;
 // rack's while both still read as "the same kind of object" relative to
 // their own frame. Centered vertically in the remaining 1 - ratio gap.
 export const PDU_HEIGHT_RATIO = 0.65;
+// Breathing room on each side of a channel's PDU-strip-width box — the
+// channel's visible dashed outline (and its hit area for drag-and-drop)
+// is wider than the strip itself. Shared so the export clone's relayout
+// reproduces the exact same channel box the live render drew it from.
+export const CHANNEL_PADDING = 5;
 
 function bottomY(rack, uHeight, u_position, u_size) {
   const top = 16 + (rack.u_height - (u_position + u_size - 1)) * uHeight;
   return top + u_size * uHeight;
 }
 
-// Vertical PDU strip's own top/height, centered within the rack's
-// rendered pixel height (frameHeight — same local, untransformed
-// coordinate space frameSize.height is measured in, so this scales
-// correctly with canvas zoom along with everything else under the same
-// transform instead of needing its own zoom correction).
-export function pduBox(frameHeight) {
-  const height = frameHeight * PDU_HEIGHT_RATIO;
-  const top = (frameHeight - height) / 2;
-  return { top, height };
+// Vertical PDU strip's own top/height. A side's full rail channel is
+// centered within the rack's rendered pixel height (frameHeight — same
+// local, untransformed coordinate space frameSize.height is measured in,
+// so this scales correctly with canvas zoom along with everything else
+// under the same transform instead of needing its own zoom correction).
+// When 2 PDUs share a channel, each gets the top or bottom HALF of it
+// (real vertical PDUs mount top-slot/bottom-slot within one rail, not
+// side-by-side) — `stackCount` is how many PDUs are on this side total,
+// `stackIndex` is this one's slot (0 = top, 1 = bottom).
+export function pduBox(frameHeight, stackCount = 1, stackIndex = 0) {
+  const channelHeight = frameHeight * PDU_HEIGHT_RATIO;
+  const channelTop = (frameHeight - channelHeight) / 2;
+  if (stackCount <= 1) return { top: channelTop, height: channelHeight };
+  const slotHeight = (channelHeight - STRIP_STACK_GAP) / 2;
+  const top = channelTop + stackIndex * (slotHeight + STRIP_STACK_GAP);
+  return { top, height: slotHeight };
 }
 
 // Bezier control points scaled to the actual distance between the cord's
@@ -76,25 +91,47 @@ function buildCordCurve(upsX, upsY, pduX, pduY, outward) {
   return { upsX, upsY, c1x, c1y, c2x, c2y, pduX, pduY };
 }
 
-// Absolute left-edge offset (from Front's own left edge) for a given
-// side/stack — the single source of truth both the floating strip and its
-// power cord's endpoint are computed from, so they always agree. Both
-// sides are anchored relative to Front specifically (`frontWidth`), never
-// Rear — that's where the UPS they're plugged into lives, and neither PDU
-// should ever end up past Rear's own outer edge. `hasGap` is true only
-// when Rear is actually present alongside Front (so there's a real gap to
-// float a Right-side PDU in) — false for Rear hidden/absent, where Right
-// instead floats the same fixed distance outside Front's edge that Left
-// does outside its own.
-export function pduLeftPx({ side, stack }, frontWidth, hasGap) {
-  const offsetPx = STRIP_OFFSET_BASE + stack * STRIP_STACK_GAP;
-  if (side === 'left') return -offsetPx;
+// Absolute left-edge offset (from Front's own left edge) for a given side
+// — the single source of truth both the floating strip and its power
+// cord's endpoint are computed from, so they always agree. Both sides are
+// anchored relative to Front specifically (`frontWidth`), never Rear —
+// that's where the UPS they're plugged into lives, and neither PDU should
+// ever end up past Rear's own outer edge. `hasGap` is true only when Rear
+// is actually present alongside Front (so there's a real gap to float a
+// Right-side PDU in) — false for Rear hidden/absent, where Right instead
+// floats the same fixed distance outside Front's edge that Left does
+// outside its own. Top/bottom-stacked PDUs on the same side share this
+// same horizontal position — see pduBox for how they split vertically.
+export function pduLeftPx({ side }, frontWidth, hasGap) {
+  if (side === 'left') return -STRIP_OFFSET_BASE;
   if (hasGap) {
     // Centered in the gap, with real breathing room on both sides, rather
     // than crowding up against either column's edge.
-    return frontWidth + (PANEL_GAP - STRIP_WIDTH) / 2 + stack * STRIP_STACK_GAP;
+    return frontWidth + (PANEL_GAP - STRIP_WIDTH) / 2;
   }
-  return frontWidth + offsetPx - STRIP_WIDTH;
+  return frontWidth + STRIP_OFFSET_BASE - STRIP_WIDTH;
+}
+
+// Layout for the two side rail channels themselves — the always-present
+// mounting zones a vertical PDU's strip floats inside, independent of
+// whether anything currently occupies them (so an empty channel still has
+// somewhere to render its placeholder/drop-zone indicator). Each channel
+// spans the *full* height a single PDU would use (pduBox with stackCount
+// 1), since the channel itself doesn't shrink just because it's empty or
+// shared — only the PDU strips inside it split to fit.
+//
+// Returns { left: { leftPx, top, height, count }, right: { ... } }, where
+// `count` is how many PDUs currently occupy that channel (0, 1, or 2).
+export function computeChannelBoxes({ verticalPdus, frontWidth, frameHeight, hasGap }) {
+  const assigned = computeVerticalPduPositions(verticalPdus);
+  const counts = { left: 0, right: 0 };
+  for (const { side } of assigned.values()) counts[side] += 1;
+
+  const { top, height } = pduBox(frameHeight, 1, 0);
+  return {
+    left:  { leftPx: pduLeftPx({ side: 'left' },  frontWidth, hasGap), top, height, count: counts.left },
+    right: { leftPx: pduLeftPx({ side: 'right' }, frontWidth, hasGap), top, height, count: counts.right },
+  };
 }
 
 // Full layout for every vertical PDU in a rack: where its strip floats
@@ -106,13 +143,15 @@ export function pduLeftPx({ side, stack }, frontWidth, hasGap) {
 // } }>.
 export function layoutVerticalPdus({ verticalPdus, uSlots, rack, uHeight, frontWidth, frameHeight, hasGap }) {
   const assigned = computeVerticalPduPositions(verticalPdus);
-  const { top, height } = pduBox(frameHeight);
-  const pduBottomY = top + height;
+  const sideCounts = { left: 0, right: 0 };
+  for (const { side } of assigned.values()) sideCounts[side] += 1;
 
   const result = new Map();
   for (const pdu of verticalPdus) {
     const { side, stack } = assigned.get(pdu.id);
-    const leftPx = pduLeftPx({ side, stack }, frontWidth, hasGap);
+    const leftPx = pduLeftPx({ side }, frontWidth, hasGap);
+    const { top, height } = pduBox(frameHeight, sideCounts[side], stack);
+    const pduBottomY = top + height;
 
     let cord = null;
     const ups = uSlots.find((s) => s.id === pdu.power_source_slot_id);

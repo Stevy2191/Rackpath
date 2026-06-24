@@ -140,46 +140,75 @@ export function countUsedU(slots, rackId) {
   return used.size;
 }
 
-// Assigns each vertical PDU in a rack to a floating position — left of the
-// Front column, or right of the Rear column (or right of Front when Rear
-// isn't showing/doesn't exist — a presentation concern handled separately
-// by whatever turns this into pixel coordinates, see verticalPduLayout's
-// pduLeftPx) — by creation order (lowest id first): 1st PDU goes left, 2nd
-// goes right. Real dual-PSU rack setups mount exactly one PDU per side, so
-// callers are expected to reject adding a 3rd (see the rack-slots POST
-// route) — this function itself doesn't enforce that, it just keeps
-// alternating sides if it's ever called with more than 2, so pre-existing
-// data from before that limit existed still renders somewhere sane
-// instead of breaking.
+// Assigns each vertical PDU in a rack to a side rail channel (left of the
+// Front column, or right of the Rear column / right of Front when Rear
+// isn't showing — a presentation concern handled separately by whatever
+// turns this into pixel coordinates, see verticalPduLayout's pduLeftPx)
+// and a stacking slot within that channel (0 = top, 1 = bottom — a channel
+// holds at most 2; callers are expected to reject adding a 3rd, see the
+// rack-slots POST route).
 //
-// This used to also have a 3rd 'middle' position (the actual physical
-// centerline, for the 2nd PDU specifically) — removed because a real
-// vertical PDU only ever mounts left/right of the frame, never literally
-// between Front and Rear. Any PDU previously assigned 'middle' (always
-// the 2nd-created one in its rack) now lands on 'right' instead, exactly
-// matching "Left if available, Right if not": the 1st PDU always already
-// holds 'left' by the time there's a 2nd one. No data migration needed,
-// since this position was always computed live, never stored.
+// `mount_side` and `vertical_pdu_position` are stored columns and are
+// authoritative when present. PDUs created before those were persisted
+// (side used to be computed live by creation order, position was never
+// stored at all) fall back to the same alternating-by-creation-order
+// behavior this function always had, so old data keeps landing somewhere
+// sane instead of breaking or all collapsing onto one side.
 //
-// Returns Map<pduId, { side: 'left'|'right', stack: number }>, where
-// `stack` is how many other PDUs on that same side sit between this one
-// and the frame (0 = closest).
+// Returns Map<pduId, { side: 'left'|'right', stack: number }>.
 export function computeVerticalPduPositions(verticalPdus) {
   const sorted = [...verticalPdus].sort((a, b) => a.id - b.id);
-  const positions = new Map();
-  let leftCount = 0;
-  let rightCount = 0;
+  const buckets = { left: [], right: [] };
+  const unassigned = [];
 
-  sorted.forEach((pdu, index) => {
-    const side = index % 2 === 0 ? 'left' : 'right';
-    if (side === 'left') {
-      positions.set(pdu.id, { side, stack: leftCount });
-      leftCount += 1;
+  for (const pdu of sorted) {
+    if (pdu.mount_side === 'left' || pdu.mount_side === 'right') {
+      buckets[pdu.mount_side].push(pdu);
     } else {
-      positions.set(pdu.id, { side, stack: rightCount });
-      rightCount += 1;
+      unassigned.push(pdu);
     }
-  });
+  }
+  // Legacy fallback: a PDU with no stored side at all goes onto whichever
+  // side currently has fewer (left-preferred on a tie) — the same
+  // alternating behavior this function always had before sides were stored.
+  for (const pdu of unassigned) {
+    const side = buckets.left.length <= buckets.right.length ? 'left' : 'right';
+    buckets[side].push(pdu);
+  }
+
+  const positions = new Map();
+  for (const side of ['left', 'right']) {
+    // Stored vertical_pdu_position wins when present; PDUs without one
+    // (legacy data, or a 3rd+ PDU beyond the normal 2-per-side cap) sort
+    // after positioned ones, by creation order.
+    const ordered = [...buckets[side]].sort((a, b) => {
+      const pa = a.vertical_pdu_position === 0 || a.vertical_pdu_position === 1 ? a.vertical_pdu_position : 2;
+      const pb = b.vertical_pdu_position === 0 || b.vertical_pdu_position === 1 ? b.vertical_pdu_position : 2;
+      if (pa !== pb) return pa - pb;
+      return a.id - b.id;
+    });
+    ordered.forEach((pdu, index) => positions.set(pdu.id, { side, stack: index }));
+  }
 
   return positions;
+}
+
+// Resolves where a vertical PDU being dropped onto (or moved to) a side
+// rail channel should land: the next open stacking slot (0 or 1) on that
+// side, or a rejection if the channel already holds 2. `excludeSlotId`
+// skips the PDU's own current row when moving it (so it doesn't count
+// against itself).
+export function resolveVerticalPduSide({ verticalPdus, side, excludeSlotId }) {
+  const others = verticalPdus.filter((p) => excludeSlotId == null || String(p.id) !== String(excludeSlotId));
+  const positions = computeVerticalPduPositions(others);
+  const takenStacks = new Set();
+  for (const p of others) {
+    const assigned = positions.get(p.id);
+    if (assigned?.side === side) takenStacks.add(assigned.stack);
+  }
+  if (takenStacks.size >= 2) {
+    return { ok: false, error: 'This rail channel is full' };
+  }
+  const stack = takenStacks.has(0) ? 1 : 0;
+  return { ok: true, side, vertical_pdu_position: stack };
 }

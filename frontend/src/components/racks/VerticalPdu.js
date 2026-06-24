@@ -1,4 +1,5 @@
 import React from 'react';
+import { GripVertical, Zap } from 'lucide-react';
 import { getOutletCount } from '../../utils/power';
 
 // Floating strip rendered alongside the rack frame, representing a PDU/UPS
@@ -27,6 +28,11 @@ export default function VerticalPdu({ slot, leftPx, top, height, side, isSelecte
       style={{ top, height, left: leftPx, ...customStyle }}
       data-pdu-id={slot.id}
       title={`${slot.item_label || 'PDU'} (${outletCount} outlets)`}
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.setData('text/slot-id', String(slot.id));
+      }}
       onClick={(e) => {
         e.stopPropagation();
         onSelect && onSelect(slot.id);
@@ -39,6 +45,8 @@ export default function VerticalPdu({ slot, leftPx, top, height, side, isSelecte
         actions?.onOpenContextMenu(slot, e.clientX, e.clientY);
       }}
     >
+      <GripVertical size={9} className="rack-vertical-pdu-grip" />
+      <Zap size={8} className="rack-vertical-pdu-power-icon" />
       <div className="rack-vertical-pdu-ticks">
         {Array.from({ length: outletCount }, (_, i) => (
           <span key={i} className="rack-vertical-pdu-tick" />

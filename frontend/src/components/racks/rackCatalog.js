@@ -87,7 +87,10 @@ export const RACK_CATALOG = [
   e('pdu-horizontal', 'PDU - Horizontal', 'POWER', 'pdu', 1, {
     halfDepth: true, outletCount: 8, outletType: 'IEC C13',
   }),
-  e('pdu-vertical', 'PDU - Vertical / 0U', 'POWER', 'pdu-vertical', 0, {
+  e('pdu-vertical', 'PDU - Vertical', 'POWER', 'pdu-vertical', 0, {
+    outletCount: 8, outletType: 'IEC C13', floating: true,
+  }),
+  e('pdu-vertical-metered', 'PDU - Vertical Metered', 'POWER', 'pdu-vertical', 0, {
     outletCount: 8, outletType: 'IEC C13', floating: true,
   }),
   // Rack-mounted like a normal device (occupies U slots), not a floating

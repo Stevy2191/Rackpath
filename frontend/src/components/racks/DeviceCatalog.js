@@ -3,7 +3,7 @@ import { X, ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react
 import { RACK_CATALOG, CATALOG_CATEGORIES, groupByCategory, findCatalogEntryByModel } from './rackCatalog';
 import { normalizeCatalogEntry } from './deviceFieldSchemas';
 import { getCategoryStyle } from './deviceRenderConfig';
-import { normalizeSlotWidth, resolveFractionalPlacement } from './rackPlacement';
+import { normalizeSlotWidth, resolveFractionalPlacement, resolveVerticalPduSide } from './rackPlacement';
 import './DeviceCatalog.css';
 
 // click-to-place finds a U row by scanning rather than dropping on a
@@ -46,8 +46,10 @@ function findNextFreeU(rack, allSlots, uSize, mountedFace, slotWidth) {
   return null;
 }
 
-function buildBadges(normalized) {
-  const badges = [`${normalized.u_size}U`];
+function buildBadges(normalized, floating) {
+  // Floating (0U) entries mount to a side rail channel, not a U row — "0U"
+  // reads as confusing/broken rather than informative, so show "Rail" instead.
+  const badges = [floating ? 'Rail' : `${normalized.u_size}U`];
   if (normalized.port_count) badges.push(`${normalized.port_count}-port`);
   if (normalized.bay_count) badges.push(`${normalized.bay_count}-bay`);
   if (normalized.capacity_va) badges.push(`${normalized.capacity_va}VA`);
@@ -65,7 +67,7 @@ function CatalogCard({ entry, source, onClick, onDragStart, onContextMenu, renam
   const normalized = normalizeCatalogEntry(entry, source);
   const { color, Icon } = getCategoryStyle({ custom_type: normalized.render_type });
   const iconBoxStyle = { borderColor: `${color}55`, background: `${color}18` };
-  const badges = buildBadges(normalized);
+  const badges = buildBadges(normalized, entry.floating);
   const [renameValue, setRenameValue] = useState(entry.name);
 
   return (
@@ -163,9 +165,11 @@ export default function DeviceCatalog({
   const rackedDeviceIds = new Set(allSlots.map((s) => s.device_id).filter(Boolean));
   const unrackedDevices = devices.filter((d) => !rackedDeviceIds.has(d.id));
 
-  // Floating (0U) entries, like the vertical PDU, aren't placed into U rows
-  // directly — they're attached via a UPS's properties panel instead.
-  const placeableCatalog = RACK_CATALOG.filter((e) => !e.floating);
+  // Floating (0U) entries (vertical PDUs) ARE placeable from here now — they
+  // just don't go into a U row, they go into a side rail channel (see
+  // requestVerticalPduPlacement / RackCanvas's handleDropChannel) instead of
+  // findNextFreeU's U-grid scan.
+  const placeableCatalog = RACK_CATALOG;
 
   const searchTerm = search.trim().toLowerCase();
   const filteredCatalog = searchTerm
@@ -183,6 +187,50 @@ export default function DeviceCatalog({
     if (!found) return;
     onRequestPlacement({ source: 'catalog', entry, target: { rack_id: focusedRack.id, u_position: found.u_position, mounted_face } });
   };
+
+  // Vertical PDUs skip the quick-config modal entirely (its width/depth/
+  // U-size fields don't apply to a 0U floating strip) and create directly,
+  // same as addUnrackedDevice below — auto-picking whichever side rail
+  // channel has fewer PDUs (left-preferred on a tie), same fallback
+  // RackCanvas's handleDropChannel and the legacy UPS-side "Add Vertical
+  // PDU" flow both use when no specific side was dragged to.
+  const placeVerticalPdu = (entry) => {
+    if (!focusedRack) return;
+    const resolved = resolveVerticalPduSide({
+      verticalPdus: allSlots.filter((s) => s.item_type === 'vertical-pdu' && s.rack_id === focusedRack.id),
+      side: undefined,
+    });
+    if (!resolved.ok) {
+      actions.onPlacementRejected?.(resolved.error);
+      return;
+    }
+    const u_size = Math.max(1, Math.round(focusedRack.u_height * 0.5));
+    const u_position = focusedRack.u_height - u_size + 1;
+    actions.onSlotCreate({
+      rack_id: focusedRack.id,
+      item_type: 'vertical-pdu',
+      item_label: entry.name,
+      catalog_id: entry.id,
+      custom_type: entry.renderType,
+      u_position,
+      u_size,
+      mount_side: resolved.side,
+      outlet_groups: entry.outletCount ? [{ type: entry.outletType || 'Other', count: entry.outletCount }] : [],
+      input_voltage: entry.inputVoltage || null,
+    });
+  };
+
+  // Shared click/drag wiring for a non-custom catalog entry — vertical
+  // PDUs (floating: true) go to the side-rail path with their own
+  // dataTransfer key (read by RackEnclosure's PduChannel / RackCanvas's
+  // handleDropChannel), everything else keeps the normal U-row path.
+  const catalogCardHandlers = (entry) => ({
+    onClick: () => (entry.floating ? placeVerticalPdu(entry) : requestCatalogPlacement(entry)),
+    onDragStart: (e) => e.dataTransfer.setData(
+      entry.floating ? 'text/vertical-pdu-item' : 'text/catalog-item',
+      JSON.stringify(entry)
+    ),
+  });
 
   const requestCustomPlacement = (custom) => {
     if (!focusedRack) return;
@@ -223,8 +271,7 @@ export default function DeviceCatalog({
               key={entry.id}
               entry={entry}
               source="catalog"
-              onClick={() => requestCatalogPlacement(entry)}
-              onDragStart={(e) => e.dataTransfer.setData('text/catalog-item', JSON.stringify(entry))}
+              {...catalogCardHandlers(entry)}
             />
           ))}
         </CollapsibleGroup>
@@ -247,8 +294,7 @@ export default function DeviceCatalog({
             key={entry.id}
             entry={entry}
             source="catalog"
-            onClick={() => requestCatalogPlacement(entry)}
-            onDragStart={(e) => e.dataTransfer.setData('text/catalog-item', JSON.stringify(entry))}
+            {...catalogCardHandlers(entry)}
           />
         ))}
       </CollapsibleGroup>

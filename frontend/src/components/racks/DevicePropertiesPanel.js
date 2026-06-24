@@ -15,7 +15,7 @@ import {
 import DeviceConfigFields from './DeviceConfigFields';
 import OutletGroupsEditor, { TypeSelect } from './OutletGroupsEditor';
 import { resolveRenderType } from './deviceRenderConfig';
-import { computeVerticalPduPositions, resolveFractionalPlacement } from './rackPlacement';
+import { computeVerticalPduPositions, resolveFractionalPlacement, resolveVerticalPduSide } from './rackPlacement';
 import './DevicePropertiesPanel.css';
 
 const FACE_OPTIONS = [
@@ -392,7 +392,10 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
   // Passive items (patch panels, shelves, etc.) and EBM battery modules have
   // no wall power connection, so they get no Power tab — just General fields.
   const isEbm = resolveRenderType(slot) === 'ebm' || fields.device_type === 'ebm';
-  const showPowerTab = !passive && !isEbm;
+  // Vertical PDUs get no Power tab either, same reasoning as EBM — their
+  // one connection field (Connected To) and outlet count live inline in
+  // General instead (see the "Power Connection" section below).
+  const showPowerTab = !passive && !isEbm && !isVerticalPdu;
   const showGeneral = !showPowerTab || tab === 'general';
   const showPower = showPowerTab && tab === 'power';
   const powerSourceGroups = groupPowerSourcesByRack(allSlots || [], racks || [], slot.id);
@@ -566,14 +569,33 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
               </div>
             )}
 
-            {/* Vertical PDU position — automatic, by creation order (1st
-                Left, 2nd Right) rather than user-chosen, so it's shown
-                read-only here instead of as a selectable control. */}
+            {/* Vertical PDU side — moves it to the other rail's channel,
+                same guarded placement logic as dragging it there onto
+                RackEnclosure's PduChannel (rejects if that channel is
+                already holding 2). */}
             {isVerticalPdu && (
               <div className="props-field">
-                <label className="props-field-label">Position</label>
-                <div className="props-readonly">
-                  {VERTICAL_PDU_POSITION_LABELS[verticalPduPosition?.side] || 'Left'}
+                <label className="props-field-label">Side</label>
+                <div className="props-face-btns">
+                  {['left', 'right'].map((sideOption) => (
+                    <button
+                      key={sideOption}
+                      type="button"
+                      className={`props-face-btn${verticalPduPosition?.side === sideOption ? ' active' : ''}`}
+                      onClick={() => {
+                        if (verticalPduPosition?.side === sideOption) return;
+                        const resolved = resolveVerticalPduSide({
+                          verticalPdus: (rackSlots || []).filter((s) => s.item_type === 'vertical-pdu'),
+                          side: sideOption,
+                          excludeSlotId: slot.id,
+                        });
+                        if (!resolved.ok) { setError(resolved.error); return; }
+                        patch({ mount_side: resolved.side });
+                      }}
+                    >
+                      {VERTICAL_PDU_POSITION_LABELS[sideOption]}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -703,6 +725,40 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
                 placeholder="Notes about this device..."
               />
             </div>
+
+            {/* Vertical PDUs have no separate Power tab (their connection
+                isn't an upstream PSU1/PSU2 pair like a regular device's —
+                it's the single "Connected To" field below, same reasoning
+                EBM devices already skip the tab for their own connection
+                field) — Connected To, Input Voltage, and outlet count all
+                live here instead, inline in General. */}
+            {isVerticalPdu && (
+              <>
+                <div className="props-section-divider">Power Connection</div>
+                {pluggedIntoFields}
+                <div className="props-field">
+                  <label className="props-field-label">Input Voltage</label>
+                  <select
+                    className="props-input"
+                    value={fields.input_voltage}
+                    onChange={(e) => setFieldNow('input_voltage', e.target.value)}
+                  >
+                    <option value="">Unset</option>
+                    {INPUT_VOLTAGES.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="props-section-divider">Outlet Groups</div>
+                <OutletGroupsEditor
+                  groups={fields.outlet_groups}
+                  onChange={(groups) => {
+                    setFields((f) => ({ ...f, outlet_groups: groups }));
+                    patch({ outlet_groups: groups });
+                  }}
+                />
+              </>
+            )}
 
             {configSchema.length > 0 && (
               <>
@@ -1249,15 +1305,16 @@ function VerticalPduSection({ ups, rackSlots, allSlots, userCatalogEntries, rack
   const [sourceKey, setSourceKey] = useState('');
 
   const attached = verticalPdusForUps(rackSlots, ups.id);
-  // Position is assigned rack-wide (by creation order across *all* vertical
-  // PDUs in the rack, not just this UPS's), matching RackEnclosure's layout.
-  // This is the PDU's logical slot and doesn't change when Rear is toggled.
+  // Position is assigned rack-wide (by stored mount_side/vertical_pdu_position,
+  // falling back to creation order for older data — see
+  // computeVerticalPduPositions), matching RackEnclosure's layout. This is
+  // the PDU's logical slot and doesn't change when Rear is toggled.
   const allRackPdus = rackSlots.filter((s) => s.item_type === 'vertical-pdu');
   const pduPositions = computeVerticalPduPositions(allRackPdus);
-  // A real rack only has room for one PDU per side — once both Left and
-  // Right are taken (rack-wide, not just this UPS's), no more vertical
-  // PDUs can be added at all, regardless of which UPS would own the 3rd one.
-  const bothSidesTaken = allRackPdus.length >= 2;
+  // Each side rail channel holds up to 2, independently — full only once
+  // *both* channels are full (4 PDUs total), not at 2 rack-wide.
+  const bothSidesTaken = !resolveVerticalPduSide({ verticalPdus: allRackPdus, side: 'left' }).ok
+    && !resolveVerticalPduSide({ verticalPdus: allRackPdus, side: 'right' }).ok;
 
   const openAdd = () => {
     setSourceKey(catalogEntries[0] ? `catalog:${catalogEntries[0].id}` : (customPdus[0] ? `custom:${customPdus[0].id}` : ''));
@@ -1266,7 +1323,8 @@ function VerticalPduSection({ ups, rackSlots, allSlots, userCatalogEntries, rack
   };
 
   const handleAdd = () => {
-    if (bothSidesTaken) { setError('Both Left and Right vertical PDU positions are already in use on this rack'); return; }
+    const sideResolved = resolveVerticalPduSide({ verticalPdus: allRackPdus, side: undefined });
+    if (!sideResolved.ok) { setError(sideResolved.error); return; }
     if (!sourceKey) { setError('Choose a PDU model'); return; }
     const outlet = firstFreeOutlet(ups, allSlots);
     if (!outlet) { setError('UPS has no free outlets'); return; }
@@ -1306,6 +1364,7 @@ function VerticalPduSection({ ups, rackSlots, allSlots, userCatalogEntries, rack
       item_type: 'vertical-pdu',
       u_position: pduPosition,
       u_size: pduSize,
+      mount_side: sideResolved.side,
       power_source_slot_id: ups.id,
       power_source_outlet: outlet,
       ...payload,

@@ -120,3 +120,53 @@
   border-color: #4adede;
   color: #4adede;
 }
+
+/* ─── Cross-rack power connection overlay ────────────────── */
+/* Sits as a sibling of the rack frames inside the same transformed
+   .rack-canvas-content, so it pans/zooms with everything else for free —
+   coordinates are computed once in content-local space (see
+   CrossRackPowerOverlay), not re-derived per transform. */
+.cross-rack-power-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.cross-rack-power-line-glow {
+  stroke-width: 7;
+  opacity: 0.25;
+  filter: blur(2px);
+}
+
+.cross-rack-power-line-stroke {
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+/* Color-coded by which rail the PDU mounts on, consistent with the
+   existing same-rack cord's amber — left gets a distinct blue so a
+   cross-rack run never reads as "the same cable" as a same-rack one. */
+.cross-rack-power-line-left .cross-rack-power-line-glow,
+.cross-rack-power-line-left .cross-rack-power-line-stroke {
+  stroke: #3b82f6;
+}
+
+.cross-rack-power-line-right .cross-rack-power-line-glow,
+.cross-rack-power-line-right .cross-rack-power-line-stroke {
+  stroke: #f59e0b;
+}
+
+.cross-rack-power-line-label {
+  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-size: 9px;
+  font-weight: 500;
+  fill: #9aa3b5;
+  paint-order: stroke;
+  stroke: #0b0c0f;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}

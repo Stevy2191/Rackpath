@@ -1,7 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { Plus, Minus, Maximize2, Settings } from 'lucide-react';
 import RackEnclosure from './RackEnclosure';
-import { resolveUPosition, isSpanFree, buildOccupiedSet, normalizeSlotWidth, resolveFractionalPlacement } from './rackPlacement';
+import CrossRackPowerOverlay from './CrossRackPowerOverlay';
+import {
+  resolveUPosition, isSpanFree, buildOccupiedSet, normalizeSlotWidth, resolveFractionalPlacement,
+  resolveVerticalPduSide,
+} from './rackPlacement';
 import { DEFAULT_U_HEIGHT } from './verticalPduLayout';
 import './RackCanvas.css';
 
@@ -47,6 +51,7 @@ export default function RackCanvas({
   renamingRackId,
   onRenameSubmit,
   onRenameCancel,
+  showPowerConnections = true,
 }) {
   const [draggingMeta, setDraggingMeta] = useState(null);
   const [vp, setVp]       = useState({ zoom: 1, tx: 0, ty: 0 });
@@ -244,6 +249,12 @@ export default function RackCanvas({
     if (slotId) {
       const slot = allSlots.find((s) => String(s.id) === slotId);
       if (!slot) return;
+      // Vertical PDUs only ever move via a side rail channel's own drop
+      // target (RackEnclosure's PduChannel -> handleDropChannel below) —
+      // they have no mounted_face/U-row to resolve here at all, so a drag
+      // that lands on the ordinary U grid (e.g. dropped slightly off a
+      // channel) is simply ignored rather than misfiled onto a U row.
+      if (slot.item_type === 'vertical-pdu') return;
       const isFractional = normalizeSlotWidth(slot.slot_width) !== 'full';
       const resolved = isFractional
         ? resolveFractionalDropU(slot.id, slot.slot_width, true)
@@ -308,6 +319,72 @@ export default function RackCanvas({
     }
   };
 
+  // ─── Vertical PDU drop (onto a side rail channel) ────────────
+  // A separate path from handleDrop: vertical PDUs are 0U floating
+  // elements, dropped onto one of the two channel zones flanking the
+  // U grid (see RackEnclosure's PduChannel), not onto a U row — there's
+  // no `uPosition`/`face` here, just which rack and which side. Handles
+  // both a NEW placement from the catalog (text/vertical-pdu-item) and
+  // repositioning an EXISTING PDU dragged from its own strip
+  // (text/slot-id, same key handleDrop's move path uses — VerticalPdu
+  // sets it on its own drag handle).
+  const handleDropChannel = (rackId, side, e) => {
+    const rack = racks.find((r) => r.id === rackId);
+    if (!rack) return;
+
+    const slotId = e.dataTransfer.getData('text/slot-id');
+    if (slotId) {
+      const slot = allSlots.find((s) => String(s.id) === slotId);
+      if (!slot || slot.item_type !== 'vertical-pdu') return;
+      const resolved = resolveVerticalPduSide({
+        verticalPdus: allSlots.filter((s) => s.item_type === 'vertical-pdu' && s.rack_id === rackId),
+        side,
+        excludeSlotId: slot.id,
+      });
+      if (!resolved.ok) {
+        actions.onPlacementRejected?.(resolved.error);
+        return;
+      }
+      if (slot.rack_id === rackId && slot.mount_side === resolved.side) return;
+      actions.onSlotUpdate(slot, { rack_id: rackId, mount_side: resolved.side });
+      return;
+    }
+
+    const catalogRaw = e.dataTransfer.getData('text/vertical-pdu-item');
+    if (!catalogRaw) return;
+    const entry = JSON.parse(catalogRaw);
+
+    const resolved = resolveVerticalPduSide({
+      verticalPdus: allSlots.filter((s) => s.item_type === 'vertical-pdu' && s.rack_id === rackId),
+      side,
+    });
+    if (!resolved.ok) {
+      actions.onPlacementRejected?.(resolved.error);
+      return;
+    }
+
+    // Half the rack's height, anchored at the top — matches the sizing the
+    // UPS-side "Add Vertical PDU" flow has always used (DevicePropertiesPanel's
+    // VerticalPduSection): a real 0U strip doesn't span floor-to-ceiling, and
+    // leaving the bottom half open gives a same-rack power cord's curve down
+    // to the UPS room to actually read as a curve.
+    const u_size = Math.max(1, Math.round(rack.u_height * 0.5));
+    const u_position = rack.u_height - u_size + 1;
+
+    actions.onSlotCreate({
+      rack_id: rackId,
+      item_type: 'vertical-pdu',
+      item_label: entry.name,
+      catalog_id: entry.id,
+      custom_type: entry.renderType,
+      u_position,
+      u_size,
+      mount_side: resolved.side,
+      outlet_groups: entry.outletCount ? [{ type: entry.outletType || 'Other', count: entry.outletCount }] : [],
+      input_voltage: entry.inputVoltage || null,
+    });
+  };
+
   const sortedRacks = [...racks].sort((a, b) => a.id - b.id);
 
   return (
@@ -339,6 +416,8 @@ export default function RackCanvas({
               draggingMeta={draggingMeta}
               setDraggingMeta={setDraggingMeta}
               onDrop={handleDrop}
+              onDropChannel={handleDropChannel}
+              showPowerConnections={showPowerConnections}
               onFocus={() => onFocusRack(rack.id)}
               onEditRackRequest={() => onOpenRackEdit(rack.id)}
               isFocused={focusedRackId === rack.id}
@@ -350,6 +429,13 @@ export default function RackCanvas({
             />
           </React.Fragment>
         ))}
+
+        <CrossRackPowerOverlay
+          allSlots={allSlots}
+          contentRef={contentRef}
+          vp={vp}
+          enabled={showPowerConnections}
+        />
       </div>
 
       {focusedRackId && (

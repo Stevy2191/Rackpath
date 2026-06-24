@@ -117,6 +117,39 @@ async function findCollision(rackId, projectId, uPosition, uSize, side, excludeI
   return null;
 }
 
+// Resolves which side rail channel a vertical PDU should occupy: the
+// requested side (if valid), or, when omitted, whichever side currently
+// has fewer PDUs (left-preferred on a tie) — then the lowest open
+// stacking slot (0 = top, then 1 = bottom) on that side. Rejects once the
+// side already holds 2. `excludeId` skips the PDU's own existing row when
+// moving/updating it, so it doesn't count against itself.
+async function resolveVerticalPduPlacement(rackId, projectId, requestedSide, excludeId) {
+  let query = `SELECT mount_side, vertical_pdu_position FROM rack_slots
+               WHERE rack_id = ? AND project_id = ? AND item_type = 'vertical-pdu'`;
+  const params = [rackId, projectId];
+  if (excludeId) {
+    query += ' AND id != ?';
+    params.push(excludeId);
+  }
+  const [rows] = await pool.query(query, params);
+
+  const takenPositions = { left: new Set(), right: new Set() };
+  for (const row of rows) {
+    const rowSide = row.mount_side === 'right' ? 'right' : 'left';
+    takenPositions[rowSide].add(row.vertical_pdu_position === 1 ? 1 : 0);
+  }
+
+  const side = (requestedSide === 'left' || requestedSide === 'right')
+    ? requestedSide
+    : (takenPositions.left.size <= takenPositions.right.size ? 'left' : 'right');
+
+  if (takenPositions[side].size >= 2) {
+    return { error: 'This rail channel is full' };
+  }
+  const vertical_pdu_position = takenPositions[side].has(0) ? 1 : 0;
+  return { mount_side: side, vertical_pdu_position };
+}
+
 // Finds a different device-PSU slot already plugged into the same source
 // outlet, if any. Project-wide, not rack-scoped — a PDU/UPS's outlets are
 // occupied by whichever device claims them, regardless of which rack that
@@ -249,17 +282,15 @@ router.post('/', async (req, res, next) => {
     const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
     // Vertical PDUs are floating elements alongside the rack frame, not
-    // occupying U columns — they never collide with U-slot devices. A real
-    // rack only has physical room for one PDU per side, so a 3rd is
-    // rejected outright rather than being given some less-meaningful
-    // stacked position.
+    // occupying U columns — they never collide with U-slot devices. Each
+    // side rail channel holds up to 2 (stacked top/bottom); a 3rd on the
+    // same side is rejected outright rather than being given some
+    // less-meaningful position.
+    let verticalPduPlacement = null;
     if (item_type === 'vertical-pdu') {
-      const [[{ pduCount }]] = await pool.query(
-        `SELECT COUNT(*) AS pduCount FROM rack_slots WHERE rack_id = ? AND project_id = ? AND item_type = 'vertical-pdu'`,
-        [rack_id, req.projectId]
-      );
-      if (pduCount >= 2) {
-        return res.status(409).json({ error: 'Both Left and Right vertical PDU positions are already in use on this rack' });
+      verticalPduPlacement = await resolveVerticalPduPlacement(rack_id, req.projectId, mount_side, null);
+      if (verticalPduPlacement.error) {
+        return res.status(409).json({ error: verticalPduPlacement.error });
       }
     } else {
       const collision = await findCollision(
@@ -300,9 +331,9 @@ router.post('/', async (req, res, next) => {
           device_type,
           ups_va_rating, ups_watt_rating, ups_runtime_full, ups_runtime_half, ups_max_ebm_slots,
           ebm_connected_ups_id, ebm_runtime_full, ebm_runtime_half,
-          power_source_slot_id, power_source_outlet, mount_side,
+          power_source_slot_id, power_source_outlet, mount_side, vertical_pdu_position,
           psu2_source_slot_id, psu2_source_outlet)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
@@ -319,7 +350,9 @@ router.post('/', async (req, res, next) => {
         ups_va_rating || null, ups_watt_rating || null, ups_runtime_full || null,
         ups_runtime_half || null, ups_max_ebm_slots || null,
         ebm_connected_ups_id || null, ebm_runtime_full || null, ebm_runtime_half || null,
-        power_source_slot_id || null, power_source_outlet || null, mount_side || null,
+        power_source_slot_id || null, power_source_outlet || null,
+        verticalPduPlacement ? verticalPduPlacement.mount_side : (mount_side || null),
+        verticalPduPlacement ? verticalPduPlacement.vertical_pdu_position : null,
         psu2_source_slot_id || null, psu2_source_outlet || null,
       ]
     );
@@ -390,7 +423,13 @@ router.put('/:id', async (req, res, next) => {
     const resolvedFrontBack = (front_back && FRONT_BACK.includes(front_back)) ? front_back : legacy.front_back;
     const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
-    if (item_type !== 'vertical-pdu') {
+    let verticalPduPlacement = null;
+    if (item_type === 'vertical-pdu') {
+      verticalPduPlacement = await resolveVerticalPduPlacement(rack_id, req.projectId, mount_side, req.params.id);
+      if (verticalPduPlacement.error) {
+        return res.status(409).json({ error: verticalPduPlacement.error });
+      }
+    } else {
       const collision = await findCollision(
         rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id,
         slotWidthResolved.normalizedWidth, slotWidthResolved.normalizedPosition, half_depth
@@ -430,7 +469,7 @@ router.put('/:id', async (req, res, next) => {
            device_type=?,
            ups_va_rating=?, ups_watt_rating=?, ups_runtime_full=?, ups_runtime_half=?, ups_max_ebm_slots=?,
            ebm_connected_ups_id=?, ebm_runtime_full=?, ebm_runtime_half=?,
-           power_source_slot_id=?, power_source_outlet=?, mount_side=?,
+           power_source_slot_id=?, power_source_outlet=?, mount_side=?, vertical_pdu_position=?,
            psu2_source_slot_id=?, psu2_source_outlet=?
        WHERE id=? AND project_id=?`,
       [
@@ -449,7 +488,9 @@ router.put('/:id', async (req, res, next) => {
         ups_va_rating || null, ups_watt_rating || null, ups_runtime_full || null,
         ups_runtime_half || null, ups_max_ebm_slots || null,
         ebm_connected_ups_id || null, ebm_runtime_full || null, ebm_runtime_half || null,
-        power_source_slot_id || null, power_source_outlet || null, mount_side || null,
+        power_source_slot_id || null, power_source_outlet || null,
+        verticalPduPlacement ? verticalPduPlacement.mount_side : (mount_side || null),
+        verticalPduPlacement ? verticalPduPlacement.vertical_pdu_position : null,
         psu2_source_slot_id || null, psu2_source_outlet || null,
         req.params.id, req.projectId,
       ]
@@ -497,6 +538,25 @@ router.patch('/:id', async (req, res, next) => {
 
     if ('mount_side' in updates && updates.mount_side !== null && !MOUNT_SIDES.includes(updates.mount_side)) {
       return res.status(400).json({ error: 'Invalid mount_side' });
+    }
+
+    // Vertical PDUs: changing side re-resolves the stacking slot (top/
+    // bottom) within the new side and rejects if it already holds 2 — the
+    // generic collision check below skips vertical PDUs entirely (they're
+    // 0U floating elements, not part of the U-grid), so this is the only
+    // place a side change gets validated.
+    if ('mount_side' in updates) {
+      const [[curForSide]] = await pool.query(
+        'SELECT rack_id, item_type FROM rack_slots WHERE id = ? AND project_id = ?',
+        [req.params.id, req.projectId]
+      );
+      if (!curForSide) return res.status(404).json({ error: 'Rack slot not found' });
+      if (curForSide.item_type === 'vertical-pdu') {
+        const placement = await resolveVerticalPduPlacement(curForSide.rack_id, req.projectId, updates.mount_side, req.params.id);
+        if (placement.error) return res.status(409).json({ error: placement.error });
+        updates.mount_side = placement.mount_side;
+        updates.vertical_pdu_position = placement.vertical_pdu_position;
+      }
     }
 
     if ('slot_width' in updates || 'slot_position' in updates) {

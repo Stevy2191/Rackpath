@@ -2,7 +2,7 @@ import {
   Server, Network, Shield, HardDrive, Zap, Plug, Cable, Monitor, Wifi, Box, Minus,
   ServerCog, Scale, Archive, Shuffle, CircleDot, Terminal, MonitorCog, Volume2,
   PlayCircle, MonitorPlay, Inbox, PackageOpen, ArrowLeftRight, PlugZap, BatteryFull,
-  Cpu, Video,
+  Cpu, Video, RectangleVertical,
 } from 'lucide-react';
 
 export const CATEGORY_CONFIG = {
@@ -53,7 +53,9 @@ export const CATEGORY_ICONS = {
   'san-switch':           Shuffle,
   ups:                    Zap,
   pdu:                    Plug,
-  'pdu-vertical':         Plug,
+  // Distinct vertical-bar icon (not the horizontal PDU's Plug) so a
+  // vertical PDU reads as a different physical form factor at a glance.
+  'pdu-vertical':         RectangleVertical,
   ats:                    ArrowLeftRight,
   transformer:            PlugZap,
   ebm:                    BatteryFull,

@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { X, Zap } from 'lucide-react';
+import { computeVerticalPduPositions } from './rackPlacement';
 import './UPSPowerSummary.css';
+
+const SIDE_LABELS = { left: 'Left Rail', right: 'Right Rail' };
 
 function fmtRuntime(min) {
   if (min == null) return '—';
@@ -32,12 +35,31 @@ function deviceLabel(s) {
   return s.item_label || s.hostname || `Slot ${s.id}`;
 }
 
-export default function UPSPowerSummary({ rack, allSlots, onClose }) {
+export default function UPSPowerSummary({ rack, racks, allSlots, onClose }) {
   const [loadPct, setLoadPct] = useState(100);
 
   const rackSlots = allSlots.filter((s) => s.rack_id === rack.id);
   const upsDevices = rackSlots.filter((s) => s.device_type === 'ups');
   const ebmDevices = rackSlots.filter((s) => s.device_type === 'ebm');
+
+  // Every vertical PDU mounted in THIS rack, regardless of which rack its
+  // own UPS connection lives in — a PDU here can be wired to a UPS in any
+  // rack in the project (see DevicePropertiesPanel's "Connected To"), and
+  // that's exactly the case this list calls out with a Cross-Rack badge.
+  const verticalPdus = rackSlots.filter((s) => s.item_type === 'vertical-pdu');
+  const pduSides = computeVerticalPduPositions(verticalPdus);
+  const pduConnections = verticalPdus.map((pdu) => {
+    const ups = pdu.power_source_slot_id ? allSlots.find((s) => s.id === pdu.power_source_slot_id) : null;
+    const upsRack = ups ? (racks || []).find((r) => r.id === ups.rack_id) : null;
+    const crossRack = Boolean(ups) && ups.rack_id !== rack.id;
+    return {
+      pdu,
+      side: pduSides.get(pdu.id)?.side || 'left',
+      ups,
+      upsRackName: upsRack?.name || null,
+      crossRack,
+    };
+  });
 
   const upsRows = upsDevices.map((ups) => {
     const connectedEbms = ebmDevices.filter((e) => e.ebm_connected_ups_id === ups.id);
@@ -81,12 +103,18 @@ export default function UPSPowerSummary({ rack, allSlots, onClose }) {
         </div>
 
         <div className="ups-summary-body">
-          {upsDevices.length === 0 ? (
+          {upsDevices.length === 0 && verticalPdus.length === 0 ? (
             <div className="ups-summary-empty">
               No UPS devices found in this rack. Add a UPS device and set its Device Type to "UPS" in the properties panel, then fill in the Power Capacity fields.
             </div>
           ) : (
             <>
+              {upsDevices.length === 0 && (
+                <div className="ups-summary-empty">
+                  No UPS devices found in this rack.
+                </div>
+              )}
+
               {upsRows.map(({ ups, connectedEbms, ebmFull, ebmHalf, baseFull, baseHalf, totalFull, totalHalf }) => {
                 const estRuntime = interpolate(totalFull, totalHalf, loadPct);
                 const hasEbms = connectedEbms.length > 0;
@@ -166,6 +194,36 @@ export default function UPSPowerSummary({ rack, allSlots, onClose }) {
                 );
               })}
 
+              {verticalPdus.length > 0 && (
+                <div className="ups-summary-pdu-section">
+                  <div className="ups-summary-totals-label">Vertical PDUs</div>
+                  <div className="ups-summary-pdu-list">
+                    {pduConnections.map(({ pdu, side, ups, upsRackName, crossRack }) => (
+                      <div key={pdu.id} className="ups-summary-pdu-row">
+                        <span className="ups-summary-pdu-name">
+                          {deviceLabel(pdu)} <span className="ups-summary-muted">({SIDE_LABELS[side]})</span>
+                        </span>
+                        <span className="ups-summary-pdu-arrow">→</span>
+                        <span className="ups-summary-pdu-target">
+                          {ups ? (
+                            <>
+                              {deviceLabel(ups)}
+                              {crossRack && upsRackName && (
+                                <span className="ups-summary-muted"> in {upsRackName}</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="ups-summary-muted">Not connected</span>
+                          )}
+                        </span>
+                        {crossRack && <span className="ups-summary-cross-rack-badge">Cross-Rack</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {upsDevices.length > 0 && (
               <div className="ups-summary-totals-section">
                 <div className="ups-summary-totals-label">Totals</div>
                 <div className="ups-summary-totals-grid">
@@ -220,6 +278,7 @@ export default function UPSPowerSummary({ rack, allSlots, onClose }) {
                   </div>
                 )}
               </div>
+              )}
             </>
           )}
         </div>
