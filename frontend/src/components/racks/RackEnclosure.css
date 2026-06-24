@@ -387,7 +387,7 @@
    look like a flat color swatch. */
 .rack-vertical-pdu {
   position: absolute;
-  width: 9px;
+  width: 19px;
   display: flex;
   flex-direction: column;
   align-items: center;

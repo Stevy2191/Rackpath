@@ -84,7 +84,7 @@ export default function DeviceBlock({
       onClick={(e) => {
         if (e.defaultPrevented) return;
         e.stopPropagation();
-        onSelect && onSelect(slot.id);
+        onSelect && onSelect(slot.id, e.shiftKey);
       }}
       onDoubleClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => {

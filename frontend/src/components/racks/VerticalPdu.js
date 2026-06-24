@@ -35,7 +35,7 @@ export default function VerticalPdu({ slot, leftPx, top, height, side, isSelecte
       }}
       onClick={(e) => {
         e.stopPropagation();
-        onSelect && onSelect(slot.id);
+        onSelect && onSelect(slot.id, e.shiftKey);
       }}
       onDoubleClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => {

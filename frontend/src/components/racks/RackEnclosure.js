@@ -189,7 +189,7 @@ function RackPanel({
   fracStripesHard, // Map<"width:pos", Map<topU,{u_position,u_size}>> — fractional FULL-depth no-go blocks (hard)
   softFracRows,    // Map<"width:pos", Set<u>> — fractional HALF-depth warning rows (soft)
   highlightedSlotId,
-  selectedSlotId,
+  selectedSlotIds,
   draggingMeta,
   setDraggingMeta,
   actions,
@@ -281,7 +281,7 @@ function RackPanel({
                   side={face}
                   uHeight={uHeight}
                   highlighted={fullSlot.id === highlightedSlotId}
-                  isSelected={fullSlot.id === selectedSlotId}
+                  isSelected={selectedSlotIds.has(fullSlot.id)}
                   setDraggingMeta={setDraggingMeta}
                   actions={actions}
                   onSelect={onSelectSlot}
@@ -319,7 +319,7 @@ function RackPanel({
                       side={face}
                       uHeight={uHeight}
                       highlighted={slot.id === highlightedSlotId}
-                      isSelected={slot.id === selectedSlotId}
+                      isSelected={selectedSlotIds.has(slot.id)}
                       setDraggingMeta={setDraggingMeta}
                       actions={actions}
                       onSelect={onSelectSlot}
@@ -439,7 +439,7 @@ export default function RackEnclosure({
   rack,
   slots,
   highlightedSlotId,
-  selectedSlotId,
+  selectedSlotIds,
   actions,
   draggingMeta,
   setDraggingMeta,
@@ -665,7 +665,7 @@ export default function RackEnclosure({
     uHeight,
     rack,
     highlightedSlotId,
-    selectedSlotId,
+    selectedSlotIds,
     draggingMeta,
     setDraggingMeta,
     actions,
@@ -873,10 +873,10 @@ export default function RackEnclosure({
               key={pdu.id}
               slot={pdu}
               side={side}
-              leftPx={leftPx}
+              leftPx={leftPx - CHANNEL_PADDING}
               top={top}
               height={height}
-              isSelected={pdu.id === selectedSlotId}
+              isSelected={selectedSlotIds.has(pdu.id)}
               highlighted={pdu.id === highlightedSlotId}
               onSelect={onSelectSlot}
               actions={actions}

@@ -38,7 +38,7 @@ export default function RackCanvas({
   allSlots,
   userCatalogEntries,
   highlightedSlotId,
-  selectedSlotId,
+  selectedSlotIds,
   actions,
   onRequestPlacement,
   focusedRackId,
@@ -411,7 +411,7 @@ export default function RackCanvas({
               rack={rack}
               slots={allSlots.filter((s) => s.rack_id === rack.id)}
               highlightedSlotId={highlightedSlotId}
-              selectedSlotId={selectedSlotId}
+              selectedSlotIds={selectedSlotIds}
               actions={actions}
               draggingMeta={draggingMeta}
               setDraggingMeta={setDraggingMeta}

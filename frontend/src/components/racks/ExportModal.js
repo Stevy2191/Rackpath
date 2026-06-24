@@ -168,7 +168,7 @@ function relayoutPdus(clone, rack, verticalPdus, uSlots, view) {
   for (const el of clone.querySelectorAll('.rack-vertical-pdu[data-pdu-id]')) {
     const entry = byId.get(el.dataset.pduId);
     if (!entry) continue;
-    el.style.left = `${entry.leftPx}px`;
+    el.style.left = `${entry.leftPx - CHANNEL_PADDING}px`;
     el.style.top = `${entry.top}px`;
     el.style.height = `${entry.height}px`;
     el.classList.remove('rack-vertical-pdu-left', 'rack-vertical-pdu-right');

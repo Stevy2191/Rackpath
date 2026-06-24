@@ -18,6 +18,7 @@ import ExportModal from '../components/racks/ExportModal';
 import UPSPowerSummary from '../components/racks/UPSPowerSummary';
 import ConfirmModal from '../components/racks/ConfirmModal';
 import { getDeviceLabel } from '../components/racks/DeviceBlock';
+import BulkMoveToolbar from '../components/racks/BulkMoveToolbar';
 import './Racks.css';
 
 function scrollRackIntoView(rackId) {
@@ -40,7 +41,7 @@ export default function RacksPage() {
   const [focusedRackId, setFocusedRackId] = useState(null);
   const [rackEditOpen, setRackEditOpen] = useState(false);
   const [highlightedSlotId, setHighlightedSlotId] = useState(null);
-  const [selectedSlotId, setSelectedSlotId] = useState(null);
+  const [selectedSlotIds, setSelectedSlotIds] = useState(new Set());
   const [contextMenu, setContextMenu] = useState(null);         // device context menu
   const [rackContextMenu, setRackContextMenu] = useState(null); // { rackId, x, y }
   const [exportModal, setExportModal] = useState(null);         // { targetRacks: [] }
@@ -107,11 +108,11 @@ export default function RacksPage() {
     );
   }, [allSlots, searchParams, setSearchParams]);
 
-  // Escape closes panels/menus
+  // Escape closes panels/menus and deselects devices
   useEffect(() => {
     const handler = (e) => {
       if (e.key !== 'Escape') return;
-      setSelectedSlotId(null);
+      setSelectedSlotIds(new Set());
       setRackEditOpen(false);
       setRackContextMenu(null);
       setExportModal(null);
@@ -123,6 +124,9 @@ export default function RacksPage() {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
+
+  // Derive single-selected slot id for use in keyboard handlers below
+  const selectedSlotId = selectedSlotIds.size === 1 ? [...selectedSlotIds][0] : null;
 
   // Delete/Backspace: device takes priority over rack when both are active
   useEffect(() => {
@@ -142,6 +146,49 @@ export default function RacksPage() {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [selectedSlotId, allSlots, deleteConfirmSlot, deleteConfirmRack, focusedRackId, racks]);
+
+  // Arrow Up/Down: 1U bulk move when 2+ selected; Shift+Arrow = 5U
+  useEffect(() => {
+    if (selectedSlotIds.size < 2) return undefined;
+    const handler = (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      const delta = (e.shiftKey ? 5 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+      const slots = [...selectedSlotIds].map((id) => allSlots.find((s) => s.id === id)).filter(Boolean);
+      const errors = [];
+      for (const s of slots) {
+        const rack = racks.find((r) => r.id === s.rack_id);
+        const maxU = rack?.u_height || 42;
+        const newU = s.u_position + delta;
+        if (newU < 1 || newU + s.u_size - 1 > maxU) { errors.push('out-of-bounds'); break; }
+        const face = s.mounted_face || s.front_back || 'front';
+        const rackSlots = allSlots.filter((o) => o.rack_id === s.rack_id && (o.mounted_face || o.front_back || 'front') === face);
+        for (let u = newU; u < newU + s.u_size; u++) {
+          const occupant = rackSlots.find((o) => !selectedSlotIds.has(o.id) && o.u_position <= u && o.u_position + o.u_size > u);
+          if (occupant) { errors.push(`${occupant.item_label || 'device'}`); break; }
+        }
+        if (errors.length) break;
+      }
+      if (errors.length) return;
+      const updated = slots.map((s) => ({ ...s, u_position: s.u_position + delta }));
+      setAllSlots((cur) => {
+        const byId = new Map(updated.map((u) => [u.id, u]));
+        return cur.map((s) => byId.get(s.id) || s);
+      });
+      Promise.all(updated.map((s) => client.patch(`/rack-slots/${s.id}`, { u_position: s.u_position }))).catch((err) => {
+        setError(err.response?.data?.error || err.message);
+        setAllSlots((cur) => {
+          const origById = new Map(slots.map((s) => [s.id, s]));
+          return cur.map((s) => origById.get(s.id) || s);
+        });
+      });
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSlotIds, allSlots, racks]);
 
   // Close rack edit panel when rack is deselected
   useEffect(() => {
@@ -221,7 +268,7 @@ export default function RacksPage() {
       }
     },
     onSlotDelete: async (slotId) => {
-      if (selectedSlotId === slotId) setSelectedSlotId(null);
+      setSelectedSlotIds((cur) => { const s = new Set(cur); s.delete(slotId); return s; });
       const previous = allSlots;
       setAllSlots((cur) => cur.filter((s) => s.id !== slotId));
       try {
@@ -298,7 +345,7 @@ export default function RacksPage() {
           bay_count: slot.bay_count,
         });
         setAllSlots((cur) => [...cur, res.data]);
-        setSelectedSlotId(res.data.id);
+        setSelectedSlotIds(new Set([res.data.id]));
       } catch (err) {
         setError(err.response?.data?.error || err.message);
       }
@@ -319,7 +366,7 @@ export default function RacksPage() {
         await client.delete(`/racks/${rackId}`);
         setFocusedRackId((cur) => (cur === rackId ? null : cur));
         setRackEditOpen(false);
-        setSelectedSlotId(null);
+        setSelectedSlotIds(new Set());
         loadRacks();
         loadAllSlots();
       } catch (err) {
@@ -519,11 +566,74 @@ export default function RacksPage() {
     setAllSlots((cur) => cur.map((s) => (s.id === updatedSlot.id ? updatedSlot : s)));
   };
 
-  const handleSelectSlot = (slotId) => {
+  const handleSelectSlot = (slotId, shiftKey) => {
     // Selecting (or deselecting) a device always closes rack settings —
     // the two right-side panels never show at the same time.
     setRackEditOpen(false);
-    setSelectedSlotId((cur) => (cur === slotId ? null : slotId));
+    if (shiftKey) {
+      setSelectedSlotIds((cur) => {
+        const next = new Set(cur);
+        if (next.has(slotId)) next.delete(slotId);
+        else next.add(slotId);
+        return next;
+      });
+    } else {
+      setSelectedSlotIds((cur) =>
+        cur.size === 1 && cur.has(slotId) ? new Set() : new Set([slotId])
+      );
+    }
+  };
+
+  const handleBulkMove = async (delta) => {
+    const slots = [...selectedSlotIds].map((id) => allSlots.find((s) => s.id === id)).filter(Boolean)
+      .filter((s) => s.item_type !== 'vertical-pdu');
+    if (slots.length === 0) return;
+    for (const s of slots) {
+      const rack = racks.find((r) => r.id === s.rack_id);
+      const maxU = rack?.u_height || 42;
+      const newU = s.u_position + delta;
+      if (newU < 1) { setError('Cannot move — device would go below U1'); return; }
+      if (newU + s.u_size - 1 > maxU) { setError('Cannot move — device would exceed rack height'); return; }
+      const face = s.mounted_face || s.front_back || 'front';
+      const rackSlots = allSlots.filter((o) => o.rack_id === s.rack_id && (o.mounted_face || o.front_back || 'front') === face);
+      for (let u = newU; u < newU + s.u_size; u++) {
+        const occupant = rackSlots.find((o) => !selectedSlotIds.has(o.id) && o.u_position <= u && o.u_position + o.u_size > u);
+        if (occupant) {
+          setError(`Cannot move — would overlap with ${occupant.item_label || 'another device'}`);
+          return;
+        }
+      }
+    }
+    const updated = slots.map((s) => ({ ...s, u_position: s.u_position + delta }));
+    setAllSlots((cur) => {
+      const byId = new Map(updated.map((u) => [u.id, u]));
+      return cur.map((s) => byId.get(s.id) || s);
+    });
+    try {
+      await Promise.all(updated.map((s) => client.patch(`/rack-slots/${s.id}`, { u_position: s.u_position })));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+      setAllSlots((cur) => {
+        const origById = new Map(slots.map((s) => [s.id, s]));
+        return cur.map((s) => origById.get(s.id) || s);
+      });
+    }
+  };
+
+  const handleBulkDelete = () => {
+    const slots = [...selectedSlotIds].map((id) => allSlots.find((s) => s.id === id)).filter(Boolean);
+    if (slots.length === 0) return;
+    if (!window.confirm(`Delete ${slots.length} device${slots.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    const ids = new Set(selectedSlotIds);
+    setSelectedSlotIds(new Set());
+    setAllSlots((cur) => cur.filter((s) => !ids.has(s.id)));
+    Promise.all([...ids].map((id) => client.delete(`/rack-slots/${id}`))).catch((err) => {
+      setError(err.response?.data?.error || err.message);
+      setAllSlots((cur) => {
+        const missing = slots.filter((s) => !cur.find((c) => c.id === s.id));
+        return missing.length ? [...cur, ...missing] : cur;
+      });
+    });
   };
 
   // ─── JSON config backup (separate from new Export modal) ────────────────────
@@ -627,7 +737,7 @@ export default function RacksPage() {
       userCatalogEntries={userCatalogEntries}
       devices={devices}
       actions={actions}
-      onClose={() => setSelectedSlotId(null)}
+      onClose={() => setSelectedSlotIds(new Set())}
       onUpdated={handleSlotUpdatedFromPanel}
       onSelectSlot={handleSelectSlot}
       onSaveToCatalog={saveSlotToCatalog}
@@ -711,7 +821,7 @@ export default function RacksPage() {
           userCatalogEntries={userCatalogEntries}
           showPowerConnections={showPowerConnections}
           highlightedSlotId={highlightedSlotId}
-          selectedSlotId={selectedSlotId}
+          selectedSlotIds={selectedSlotIds}
           actions={actions}
           onRequestPlacement={requestPlacement}
           focusedRackId={focusedRackId}
@@ -719,19 +829,19 @@ export default function RacksPage() {
             // Single click on the rack frame / empty rack space: select that
             // rack for click-to-add, deselect any device, and never pop
             // open rack settings — that's reserved for a double click.
-            setSelectedSlotId(null);
+            setSelectedSlotIds(new Set());
             setRackEditOpen(false);
             setFocusedRackId(rackId);
           }}
           onSelectSlot={handleSelectSlot}
           onEditRack={() => {
-            setSelectedSlotId(null);
+            setSelectedSlotIds(new Set());
             setRackEditOpen((v) => !v);
           }}
           onOpenRackEdit={(rackId) => {
             // Double click on the rack frame: open rack settings, closing
             // the device panel first so only one panel is ever visible.
-            setSelectedSlotId(null);
+            setSelectedSlotIds(new Set());
             setFocusedRackId(rackId);
             setRackEditOpen(true);
           }}
@@ -752,13 +862,13 @@ export default function RacksPage() {
           onClose={() => setRackContextMenu(null)}
           onExport={() => openExportModal([ctxRack])}
           onFocus={() => {
-            setSelectedSlotId(null);
+            setSelectedSlotIds(new Set());
             setRackEditOpen(false);
             setFocusedRackId(ctxRack.id);
             setFitRackRequest({ id: ctxRack.id, t: Date.now() });
           }}
           onEditRack={() => {
-            setSelectedSlotId(null);
+            setSelectedSlotIds(new Set());
             setFocusedRackId(ctxRack.id);
             setRackEditOpen(true);
           }}
@@ -837,6 +947,17 @@ export default function RacksPage() {
 
       {portEditorDevice && (
         <PortEditorModal device={portEditorDevice} devices={devices} onClose={() => setPortEditorDevice(null)} />
+      )}
+
+      {selectedSlotIds.size >= 2 && (
+        <BulkMoveToolbar
+          selectedCount={selectedSlotIds.size}
+          onMoveUp={(n) => handleBulkMove(n)}
+          onMoveDown={(n) => handleBulkMove(-n)}
+          onMoveByN={(n, dir) => handleBulkMove(dir === 'up' ? n : -n)}
+          onDeselectAll={() => setSelectedSlotIds(new Set())}
+          onDelete={handleBulkDelete}
+        />
       )}
     </div>
   );
