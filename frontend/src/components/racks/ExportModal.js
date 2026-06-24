@@ -331,7 +331,8 @@ function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
 }
 
 // ─── Capture a single rack in the requested view/theme ────────────────────────
-// Returns { dataUrl, cssW, cssH }
+// Returns { dataUrl, cssW, cssH, pduOverflowLeft, frameOffsetTop, frontWidth, verticalPdus, pduLayout }
+// The extra fields let compositeRacks draw cross-rack cables onto the composite.
 async function captureSingle(rackId, rack, allSlots, { format, view, theme, scale }) {
   const wrapper = buildOffscreenRack(rackId, rack, allSlots, view, theme);
   if (!wrapper) return null;
@@ -342,24 +343,133 @@ async function captureSingle(rackId, rack, allSlots, { format, view, theme, scal
     const bg = bgFor(theme);
     const w = clone.offsetWidth;
     const h = clone.offsetHeight;
+
+    // Capture layout metadata while the clone is still attached and has a real
+    // layout box.  compositeRacks uses this to draw cross-rack cables.
+    const frame = clone.querySelector('.rack-dual-frame');
+    const frontPanel = frame && frame.querySelector('.rack-panel-frame-front');
+    const frontWidth = frontPanel ? frontPanel.offsetWidth : (frame ? frame.offsetWidth : 0);
+    const frameHeight = frame ? frame.offsetHeight : 0;
+    const frameOffsetTop = frame ? frame.offsetTop : 0;
+    const hasGap = view === 'side-by-side';
+    const pduOverflowLeft = frame ? (parseFloat(frame.style.marginLeft) || 0) : 0;
+    const verticalPdus = allSlots.filter((s) => s.rack_id === rackId && s.item_type === 'vertical-pdu');
+    const uSlotsForLayout = allSlots.filter((s) => s.rack_id === rackId && s.item_type !== 'vertical-pdu');
+    const pduLayout = layoutVerticalPdus({
+      verticalPdus, uSlots: uSlotsForLayout, rack, uHeight: DEFAULT_U_HEIGHT, frontWidth, frameHeight, hasGap,
+    });
+
     const dataUrl = await capFn(clone, { backgroundColor: bg, pixelRatio: scale });
-    return { dataUrl, cssW: w, cssH: h };
+    return { dataUrl, cssW: w, cssH: h, pduOverflowLeft, frameOffsetTop, frontWidth, verticalPdus, pduLayout };
   } finally {
     wrapper.remove();
   }
 }
 
+// ─── Cross-rack cable drawing ─────────────────────────────────────────────────
+
+// Frame-local y of the bottom edge of a device slot (16px = rack-top-blank
+// height + its margin-bottom). Matches verticalPduLayout.bottomY exactly.
+function upsBottomY(rack, u_position, u_size) {
+  const top = 16 + (rack.u_height - (u_position + u_size - 1)) * DEFAULT_U_HEIGHT;
+  return top + u_size * DEFAULT_U_HEIGHT;
+}
+
+// Draws cross-rack power-cord beziers onto a composite canvas that already
+// has each rack image painted at the positions described by `rackPositions`.
+// Coordinates are in CSS pixel space (ctx has already been scaled).
+function drawCrossRackCablesOnCanvas(ctx, captures, targetRacks, rackPositions, allSlots) {
+  // Build a lookup from rack id → { rack, capture, pos } for both directions
+  const byRackId = new Map();
+  for (let i = 0; i < captures.length; i++) {
+    if (captures[i] && targetRacks[i]) {
+      byRackId.set(targetRacks[i].id, { rack: targetRacks[i], capture: captures[i], pos: rackPositions[i] });
+    }
+  }
+
+  for (const { rack, capture, pos } of byRackId.values()) {
+    if (!capture.verticalPdus || !capture.pduLayout) continue;
+
+    for (const pdu of capture.verticalPdus) {
+      if (!pdu.power_source_slot_id) continue;
+      const ups = allSlots.find((s) => s.id === pdu.power_source_slot_id);
+      // Same-rack connections are already drawn by each rack's own .rack-power-cords SVG.
+      if (!ups || ups.rack_id === pdu.rack_id) continue;
+
+      const upsEntry = byRackId.get(ups.rack_id);
+      if (!upsEntry) continue; // UPS's rack not included in this export set
+
+      const pduEntry = capture.pduLayout.get(pdu.id);
+      if (!pduEntry) continue;
+
+      // PDU anchor: bottom-center of its floating strip in composite CSS-px space
+      const pduX = pos.x + capture.pduOverflowLeft + pduEntry.leftPx + STRIP_WIDTH / 2;
+      const pduY = pos.y + capture.frameOffsetTop + pduEntry.top + pduEntry.height;
+
+      // UPS anchor: the frame edge of the UPS's rack that faces the PDU's rack.
+      // Mirrors same-rack cord logic: upsX = 0 (left edge of Front) or frontWidth
+      // (right edge of Front) — both in frame-local coords → shifted by pduOverflowLeft.
+      const { capture: upsCap, pos: upsPos, rack: upsRack } = upsEntry;
+      const upsFrameLeft  = upsPos.x + upsCap.pduOverflowLeft;
+      const upsFrameRight = upsFrameLeft + upsCap.frontWidth;
+      const pduIsLeft = pduX < (upsFrameLeft + upsCap.frontWidth / 2);
+      const upsX = pduIsLeft ? upsFrameLeft : upsFrameRight;
+      const upsY = upsPos.y + upsCap.frameOffsetTop + upsBottomY(upsRack, ups.u_position, ups.u_size);
+
+      // Bezier control points — identical formula to CrossRackPowerOverlay / buildCordCurve
+      const outward = pduIsLeft ? -1 : 1;
+      const dist = Math.hypot(pduX - upsX, pduY - upsY);
+      const reach = Math.max(10, Math.min(40, dist * 0.3));
+      const droop = Math.max(16, Math.min(48, dist * 0.24));
+      const lowY  = Math.max(upsY, pduY) + droop;
+      const c1x = upsX + outward * reach * 0.4;
+      const c1y = (upsY + lowY) / 2;
+      const c2x = pduX + outward * reach;
+      const c2y = lowY;
+
+      // Glow: wide, blurred, low-opacity stroke
+      ctx.save();
+      ctx.filter = 'blur(2px)';
+      ctx.beginPath();
+      ctx.moveTo(upsX, upsY);
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, pduX, pduY);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 7;
+      ctx.globalAlpha = 0.28;
+      ctx.stroke();
+      ctx.restore();
+
+      // Cord: solid amber line
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(upsX, upsY);
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, pduX, pduY);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
 // ─── Composite multiple rack captures side-by-side ────────────────────────────
 // Returns { dataUrl, cssW, cssH }
-async function compositeRacks(captures, { theme, scale, format }) {
-  const valid = captures.filter(Boolean);
-  if (valid.length === 0) return null;
-  if (valid.length === 1) return valid[0];
+// targetRacks and allSlots are optional; when provided, cross-rack power cables
+// are drawn on top of the composite after the rack images are placed.
+async function compositeRacks(captures, targetRacks, allSlots, { theme, scale, format }) {
+  // Keep original rack→capture pairing when filtering nulls, so indices stay aligned.
+  const validPairs = captures
+    .map((c, i) => ({ capture: c, rack: targetRacks ? targetRacks[i] : null }))
+    .filter(({ capture }) => capture != null);
+
+  if (validPairs.length === 0) return null;
+  if (validPairs.length === 1) return validPairs[0].capture;
 
   const GAP = 48;
   const PAD = 32;
-  const totalCssW = valid.reduce((sum, c) => sum + c.cssW, 0) + GAP * (valid.length - 1) + PAD * 2;
-  const maxCssH = Math.max(...valid.map((c) => c.cssH));
+  const totalCssW = validPairs.reduce((sum, { capture: c }) => sum + c.cssW, 0) + GAP * (validPairs.length - 1) + PAD * 2;
+  const maxCssH = Math.max(...validPairs.map(({ capture: c }) => c.cssH));
   const totalCssH = maxCssH + PAD * 2;
 
   const canvas = document.createElement('canvas');
@@ -370,12 +480,28 @@ async function compositeRacks(captures, { theme, scale, format }) {
   ctx.fillStyle = bgFor(theme);
   ctx.fillRect(0, 0, totalCssW, totalCssH);
 
-  const imgs = await Promise.all(valid.map((c) => loadImage(c.dataUrl)));
+  const imgs = await Promise.all(validPairs.map(({ capture: c }) => loadImage(c.dataUrl)));
+
+  // Track each rack's CSS-pixel origin in the composite for cable drawing.
+  const rackPositions = [];
   let x = PAD;
-  for (let i = 0; i < valid.length; i++) {
-    const y = PAD + Math.floor((maxCssH - valid[i].cssH) / 2);
-    ctx.drawImage(imgs[i], x, y, valid[i].cssW, valid[i].cssH);
-    x += valid[i].cssW + GAP;
+  for (let i = 0; i < validPairs.length; i++) {
+    const { capture: c } = validPairs[i];
+    const y = PAD + Math.floor((maxCssH - c.cssH) / 2);
+    rackPositions.push({ x, y });
+    ctx.drawImage(imgs[i], x, y, c.cssW, c.cssH);
+    x += c.cssW + GAP;
+  }
+
+  // Draw cross-rack power cables on top of the composited rack images.
+  if (allSlots && targetRacks) {
+    drawCrossRackCablesOnCanvas(
+      ctx,
+      validPairs.map(({ capture: c }) => c),
+      validPairs.map(({ rack: r }) => r),
+      rackPositions,
+      allSlots,
+    );
   }
 
   const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
@@ -981,7 +1107,7 @@ async function performExport(targetRacks, allSlots, racks, { format, view, theme
     const singles = await Promise.all(
       targetRacks.map((r) => captureSingle(r.id, r, allSlots, { format, view, theme, scale }))
     );
-    result = await compositeRacks(singles, { theme, scale, format });
+    result = await compositeRacks(singles, targetRacks, allSlots, { theme, scale, format });
   }
 
   if (!result) return;
@@ -1058,7 +1184,7 @@ export default function ExportModal({ targetRacks, allSlots, racks, onClose }) {
         const singles = await Promise.all(
           targetRacks.map((r) => captureSingle(r.id, r, allSlots, { format: previewFormat, view: v, theme: t, scale: PREVIEW_SCALE }))
         );
-        result = await compositeRacks(singles, { theme: t, scale: PREVIEW_SCALE, format: previewFormat });
+        result = await compositeRacks(singles, targetRacks, allSlots, { theme: t, scale: PREVIEW_SCALE, format: previewFormat });
       }
       if (!result) { setPreviewError(true); return; }
 
