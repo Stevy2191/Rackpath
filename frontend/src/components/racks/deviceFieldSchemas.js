@@ -74,8 +74,12 @@ export function normalizeCatalogEntry(entry, source) {
       render_type: entry.render_type,
       u_size: entry.u_size,
       color: entry.color || null,
-      half_width: !!entry.half_width,
       half_depth: !!entry.half_depth,
+      // user_catalog_entries only ever modeled half-width, not thirds - a
+      // saved Mini PC (third-width) would already have lost that down to
+      // plain half_width=0 when it was saved, so this can only ever derive
+      // 'half-width' or 'full', never 'third'.
+      slot_width: entry.half_width ? 'half-width' : 'full',
       mounted_face: entry.mounted_face || 'front',
       outlet_groups: Array.isArray(entry.outlet_groups) ? entry.outlet_groups : [],
       input_voltage: entry.input_voltage ?? null,
@@ -92,9 +96,9 @@ export function normalizeCatalogEntry(entry, source) {
     label: entry.name,
     render_type: entry.renderType,
     u_size: entry.uSize,
-    color: null,
-    half_width: !!entry.halfWidth,
+    color: entry.color || null,
     half_depth: !!entry.halfDepth,
+    slot_width: entry.slotWidth || 'full',
     mounted_face: entry.mountedFace || 'front',
     outlet_groups: singleOutletGroup(entry.outletCount, entry.outletType),
     input_voltage: entry.inputVoltage ?? null,

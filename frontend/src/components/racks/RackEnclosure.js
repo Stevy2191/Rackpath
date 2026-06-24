@@ -2,9 +2,17 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import DeviceBlock from './DeviceBlock';
 import RackUnitSlot from './RackUnitSlot';
 import VerticalPdu from './VerticalPdu';
-import { countUsedU } from './rackPlacement';
+import { countUsedU, normalizeSlotWidth, SLOT_WIDTH_COLUMNS, FRACTIONAL_WIDTHS } from './rackPlacement';
 import { layoutVerticalPdus, cordPathD } from './verticalPduLayout';
 import './RackEnclosure.css';
+
+// Composite key for the per-width-per-column stripe/warning maps below —
+// there are only 5 possible (width, position) pairs total (2 for
+// half-width, 3 for third), so a flat `"width:pos"` string key is simpler
+// than nesting two more Maps.
+function fracKey(width, position) {
+  return `${width}:${position}`;
+}
 
 // Power cord traveling pulse: a lead dot plus a short comet tail of
 // progressively smaller, fainter dots a few percent of the cord's own
@@ -53,8 +61,12 @@ function resolveface(s) {
 //
 // Returns:
 //   fullByTop   – { [topU]: slot }  — full-width slots keyed by their topmost U
-//   hwAtU       – Map<u, { left?, right? }>  — ½W slots whose range spans each U row
-//   hwRenderU   – Set<u>  — U rows that need a split hw-row container rendered
+//   fracAtU     – Map<u, { width, columns: Array<slot|undefined> }>  — fractional
+//                 slots whose range spans each U row, columns indexed by slot_position.
+//                 A given U can only ever hold ONE width class on a given face — mixed
+//                 widths sharing a row are rejected by the backend, so this never needs
+//                 to merge two different `width`s at the same key.
+//   fracRenderU – Set<u>  — U rows that need a split frac-row container rendered
 //   covered     – Set<u>  — all occupied U rows (used for drag collision checks)
 //   occupiedByU – Map<u, slotId>  — for drop highlight logic in RackUnitSlot
 function buildUMap(slots, face) {
@@ -65,7 +77,7 @@ function buildUMap(slots, face) {
   });
 
   const fullByTop = {};
-  const hwAtU = new Map();
+  const fracAtU = new Map();
   const covered = new Set();
   const occupiedByU = new Map();
 
@@ -75,27 +87,31 @@ function buildUMap(slots, face) {
       covered.add(u);
       occupiedByU.set(u, s.id);
     }
-    if (s.half_width) {
-      const hp = s.half_position === 'right' ? 'right' : 'left';
+    const width = normalizeSlotWidth(s.slot_width);
+    if (width !== 'full') {
+      const columns = SLOT_WIDTH_COLUMNS[width];
+      const pos = Math.min(Math.max(Number(s.slot_position) || 0, 0), columns - 1);
       for (let u = s.u_position; u <= top; u++) {
-        hwAtU.set(u, { ...(hwAtU.get(u) || {}), [hp]: s });
+        const entry = fracAtU.get(u) || { width, columns: new Array(columns).fill(undefined) };
+        entry.columns[pos] = s;
+        fracAtU.set(u, entry);
       }
     } else {
       fullByTop[top] = s;
     }
   }
 
-  // hwRenderU: only U rows where at least one ½W device has its topU === u.
-  // These are the rows where we render the hw-row split container.
-  // Covered rows below a topU are handled by the tall DeviceBlock / explicit null.
-  const hwRenderU = new Set();
-  for (const [u, pair] of hwAtU) {
-    const leftAtTop  = pair.left  && (pair.left.u_position  + pair.left.u_size  - 1 === u);
-    const rightAtTop = pair.right && (pair.right.u_position + pair.right.u_size - 1 === u);
-    if (leftAtTop || rightAtTop) hwRenderU.add(u);
+  // fracRenderU: only U rows where at least one fractional device has its
+  // topU === u. These are the rows where we render the frac-row split
+  // container. Covered rows below a topU are handled by the tall
+  // DeviceBlock / explicit null.
+  const fracRenderU = new Set();
+  for (const [u, entry] of fracAtU) {
+    const atTop = entry.columns.some((c) => c && c.u_position + c.u_size - 1 === u);
+    if (atTop) fracRenderU.add(u);
   }
 
-  return { fullByTop, hwAtU, hwRenderU, covered, occupiedByU };
+  return { fullByTop, fracAtU, fracRenderU, covered, occupiedByU };
 }
 
 // Groups a set of U row numbers into contiguous stripe blocks.
@@ -132,16 +148,14 @@ function RackPanel({
   uHeight,
   rack,
   fullByTop,
-  hwAtU,
-  hwRenderU,
+  fracAtU,
+  fracRenderU,
   covered,
   occupiedByU,
-  fullStripesHard,    // Map<topU, {u_position,u_size}> — full-width FULL-depth no-go blocks from opp. face (hard, non-interactive)
-  hwStripesHardLeft,  // Map<topU, {u_position,u_size}> — ½W-left full-depth no-go blocks (hard)
-  hwStripesHardRight, // Map<topU, {u_position,u_size}> — ½W-right full-depth no-go blocks (hard)
-  softFullRows,       // Set<u> — full-width HALF-depth warning rows from opp. face (soft: still droppable)
-  softHwLeftRows,     // Set<u> — ½W-left half-depth warning rows (soft)
-  softHwRightRows,    // Set<u> — ½W-right half-depth warning rows (soft)
+  fullStripesHard, // Map<topU, {u_position,u_size}> — full-width FULL-depth no-go blocks from opp. face (hard, non-interactive)
+  softFullRows,    // Set<u> — full-width HALF-depth warning rows from opp. face (soft: still droppable)
+  fracStripesHard, // Map<"width:pos", Map<topU,{u_position,u_size}>> — fractional FULL-depth no-go blocks (hard)
+  softFracRows,    // Map<"width:pos", Set<u>> — fractional HALF-depth warning rows (soft)
   highlightedSlotId,
   selectedSlotId,
   draggingMeta,
@@ -161,13 +175,54 @@ function RackPanel({
   for (const [topU, { u_position }] of fullStripesHard) {
     for (let u = u_position; u < topU; u++) fullStripesHardCovered.add(u);
   }
-  const hwStripesHardLeftCovered = new Set();
-  for (const [topU, { u_position }] of hwStripesHardLeft) {
-    for (let u = u_position; u < topU; u++) hwStripesHardLeftCovered.add(u);
+  const fracStripesHardCovered = new Map(); // "width:pos" -> Set<u>
+  for (const [key, stripeMap] of fracStripesHard) {
+    const coveredSet = new Set();
+    for (const [topU, { u_position }] of stripeMap) {
+      for (let u = u_position; u < topU; u++) coveredSet.add(u);
+    }
+    fracStripesHardCovered.set(key, coveredSet);
   }
-  const hwStripesHardRightCovered = new Set();
-  for (const [topU, { u_position }] of hwStripesHardRight) {
-    for (let u = u_position; u < topU; u++) hwStripesHardRightCovered.add(u);
+
+  // Determines whether row `u` has any fractional involvement at all (a
+  // real device, a hard no-go block, or a soft warning — top row or a
+  // covered/non-top row of any of those), and if so, which width governs
+  // it. A U can only ever have ONE fractional width class active at a time
+  // on a given face (mixed widths sharing a row are rejected server-side),
+  // so checking each width in turn and stopping at the first hit is safe.
+  function fracRowInfo(u) {
+    const realEntry = fracAtU.get(u);
+    let width = realEntry?.width || null;
+    if (!width) {
+      for (const w of FRACTIONAL_WIDTHS) {
+        const cols = SLOT_WIDTH_COLUMNS[w];
+        for (let pos = 0; pos < cols; pos++) {
+          const key = fracKey(w, pos);
+          if (fracStripesHard.get(key)?.has(u) || softFracRows.get(key)?.has(u) || fracStripesHardCovered.get(key)?.has(u)) {
+            width = w;
+            break;
+          }
+        }
+        if (width) break;
+      }
+    }
+    if (!width) return null;
+
+    const cols = SLOT_WIDTH_COLUMNS[width];
+    let rowUSize = 1;
+    const columns = [];
+    for (let pos = 0; pos < cols; pos++) {
+      const key = fracKey(width, pos);
+      const slot = realEntry?.columns[pos];
+      const slotAtTop = Boolean(slot && slot.u_position + slot.u_size - 1 === u);
+      const hardStripe = fracStripesHard.get(key)?.get(u);
+      const hardStripeCovered = fracStripesHardCovered.get(key)?.has(u) || false;
+      const soft = softFracRows.get(key)?.has(u) || false;
+      if (slotAtTop) rowUSize = Math.max(rowUSize, slot.u_size);
+      if (hardStripe) rowUSize = Math.max(rowUSize, hardStripe.u_size);
+      columns.push({ slot, slotAtTop, hardStripe, hardStripeCovered, soft });
+    }
+    return { width, rowUSize, columns };
   }
 
   return (
@@ -203,40 +258,27 @@ function RackPanel({
             }
 
             // ── Covered by a full-width multi-U device (non-top rows) ─────
-            if (covered.has(u) && !hwAtU.has(u)) return null;
+            if (covered.has(u) && !fracAtU.has(u)) return null;
 
-            const leftHardStripe  = hwStripesHardLeft.get(u);
-            const rightHardStripe = hwStripesHardRight.get(u);
-            const leftSoft  = softHwLeftRows.has(u);
-            const rightSoft = softHwRightRows.has(u);
-
-            // ── Half-width row: render a split container ──────────────────
-            // Enter this branch for a real ½W device starting here (hwRenderU)
-            // *or* a ½W no-go stripe/warning starting here — those need no
-            // real device on this face at all (e.g. a ½W half-depth device
-            // whose projected stripe lands on an otherwise-empty opposite
-            // face), so they can't be gated behind hwAtU like the real-device
-            // case is.
-            if (hwRenderU.has(u) || leftHardStripe || rightHardStripe || leftSoft || rightSoft) {
-              const pair = hwAtU.get(u) || {};
-              const leftSlot  = pair.left;
-              const rightSlot = pair.right;
-              const leftAtTop  = leftSlot  && (leftSlot.u_position  + leftSlot.u_size  - 1 === u);
-              const rightAtTop = rightSlot && (rightSlot.u_position + rightSlot.u_size - 1 === u);
-
+            // ── Fractional-width row: render an N-column split container ──
+            // Enter this branch for a real fractional device covering this
+            // row (top or non-top), a hard no-go block starting/covering
+            // here, or a soft warning here — the latter two need no real
+            // device on this face at all (e.g. a fractional half-depth
+            // device whose projected stripe lands on an otherwise-empty
+            // opposite face), so they can't be gated behind fracAtU like
+            // the real-device case is. (fracAtU.has(u) on its own already
+            // implies a non-null result here, since fracRowInfo always
+            // finds *some* width once there's a real entry to read it
+            // from — so this is also what replaces the old standalone
+            // "covered by a fractional device, no sibling" check.)
+            const info = fracRowInfo(u);
+            if (info) {
               const band = Math.floor((u - 1) / 5) % 2;
               const is5th = u % 5 === 0;
 
-              // Row height = max u_size of devices/hard-blocks that START at
-              // this topU. Soft rows are always exactly 1U (never merged),
-              // so they never contribute to this.
-              let rowUSize = 1;
-              if (leftAtTop)       rowUSize = Math.max(rowUSize, leftSlot.u_size);
-              if (rightAtTop)      rowUSize = Math.max(rowUSize, rightSlot.u_size);
-              if (leftHardStripe)  rowUSize = Math.max(rowUSize, leftHardStripe.u_size);
-              if (rightHardStripe) rowUSize = Math.max(rowUSize, rightHardStripe.u_size);
-
-              const renderHalfContent = (slot, slotAtTop, hardStripe, hardStripeCovered, soft) => {
+              const renderColumnContent = (col) => {
+                const { slot, slotAtTop, hardStripe, hardStripeCovered, soft } = col;
                 if (slot && slotAtTop) {
                   return (
                     <DeviceBlock
@@ -252,12 +294,12 @@ function RackPanel({
                     />
                   );
                 }
-                if (slot && !slotAtTop) return null; // covered by this half's multi-U device
+                if (slot && !slotAtTop) return null; // covered by this column's multi-U device
                 if (hardStripe) {
                   return (
                     <DeviceBlock
-                      key={`hw-stripe-${u}`}
-                      slot={{ id: `hw-stripe-${face}-${u}`, halfDepthStripe: true, u_position: hardStripe.u_position, u_size: hardStripe.u_size }}
+                      key={`frac-stripe-${u}`}
+                      slot={{ id: `frac-stripe-${face}-${u}`, halfDepthStripe: true, u_position: hardStripe.u_position, u_size: hardStripe.u_size }}
                       side={face}
                       uHeight={uHeight}
                       highlighted={false}
@@ -270,7 +312,7 @@ function RackPanel({
                 if (hardStripeCovered) return null;
                 return (
                   <RackUnitSlot
-                    key={`hw-slot-${u}`}
+                    key={`frac-slot-${u}`}
                     u={u}
                     band={band}
                     is5th={is5th}
@@ -283,27 +325,20 @@ function RackPanel({
                 );
               };
 
-              const leftContent  = renderHalfContent(leftSlot,  leftAtTop,  leftHardStripe,  hwStripesHardLeftCovered.has(u),  leftSoft);
-              const rightContent = renderHalfContent(rightSlot, rightAtTop, rightHardStripe, hwStripesHardRightCovered.has(u), rightSoft);
+              const contents = info.columns.map(renderColumnContent);
 
-              // If both halves are null (covered rows with no sibling), skip the row.
-              if (leftContent === null && rightContent === null) return null;
+              // If every column is null (a covered row with no content of its
+              // own), skip the whole row.
+              if (contents.every((c) => c === null)) return null;
 
               return (
-                <div key={`hw-row-${u}`} className="rack-hw-row" style={{ height: `${rowUSize * uHeight}px` }}>
-                  <div className="rack-hw-half">{leftContent}</div>
-                  <div className="rack-hw-half">{rightContent}</div>
+                <div key={`frac-row-${u}`} className="rack-frac-row" style={{ height: `${info.rowUSize * uHeight}px` }}>
+                  {contents.map((content, i) => (
+                    <div key={i} className="rack-frac-col">{content}</div>
+                  ))}
                 </div>
               );
             }
-
-            // ── Covered by a ½W device at a higher topU (no sibling here) ─
-            if (hwAtU.has(u)) return null;
-
-            // ── Covered by a ½W HARD no-go block at a higher topU, with no
-            //    real device on this face at all (same "no sibling" case as
-            //    above, just for a hard block instead of a real device) ────
-            if (hwStripesHardLeftCovered.has(u) || hwStripesHardRightCovered.has(u)) return null;
 
             // ── Full-width HARD no-go block from a full-depth device on the
             //    opposite face — non-interactive, blocks this U entirely ───
@@ -521,15 +556,15 @@ export default function RackEnclosure({
   //     has nothing on either face. Each soft row is rendered and dropped
   //     on independently, exactly like an ordinary empty U.
   // 'both'-face devices already render on both panels, so they never
-  // contribute a stripe. ½W half-depth devices project onto the same half
-  // of the opposite face.
+  // contribute a stripe. Fractional-width devices project onto the SAME
+  // (width, column) of the opposite face — tracked per "width:pos" key
+  // (fracKey) rather than per side, so it generalizes past the old
+  // left/right pair to however many columns a given width splits into.
   function computeStripes(sourceFace, targetMap) {
-    const hardFullRows    = new Set();
-    const softFullRows    = new Set();
-    const hardHwLeftRows  = new Set();
-    const softHwLeftRows  = new Set();
-    const hardHwRightRows = new Set();
-    const softHwRightRows = new Set();
+    const hardFullRows = new Set();
+    const softFullRows = new Set();
+    const hardFracRows = new Map(); // "width:pos" -> Set<u>
+    const softFracRows = new Map(); // "width:pos" -> Set<u>
 
     for (const s of uSlots) {
       const mf = resolveface(s);
@@ -540,28 +575,31 @@ export default function RackEnclosure({
       // 'both'-face devices render on both panels — no stripe needed.
       if (mf === 'both') continue;
 
+      const width = normalizeSlotWidth(s.slot_width);
       const top = s.u_position + s.u_size - 1;
       for (let u = s.u_position; u <= top; u++) {
         if (targetMap.covered.has(u)) continue;
-        if (s.half_width) {
-          const hp = s.half_position === 'right' ? 'right' : 'left';
-          const rows = hp === 'left'
-            ? (s.half_depth ? softHwLeftRows : hardHwLeftRows)
-            : (s.half_depth ? softHwRightRows : hardHwRightRows);
-          rows.add(u);
+        if (width !== 'full') {
+          const columns = SLOT_WIDTH_COLUMNS[width];
+          const pos = Math.min(Math.max(Number(s.slot_position) || 0, 0), columns - 1);
+          const key = fracKey(width, pos);
+          const bucket = s.half_depth ? softFracRows : hardFracRows;
+          if (!bucket.has(key)) bucket.set(key, new Set());
+          bucket.get(key).add(u);
         } else {
           (s.half_depth ? softFullRows : hardFullRows).add(u);
         }
       }
     }
 
+    const fracStripesHard = new Map();
+    for (const [key, rows] of hardFracRows) fracStripesHard.set(key, groupStripeRows(rows));
+
     return {
-      fullStripesHard:    groupStripeRows(hardFullRows),
-      hwStripesHardLeft:  groupStripeRows(hardHwLeftRows),
-      hwStripesHardRight: groupStripeRows(hardHwRightRows),
+      fullStripesHard: groupStripeRows(hardFullRows),
       softFullRows,
-      softHwLeftRows,
-      softHwRightRows,
+      fracStripesHard, // Map<"width:pos", Map<topU,{u_position,u_size}>>
+      softFracRows,    // Map<"width:pos", Set<u>>
     };
   }
 
@@ -627,16 +665,14 @@ export default function RackEnclosure({
           showLeftRail
           showRightRail
           fullByTop={frontMap.fullByTop}
-          hwAtU={frontMap.hwAtU}
-          hwRenderU={frontMap.hwRenderU}
+          fracAtU={frontMap.fracAtU}
+          fracRenderU={frontMap.fracRenderU}
           covered={frontMap.covered}
           occupiedByU={frontMap.occupiedByU}
           fullStripesHard={frontStripes.fullStripesHard}
-          hwStripesHardLeft={frontStripes.hwStripesHardLeft}
-          hwStripesHardRight={frontStripes.hwStripesHardRight}
           softFullRows={frontStripes.softFullRows}
-          softHwLeftRows={frontStripes.softHwLeftRows}
-          softHwRightRows={frontStripes.softHwRightRows}
+          fracStripesHard={frontStripes.fracStripesHard}
+          softFracRows={frontStripes.softFracRows}
           {...panelProps}
         />
         {/* Always rendered, never conditionally omitted — Rear being
@@ -652,16 +688,14 @@ export default function RackEnclosure({
           showLeftRail
           showRightRail
           fullByTop={rearMap.fullByTop}
-          hwAtU={rearMap.hwAtU}
-          hwRenderU={rearMap.hwRenderU}
+          fracAtU={rearMap.fracAtU}
+          fracRenderU={rearMap.fracRenderU}
           covered={rearMap.covered}
           occupiedByU={rearMap.occupiedByU}
           fullStripesHard={rearStripes.fullStripesHard}
-          hwStripesHardLeft={rearStripes.hwStripesHardLeft}
-          hwStripesHardRight={rearStripes.hwStripesHardRight}
           softFullRows={rearStripes.softFullRows}
-          softHwLeftRows={rearStripes.softHwLeftRows}
-          softHwRightRows={rearStripes.softHwRightRows}
+          fracStripesHard={rearStripes.fracStripesHard}
+          softFracRows={rearStripes.softFracRows}
           {...panelProps}
         />
 

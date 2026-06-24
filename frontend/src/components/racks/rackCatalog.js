@@ -2,8 +2,15 @@
 // *types*, not vendor models — every type is fully configurable (height,
 // port/bay counts, outlet specs, etc.) via the quick-config step shown when
 // it's placed, and again afterwards in the device properties panel.
-// Fields: id, name, category, renderType, uSize, mountedFace, halfDepth, halfWidth.
+// Fields: id, name, category, renderType, uSize, mountedFace, halfDepth, slotWidth.
 // `mountedFace` matches the DB column: 'front' | 'rear' | 'both'.
+// `slotWidth` matches the DB column: 'full' | 'half-width' | 'third' — a
+// non-'full' device can share a U row side by side with others of the SAME
+// slotWidth (2 for half-width, 3 for third); `halfWidth` is kept in sync
+// (true iff slotWidth === 'half-width') purely for backwards compat with
+// code/data that only knows the older boolean (e.g. saving a catalog
+// placement to the user's own custom catalog, which still only models
+// half-width, not thirds — see deviceFieldSchemas.js).
 // `renderType` keys into deviceRenderConfig.js and deviceFieldSchemas.js.
 // `floating` entries (vertical/0U PDUs) aren't placed into U rows directly —
 // they're attached to a UPS via the properties panel.
@@ -19,9 +26,11 @@ export const SIMPLE_ITEM_TYPES = ['patch-panel', 'blank', 'cable-manager'];
 
 export const CATALOG_CATEGORIES = [
   { id: 'SERVERS',              label: 'Servers' },
+  { id: 'COMPUTING',            label: 'Computing' },
   { id: 'NETWORKING',           label: 'Networking' },
   { id: 'POWER',                label: 'Power' },
   { id: 'STORAGE',               label: 'Storage' },
+  { id: 'SECURITY',             label: 'Security' },
   { id: 'PATCHING & CABLING',   label: 'Patching & Cabling' },
   { id: 'KVM & MANAGEMENT',     label: 'KVM & Management' },
   { id: 'AV & MEDIA',           label: 'AV & Media' },
@@ -29,10 +38,12 @@ export const CATALOG_CATEGORIES = [
 ];
 
 function e(id, name, category, renderType, uSize, opts = {}) {
+  const slotWidth = opts.slotWidth || 'full';
   return {
     id, name, category, renderType, uSize,
     halfDepth: opts.halfDepth || false,
-    halfWidth: opts.halfWidth || false,
+    slotWidth,
+    halfWidth: opts.halfWidth || slotWidth === 'half-width',
     mountedFace: opts.mountedFace || 'front',
     outletCount:  opts.outletCount,
     outletType:   opts.outletType,
@@ -42,6 +53,7 @@ function e(id, name, category, renderType, uSize, opts = {}) {
     bayCount:     opts.bayCount,
     floating:     opts.floating || false,
     deviceType:   opts.deviceType || null,
+    color:        opts.color || null,
   };
 }
 
@@ -49,6 +61,20 @@ export const RACK_CATALOG = [
   // ─── SERVERS ────────────────────────────────────────────────────────────────
   e('server',        'Server',         'SERVERS', 'server', 1),
   e('blade-chassis',  'Blade Chassis',  'SERVERS', 'blade-chassis', 4, { bayCount: 8 }),
+
+  // ─── COMPUTING ──────────────────────────────────────────────────────────────
+  // Mini PC and Regular PC are fractional-width: up to 3 Mini PCs, or 2
+  // Regular PCs, can share a single U slot side by side (slotWidth below).
+  // Rack Mount PC is a standard full-width 1U device, nothing special.
+  e('mini-pc', 'Mini PC', 'COMPUTING', 'mini-pc', 1, {
+    slotWidth: 'third', color: '#6B7280',
+  }),
+  e('regular-pc', 'Regular PC', 'COMPUTING', 'regular-pc', 1, {
+    slotWidth: 'half-width', color: '#6B7280',
+  }),
+  e('rack-mount-pc', 'Rack Mount PC', 'COMPUTING', 'rack-mount-pc', 1, {
+    color: '#6B7280',
+  }),
 
   // ─── NETWORKING ─────────────────────────────────────────────────────────────
   e('switch',              'Switch',               'NETWORKING', 'switch', 1, { portCount: 24 }),
@@ -83,6 +109,9 @@ export const RACK_CATALOG = [
   e('nas-storage-array', 'NAS / Storage Array', 'STORAGE', 'storage', 2, { bayCount: 12 }),
   e('tape-library',      'Tape Library',        'STORAGE', 'tape-library', 4),
   e('san-switch',        'SAN Switch',          'STORAGE', 'san-switch', 1),
+
+  // ─── SECURITY ───────────────────────────────────────────────────────────────
+  e('nvr', 'NVR', 'SECURITY', 'nvr', 1, { color: '#1F2937' }),
 
   // ─── PATCHING & CABLING ─────────────────────────────────────────────────────
   e('patch-panel-copper', 'Patch Panel - Copper', 'PATCHING & CABLING', 'patch-panel-copper', 1, { portCount: 24 }),

@@ -35,6 +35,73 @@ export function isSpanFree(pos, uSize, occupied) {
   return true;
 }
 
+// Fractional-width U slots: "half-width" splits a U into 2 equal columns,
+// "third" into 3 - up to that many same-width devices can share one U side
+// by side. Anything else (including missing/unrecognized values) is "full".
+export const FRACTIONAL_WIDTHS = ['half-width', 'third'];
+export const SLOT_WIDTH_COLUMNS = { 'half-width': 2, third: 3 };
+
+export function normalizeSlotWidth(width) {
+  return FRACTIONAL_WIDTHS.includes(width) ? width : 'full';
+}
+
+export function slotWidthLabel(width) {
+  if (width === 'half-width') return 'half-width';
+  if (width === 'third') return 'third-width';
+  return 'full-width';
+}
+
+// Resolves where a NEW fractional-width device should land at the exact U
+// row it was dropped/clicked on, without ever falling back to a different
+// row — fractional placement either joins the exact target row (if empty,
+// or already holds compatible same-width siblings with an open column) or
+// is rejected outright, so the caller can either share the modal flow's
+// generic collision search (for "full" widths and for an incompatible exact
+// row) or surface a specific rejection message (for "no room left here").
+//
+// Returns one of:
+//   { ok: true,  u_position, slot_position }
+//   { ok: false, reason: 'incompatible' }  — exact row has a full-width
+//     device, or fractional siblings of a *different* width — caller
+//     should fall back to the generic free-row search, same as dropping a
+//     full-width device onto any other occupied row already behaves.
+//   { ok: false, reason: 'full', error }   — exact row has compatible
+//     siblings but every column is already taken.
+export function resolveFractionalPlacement({ slots, rackId, face, uPosition, slotWidth, excludeSlotId, deviceLabel }) {
+  const width = normalizeSlotWidth(slotWidth);
+  const columns = SLOT_WIDTH_COLUMNS[width];
+
+  const occupantsHere = slots.filter((s) => {
+    if (s.rack_id !== rackId) return false;
+    if (s.item_type === 'vertical-pdu') return false;
+    if (excludeSlotId != null && String(s.id) === String(excludeSlotId)) return false;
+    const mountedFace = s.mounted_face || s.front_back || 'front';
+    if (face !== 'both' && mountedFace !== 'both' && mountedFace !== face) return false;
+    const top = s.u_position + s.u_size - 1;
+    return uPosition >= s.u_position && uPosition <= top;
+  });
+
+  if (occupantsHere.length === 0) {
+    return { ok: true, u_position: uPosition, slot_position: 0 };
+  }
+
+  const existingWidth = normalizeSlotWidth(occupantsHere[0].slot_width);
+  const allSameWidth = occupantsHere.every((s) => normalizeSlotWidth(s.slot_width) === existingWidth);
+  if (existingWidth !== width || !allSameWidth) {
+    return { ok: false, reason: 'incompatible' };
+  }
+
+  const takenPositions = new Set(occupantsHere.map((s) => Number(s.slot_position) || 0));
+  for (let pos = 0; pos < columns; pos++) {
+    if (!takenPositions.has(pos)) return { ok: true, u_position: uPosition, slot_position: pos };
+  }
+  return {
+    ok: false,
+    reason: 'full',
+    error: `This U slot is full — no more ${deviceLabel || 'devices'} can be added here`,
+  };
+}
+
 // Builds the set of U rows occupied on a given face of a rack, for a quick
 // client-side collision heuristic. This intentionally ignores half-width
 // nuances (two half-width devices can share U rows on opposite halves) —

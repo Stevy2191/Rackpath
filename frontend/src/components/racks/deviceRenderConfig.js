@@ -2,6 +2,7 @@ import {
   Server, Network, Shield, HardDrive, Zap, Plug, Cable, Monitor, Wifi, Box, Minus,
   ServerCog, Scale, Archive, Shuffle, CircleDot, Terminal, MonitorCog, Volume2,
   PlayCircle, MonitorPlay, Inbox, PackageOpen, ArrowLeftRight, PlugZap, BatteryFull,
+  Cpu, Video,
 } from 'lucide-react';
 
 export const CATEGORY_CONFIG = {
@@ -36,6 +37,10 @@ export const CATEGORY_CONFIG = {
   shelf:                  '#4B5563',
   drawer:                 '#4B5563',
   other:                  '#0D9488',
+  'mini-pc':              '#6B7280',
+  'regular-pc':           '#6B7280',
+  'rack-mount-pc':        '#6B7280',
+  nvr:                    '#1F2937',
 };
 
 export const CATEGORY_ICONS = {
@@ -70,6 +75,10 @@ export const CATEGORY_ICONS = {
   shelf:                  Inbox,
   drawer:                 PackageOpen,
   other:                  Box,
+  'mini-pc':              Cpu,
+  'regular-pc':           Cpu,
+  'rack-mount-pc':        Cpu,
+  nvr:                    Video,
 };
 
 const KEYWORD_RULES = [

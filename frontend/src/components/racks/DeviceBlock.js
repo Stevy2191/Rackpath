@@ -110,7 +110,8 @@ export default function DeviceBlock({
           <span className="device-block-name">{name}</span>
           <div className="device-block-badges">
             <span className="device-block-badge">{slot.u_size}U</span>
-            {slot.half_width ? <span className="device-block-badge device-block-badge-accent">½W</span> : null}
+            {slot.slot_width === 'half-width' && <span className="device-block-badge device-block-badge-accent">½W</span>}
+            {slot.slot_width === 'third' && <span className="device-block-badge device-block-badge-accent">⅓W</span>}
             {slot.half_depth ? <span className="device-block-badge device-block-badge-accent">½D</span> : null}
           </div>
         </>

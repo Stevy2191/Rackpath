@@ -245,11 +245,13 @@
   letter-spacing: 0.03em;
 }
 
-/* ─── Half-width device row ──────────────────────────────── */
-/* Contains two equal halves side-by-side. Each child (DeviceBlock or
-   RackUnitSlot) already uses width:100%/box-sizing:border-box so it
-   fills its half automatically. */
-.rack-hw-row {
+/* ─── Fractional-width device row ────────────────────────── */
+/* Contains 2 ("half-width") or 3 ("third") equal columns side-by-side —
+   `flex: 1 1 0%` divides the row evenly across however many columns are
+   rendered, no fixed-percentage math needed. Each child (DeviceBlock or
+   RackUnitSlot) already uses width:100%/box-sizing:border-box so it fills
+   its column automatically. */
+.rack-frac-row {
   display: flex;
   flex-direction: row;
   flex-shrink: 0;
@@ -257,17 +259,16 @@
   width: 100%;
 }
 
-.rack-hw-half {
-  flex: 0 0 50%;
-  width: 50%;
+.rack-frac-col {
+  flex: 1 1 0%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
 }
 
-/* Thin visual separator between the two halves */
-.rack-hw-half + .rack-hw-half {
+/* Thin visual divider between every adjacent pair of columns */
+.rack-frac-col + .rack-frac-col {
   border-left: 1px solid rgba(0, 0, 0, 0.35);
 }
 

@@ -14,6 +14,31 @@ const FRONT_BACK = ['front', 'back'];
 const MOUNTED_FACES = ['front', 'rear', 'both'];
 const MOUNT_SIDES = ['left', 'right'];
 
+// Fractional-width U slots: a "half-width" slot is split into 2 equal
+// columns, a "third" slot into 3 - up to that many devices can share one U
+// side by side. slot_position is the 0-based column index within that
+// split ("full" devices ignore it - always column 0 of a single column).
+const SLOT_WIDTHS = ['full', 'half-width', 'third'];
+const SLOT_WIDTH_COLUMNS = { 'half-width': 2, third: 3 };
+
+function normalizeSlotWidth(width) {
+  return SLOT_WIDTHS.includes(width) ? width : 'full';
+}
+
+// Validates slot_width and clamps slot_position into range for it (always 0
+// for "full"). Returns { error } if slot_width itself is invalid, otherwise
+// { normalizedWidth, normalizedPosition }.
+function resolveSlotWidthAndPosition(slotWidth, slotPosition) {
+  if (slotWidth !== undefined && slotWidth !== null && !SLOT_WIDTHS.includes(slotWidth)) {
+    return { error: 'Invalid slot_width' };
+  }
+  const normalizedWidth = normalizeSlotWidth(slotWidth);
+  if (normalizedWidth === 'full') return { normalizedWidth, normalizedPosition: 0 };
+  const maxPos = SLOT_WIDTH_COLUMNS[normalizedWidth] - 1;
+  const pos = Number(slotPosition);
+  return { normalizedWidth, normalizedPosition: Number.isInteger(pos) && pos >= 0 && pos <= maxPos ? pos : 0 };
+}
+
 // Image upload for slot front/rear faceplate images
 const SLOT_IMAGE_DIR = path.join('/uploads', 'rack-slots');
 fs.mkdirSync(SLOT_IMAGE_DIR, { recursive: true });
@@ -44,13 +69,13 @@ function mountedFaceToLegacy(mounted_face) {
   return { side: 'front', front_back: 'front' };
 }
 
-async function findCollision(rackId, projectId, uPosition, uSize, side, excludeId, halfWidth, halfPosition, halfDepth) {
+async function findCollision(rackId, projectId, uPosition, uSize, side, excludeId, slotWidth, slotPosition, halfDepth) {
   // Vertical PDUs are 0U floating elements alongside the frame, not real
   // U-grid occupants — they still carry a u_position/u_size in storage
   // (so a PDU strip has a slot to draw its cord from), but that range
   // must never block a real device from being placed over it. Excluded
   // here the same way the rack resize-fit check already excludes them.
-  let query = `SELECT id, u_position, u_size, side, half_width, half_position, half_depth FROM rack_slots
+  let query = `SELECT id, u_position, u_size, side, slot_width, slot_position, half_depth FROM rack_slots
                WHERE rack_id = ? AND project_id = ? AND item_type != 'vertical-pdu'`;
   const params = [rackId, projectId];
   if (excludeId) {
@@ -59,6 +84,8 @@ async function findCollision(rackId, projectId, uPosition, uSize, side, excludeI
   }
   const [rows] = await pool.query(query, params);
 
+  const normalizedWidth = normalizeSlotWidth(slotWidth);
+  const normalizedPosition = Number(slotPosition) || 0;
   const top = uPosition + uSize - 1;
   for (const row of rows) {
     const rowTop = row.u_position + row.u_size - 1;
@@ -76,10 +103,14 @@ async function findCollision(rackId, projectId, uPosition, uSize, side, excludeI
       return row;
     }
 
-    // Two half-width devices can share the same U rows when on opposite halves.
-    if (halfWidth && row.half_width) {
-      const rowHalf = row.half_position || 'left';
-      if (rowHalf !== (halfPosition || 'left')) continue;
+    // Same face (or 'both'): two fractional-width devices can share a U row
+    // only if they're the SAME width class (mixing half-width and third is
+    // not supported) and claim DIFFERENT columns within it. A full-width
+    // device never shares with a fractional one, in either direction.
+    const rowWidth = normalizeSlotWidth(row.slot_width);
+    if (normalizedWidth !== 'full' && normalizedWidth === rowWidth) {
+      const rowPosition = Number(row.slot_position) || 0;
+      if (rowPosition !== normalizedPosition) continue;
     }
     return row;
   }
@@ -176,6 +207,7 @@ router.post('/', async (req, res, next) => {
     const {
       rack_id, device_id, u_position, item_type, item_label, side,
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
+      slot_width, slot_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
       port_count, bay_count, capacity_va, capacity_w,
@@ -200,6 +232,9 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid mount_side' });
     }
     if (u_size < 1) return res.status(400).json({ error: 'u_size must be at least 1' });
+
+    const slotWidthResolved = resolveSlotWidthAndPosition(slot_width, slot_position);
+    if (slotWidthResolved.error) return res.status(400).json({ error: slotWidthResolved.error });
 
     const [racks] = await pool.query('SELECT u_height FROM racks WHERE id = ? AND project_id = ?', [rack_id, req.projectId]);
     if (racks.length === 0) return res.status(404).json({ error: 'Rack not found' });
@@ -227,7 +262,10 @@ router.post('/', async (req, res, next) => {
         return res.status(409).json({ error: 'Both Left and Right vertical PDU positions are already in use on this rack' });
       }
     } else {
-      const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, null, half_width, resolvedHalfPos, half_depth);
+      const collision = await findCollision(
+        rack_id, req.projectId, u_position, u_size, resolvedSide, null,
+        slotWidthResolved.normalizedWidth, slotWidthResolved.normalizedPosition, half_depth
+      );
       if (collision) {
         return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
       }
@@ -255,7 +293,8 @@ router.post('/', async (req, res, next) => {
       `INSERT INTO rack_slots
          (project_id, rack_id, device_id, item_type, item_label, custom_type, color,
           u_position, position_offset, u_size, side, front_back, mounted_face,
-          half_depth, half_width, half_position, catalog_id, custom_image_url, vendor, ip_address, slot_notes,
+          half_depth, half_width, half_position, slot_width, slot_position,
+          catalog_id, custom_image_url, vendor, ip_address, slot_notes,
           outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
           port_count, bay_count, capacity_va, capacity_w,
           device_type,
@@ -263,13 +302,14 @@ router.post('/', async (req, res, next) => {
           ebm_connected_ups_id, ebm_runtime_full, ebm_runtime_half,
           power_source_slot_id, power_source_outlet, mount_side,
           psu2_source_slot_id, psu2_source_outlet)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
         u_position, position_offset || 0, u_size,
         resolvedSide, resolvedFrontBack, resolvedFace,
         half_depth ? 1 : 0, half_width ? 1 : 0, resolvedHalfPos,
+        slotWidthResolved.normalizedWidth, slotWidthResolved.normalizedPosition,
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
         outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
@@ -308,6 +348,7 @@ router.put('/:id', async (req, res, next) => {
     const {
       rack_id, device_id, item_type, item_label, side,
       custom_type, color, front_back, mounted_face, half_depth, half_width, half_position,
+      slot_width, slot_position,
       catalog_id, custom_image_url, vendor, ip_address, slot_notes, position_offset,
       outlet_groups, input_voltage, input_plug_type, capacity_value, capacity_unit,
       port_count, bay_count, capacity_va, capacity_w,
@@ -331,6 +372,9 @@ router.put('/:id', async (req, res, next) => {
     }
     if (u_size < 1) return res.status(400).json({ error: 'u_size must be at least 1' });
 
+    const slotWidthResolved = resolveSlotWidthAndPosition(slot_width, slot_position);
+    if (slotWidthResolved.error) return res.status(400).json({ error: slotWidthResolved.error });
+
     const [racks] = await pool.query('SELECT u_height FROM racks WHERE id = ? AND project_id = ?', [rack_id, req.projectId]);
     if (racks.length === 0) return res.status(404).json({ error: 'Rack not found' });
     const uHeight = racks[0].u_height;
@@ -347,7 +391,10 @@ router.put('/:id', async (req, res, next) => {
     const resolvedHalfPos = (half_position === 'right') ? 'right' : 'left';
 
     if (item_type !== 'vertical-pdu') {
-      const collision = await findCollision(rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id, half_width, resolvedHalfPos, half_depth);
+      const collision = await findCollision(
+        rack_id, req.projectId, u_position, u_size, resolvedSide, req.params.id,
+        slotWidthResolved.normalizedWidth, slotWidthResolved.normalizedPosition, half_depth
+      );
       if (collision) {
         return res.status(409).json({ error: `U${collision.u_position} is already occupied` });
       }
@@ -375,7 +422,8 @@ router.put('/:id', async (req, res, next) => {
       `UPDATE rack_slots
        SET rack_id=?, device_id=?, item_type=?, item_label=?, custom_type=?, color=?,
            u_position=?, position_offset=?, u_size=?, side=?, front_back=?, mounted_face=?,
-           half_depth=?, half_width=?, half_position=?, catalog_id=?, custom_image_url=?, vendor=?,
+           half_depth=?, half_width=?, half_position=?, slot_width=?, slot_position=?,
+           catalog_id=?, custom_image_url=?, vendor=?,
            ip_address=?, slot_notes=?,
            outlet_groups=?, input_voltage=?, input_plug_type=?, capacity_value=?, capacity_unit=?,
            port_count=?, bay_count=?, capacity_va=?, capacity_w=?,
@@ -391,6 +439,7 @@ router.put('/:id', async (req, res, next) => {
         u_position, position_offset || 0, u_size,
         resolvedSide, resolvedFrontBack, resolvedFace,
         half_depth ? 1 : 0, half_width ? 1 : 0, resolvedHalfPos,
+        slotWidthResolved.normalizedWidth, slotWidthResolved.normalizedPosition,
         catalog_id || null, custom_image_url || null, vendor || null,
         ip_address || null, slot_notes || null,
         outlet_groups ? JSON.stringify(outlet_groups) : null, input_voltage || null,
@@ -423,6 +472,7 @@ router.patch('/:id', async (req, res, next) => {
   try {
     const allowed = [
       'item_label', 'color', 'mounted_face', 'half_depth', 'half_width', 'half_position',
+      'slot_width', 'slot_position',
       'u_size', 'u_position', 'position_offset', 'ip_address', 'slot_notes',
       'asset_tag', 'serial_number',
       'front_image_url', 'rear_image_url',
@@ -449,6 +499,16 @@ router.patch('/:id', async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid mount_side' });
     }
 
+    if ('slot_width' in updates || 'slot_position' in updates) {
+      const slotWidthResolved = resolveSlotWidthAndPosition(
+        'slot_width' in updates ? updates.slot_width : undefined,
+        updates.slot_position
+      );
+      if (slotWidthResolved.error) return res.status(400).json({ error: slotWidthResolved.error });
+      if ('slot_width' in updates) updates.slot_width = slotWidthResolved.normalizedWidth;
+      if ('slot_position' in updates) updates.slot_position = slotWidthResolved.normalizedPosition;
+    }
+
     // Sync legacy columns when mounted_face changes
     if (updates.mounted_face) {
       const legacy = mountedFaceToLegacy(updates.mounted_face);
@@ -456,12 +516,13 @@ router.patch('/:id', async (req, res, next) => {
       updates.front_back = legacy.front_back;
     }
 
-    // Collision check when position, size, face, or half-width/depth changes
-    // — any of these can change which slots this one now overlaps/collides with.
-    const collisionFields = ['u_position', 'u_size', 'side', 'half_width', 'half_position', 'half_depth'];
+    // Collision check when position, size, face, fractional width/position,
+    // or half-depth changes — any of these can change which slots this one
+    // now overlaps/collides with.
+    const collisionFields = ['u_position', 'u_size', 'side', 'slot_width', 'slot_position', 'half_depth'];
     if (collisionFields.some((f) => f in updates)) {
       const [[cur]] = await pool.query(
-        'SELECT rack_id, item_type, u_position, u_size, side, half_width, half_position, half_depth FROM rack_slots WHERE id = ? AND project_id = ?',
+        'SELECT rack_id, item_type, u_position, u_size, side, slot_width, slot_position, half_depth FROM rack_slots WHERE id = ? AND project_id = ?',
         [req.params.id, req.projectId]
       );
       if (!cur) return res.status(404).json({ error: 'Rack slot not found' });
@@ -469,8 +530,8 @@ router.patch('/:id', async (req, res, next) => {
       const newPos  = 'u_position' in updates ? Number(updates.u_position) : cur.u_position;
       const newSize = 'u_size'     in updates ? Number(updates.u_size)     : cur.u_size;
       const checkSide = updates.side || cur.side;
-      const checkHalfWidth = 'half_width' in updates ? Boolean(updates.half_width) : Boolean(cur.half_width);
-      const checkHalfPosition = 'half_position' in updates ? updates.half_position : cur.half_position;
+      const checkSlotWidth = 'slot_width' in updates ? updates.slot_width : cur.slot_width;
+      const checkSlotPosition = 'slot_position' in updates ? updates.slot_position : cur.slot_position;
       const checkHalfDepth = 'half_depth' in updates ? Boolean(updates.half_depth) : Boolean(cur.half_depth);
 
       if (newPos < 1 || newSize < 1) {
@@ -489,7 +550,7 @@ router.patch('/:id', async (req, res, next) => {
       if (cur.item_type !== 'vertical-pdu') {
         const collision = await findCollision(
           cur.rack_id, req.projectId, newPos, newSize, checkSide, req.params.id,
-          checkHalfWidth, checkHalfPosition, checkHalfDepth
+          checkSlotWidth, checkSlotPosition, checkHalfDepth
         );
         if (collision) {
           return res.status(409).json({ error: `U${collision.u_position} is already occupied` });

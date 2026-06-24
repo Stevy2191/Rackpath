@@ -3,9 +3,28 @@ import { X, ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react
 import { RACK_CATALOG, CATALOG_CATEGORIES, groupByCategory, findCatalogEntryByModel } from './rackCatalog';
 import { normalizeCatalogEntry } from './deviceFieldSchemas';
 import { getCategoryStyle } from './deviceRenderConfig';
+import { normalizeSlotWidth, resolveFractionalPlacement } from './rackPlacement';
 import './DeviceCatalog.css';
 
-function findNextFreeU(rack, allSlots, uSize, mountedFace) {
+// click-to-place finds a U row by scanning rather than dropping on a
+// specific one, so there's no single "exact target row" the way
+// RackCanvas's drag-and-drop has — for a fractional-width device, this
+// just prefers the first row (top down) that can take it, whether that's
+// an existing compatible group with an open column or a fresh empty row.
+function findNextFreeU(rack, allSlots, uSize, mountedFace, slotWidth) {
+  const width = normalizeSlotWidth(slotWidth);
+  const targetFace = mountedFace === 'rear' ? 'rear' : 'front';
+
+  if (width !== 'full') {
+    for (let u = 1; u <= rack.u_height; u++) {
+      const resolved = resolveFractionalPlacement({
+        slots: allSlots, rackId: rack.id, face: targetFace, uPosition: u, slotWidth: width,
+      });
+      if (resolved.ok) return { u_position: u, slot_position: resolved.slot_position };
+    }
+    return null;
+  }
+
   const occupied = new Set();
   for (const s of allSlots) {
     if (s.rack_id !== rack.id) continue;
@@ -14,7 +33,6 @@ function findNextFreeU(rack, allSlots, uSize, mountedFace) {
     // from the catalog can land.
     if (s.item_type === 'vertical-pdu') continue;
     const face = s.mounted_face || s.front_back || 'front';
-    const targetFace = mountedFace === 'rear' ? 'rear' : 'front';
     if (face !== 'both' && face !== targetFace) continue;
     for (let u = s.u_position; u <= s.u_position + s.u_size - 1; u++) occupied.add(u);
   }
@@ -23,7 +41,7 @@ function findNextFreeU(rack, allSlots, uSize, mountedFace) {
     for (let u = start; u <= start + uSize - 1; u++) {
       if (occupied.has(u)) { free = false; break; }
     }
-    if (free) return start;
+    if (free) return { u_position: start, slot_position: 0 };
   }
   return null;
 }
@@ -81,7 +99,8 @@ function CatalogCard({ entry, source, onClick, onDragStart, onContextMenu, renam
       )}
       <div className="dc-card-badges">
         {badges.map((b) => <span key={b} className="dc-card-badge">{b}</span>)}
-        {normalized.half_width && <span className="dc-card-badge dc-card-badge-accent">½W</span>}
+        {normalized.slot_width === 'half-width' && <span className="dc-card-badge dc-card-badge-accent">½W</span>}
+        {normalized.slot_width === 'third' && <span className="dc-card-badge dc-card-badge-accent">⅓W</span>}
         {normalized.half_depth && <span className="dc-card-badge dc-card-badge-accent">½D</span>}
         {normalized.mounted_face === 'rear' && <span className="dc-card-badge dc-card-badge-rear">Rear</span>}
       </div>
@@ -160,17 +179,17 @@ export default function DeviceCatalog({
   const requestCatalogPlacement = (entry) => {
     if (!focusedRack) return;
     const mounted_face = entry.mountedFace || 'front';
-    const u_position = findNextFreeU(focusedRack, allSlots, entry.uSize, mounted_face);
-    if (u_position == null) return;
-    onRequestPlacement({ source: 'catalog', entry, target: { rack_id: focusedRack.id, u_position, mounted_face } });
+    const found = findNextFreeU(focusedRack, allSlots, entry.uSize, mounted_face, entry.slotWidth);
+    if (!found) return;
+    onRequestPlacement({ source: 'catalog', entry, target: { rack_id: focusedRack.id, u_position: found.u_position, mounted_face } });
   };
 
   const requestCustomPlacement = (custom) => {
     if (!focusedRack) return;
     const mounted_face = custom.mounted_face || 'front';
-    const u_position = findNextFreeU(focusedRack, allSlots, custom.u_size, mounted_face);
-    if (u_position == null) return;
-    onRequestPlacement({ source: 'custom', entry: custom, target: { rack_id: focusedRack.id, u_position, mounted_face } });
+    const found = findNextFreeU(focusedRack, allSlots, custom.u_size, mounted_face);
+    if (!found) return;
+    onRequestPlacement({ source: 'custom', entry: custom, target: { rack_id: focusedRack.id, u_position: found.u_position, mounted_face } });
   };
 
   const addUnrackedDevice = (device) => {
@@ -178,17 +197,18 @@ export default function DeviceCatalog({
     const catalogMatch = findCatalogEntryByModel(device.model);
     const uSize = catalogMatch ? catalogMatch.uSize : 1;
     const mountedFace = catalogMatch ? catalogMatch.mountedFace : 'front';
-    const u_position = findNextFreeU(focusedRack, allSlots, uSize, mountedFace);
-    if (u_position == null) return;
+    const found = findNextFreeU(focusedRack, allSlots, uSize, mountedFace, catalogMatch?.slotWidth);
+    if (!found) return;
     actions.onSlotCreate({
       rack_id: focusedRack.id,
       device_id: device.id,
       item_type: 'device',
-      u_position,
+      u_position: found.u_position,
       u_size: uSize,
       mounted_face: mountedFace,
       half_depth: catalogMatch?.halfDepth ? 1 : 0,
-      half_width: catalogMatch?.halfWidth ? 1 : 0,
+      slot_width: catalogMatch?.slotWidth || 'full',
+      slot_position: found.slot_position,
     });
   };
 
@@ -334,7 +354,7 @@ export default function DeviceCatalog({
                               uSize: catalogMatch.uSize,
                               mountedFace: catalogMatch.mountedFace,
                               halfDepth: catalogMatch.halfDepth,
-                              halfWidth: catalogMatch.halfWidth,
+                              slotWidth: catalogMatch.slotWidth,
                             }));
                           }
                         }}

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { Plus, Minus, Maximize2, Settings } from 'lucide-react';
 import RackEnclosure from './RackEnclosure';
-import { resolveUPosition, isSpanFree, buildOccupiedSet } from './rackPlacement';
+import { resolveUPosition, isSpanFree, buildOccupiedSet, normalizeSlotWidth, resolveFractionalPlacement } from './rackPlacement';
 import { DEFAULT_U_HEIGHT } from './verticalPduLayout';
 import './RackCanvas.css';
 
@@ -215,13 +215,51 @@ export default function RackCanvas({
       return resolveUPosition(uPosition, uSize, rack.u_height, (pos) => isSpanFree(pos, uSize, occupied));
     };
 
+    // Fractional-width devices (Mini PC, Regular PC, ...) are always
+    // resolved against the EXACT row dropped on, not the generic
+    // anchor-direction search above (which has no concept of sharing a row
+    // — see buildOccupiedSet's docstring) - they either join that row's
+    // existing compatible siblings at the next open column, start a fresh
+    // group there if it's empty, or (when `rejectIfFull`) are rejected
+    // outright with a friendly message instead of silently landing
+    // somewhere else. Only meaningfully accurate for 1U devices, which is
+    // all the catalog ships today — a manually multi-U-resized fractional
+    // device only has its *first* row's compatibility checked here; the
+    // backend's collision check remains authoritative either way.
+    const resolveFractionalDropU = (excludeId, slotWidth, rejectIfFull) => {
+      const width = normalizeSlotWidth(slotWidth);
+      if (width !== 'full') {
+        const result = resolveFractionalPlacement({
+          slots: allSlots, rackId, face, uPosition, slotWidth: width, excludeSlotId: excludeId,
+        });
+        if (result.ok) return { u_position: result.u_position, slot_position: result.slot_position };
+        if (rejectIfFull && result.reason === 'full') return { rejected: result.error };
+        // 'incompatible' (or 'full' when not rejecting outright, e.g. the
+        // tentative target before a quick-config modal even opens) falls
+        // back to the generic search below, same as any other collision.
+      }
+      return { u_position: resolvePosition(1, face, excludeId), slot_position: 0 };
+    };
+
     if (slotId) {
       const slot = allSlots.find((s) => String(s.id) === slotId);
       if (!slot) return;
-      const u_position = resolvePosition(slot.u_size, face, slot.id);
+      const isFractional = normalizeSlotWidth(slot.slot_width) !== 'full';
+      const resolved = isFractional
+        ? resolveFractionalDropU(slot.id, slot.slot_width, true)
+        : { u_position: resolvePosition(slot.u_size, face, slot.id) };
+      if (resolved.rejected) {
+        actions.onPlacementRejected?.(resolved.rejected);
+        return;
+      }
+      const { u_position, slot_position } = resolved;
       const curFace = slot.mounted_face || slot.front_back || 'front';
-      if (u_position === slot.u_position && slot.rack_id === rackId && curFace === face) return;
-      actions.onSlotUpdate(slot, { rack_id: rackId, u_position, mounted_face: face });
+      if (u_position === slot.u_position && slot.rack_id === rackId && curFace === face
+        && (!isFractional || slot_position === (Number(slot.slot_position) || 0))) return;
+      actions.onSlotUpdate(slot, {
+        rack_id: rackId, u_position, mounted_face: face,
+        ...(isFractional ? { slot_position } : {}),
+      });
       return;
     }
 
@@ -230,16 +268,22 @@ export default function RackCanvas({
       const catalogMeta = catalogRaw ? JSON.parse(catalogRaw) : null;
       const u_size = catalogMeta?.uSize || 1;
       const mounted_face = catalogMeta?.mountedFace || face;
-      const u_position = resolvePosition(u_size, mounted_face, null);
+      const slotWidth = catalogMeta?.slotWidth || 'full';
+      const resolved = resolveFractionalDropU(null, slotWidth, true);
+      if (resolved.rejected) {
+        actions.onPlacementRejected?.(resolved.rejected);
+        return;
+      }
       actions.onSlotCreate({
         rack_id: rackId,
         device_id: Number(deviceId),
         item_type: 'device',
-        u_position,
+        u_position: resolved.u_position,
         u_size,
         mounted_face,
         half_depth: catalogMeta?.halfDepth ? 1 : 0,
-        half_width: catalogMeta?.halfWidth ? 1 : 0,
+        slot_width: slotWidth,
+        slot_position: resolved.slot_position,
       });
       return;
     }
@@ -247,8 +291,11 @@ export default function RackCanvas({
     if (catalogItem) {
       const entry = JSON.parse(catalogItem);
       const mounted_face = entry.mountedFace || face;
-      const u_position = resolvePosition(entry.uSize, mounted_face, null);
-      onRequestPlacement({ source: 'catalog', entry, target: { rack_id: rackId, u_position, mounted_face } });
+      // Tentative target for the quick-config modal — not the final
+      // accept/reject decision, which confirmPlacement re-resolves with
+      // fresh data once the user actually clicks "Place".
+      const resolved = resolveFractionalDropU(null, entry.slotWidth, false);
+      onRequestPlacement({ source: 'catalog', entry, target: { rack_id: rackId, u_position: resolved.u_position, mounted_face } });
       return;
     }
 

@@ -15,7 +15,7 @@ import {
 import DeviceConfigFields from './DeviceConfigFields';
 import OutletGroupsEditor, { TypeSelect } from './OutletGroupsEditor';
 import { resolveRenderType } from './deviceRenderConfig';
-import { computeVerticalPduPositions } from './rackPlacement';
+import { computeVerticalPduPositions, resolveFractionalPlacement } from './rackPlacement';
 import './DevicePropertiesPanel.css';
 
 const FACE_OPTIONS = [
@@ -97,7 +97,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
       ebm_connected_ups_id:     slot.ebm_connected_ups_id     || null,
       ebm_runtime_full:         slot.ebm_runtime_full         ?? '',
       ebm_runtime_half:         slot.ebm_runtime_half         ?? '',
-      half_width:    !!slot.half_width,
+      slot_width:    slot.slot_width || 'full',
       half_depth:    !!slot.half_depth,
       power_source_slot_id: slot.power_source_slot_id || null,
       power_source_outlet:  slot.power_source_outlet  || null,
@@ -491,20 +491,33 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
                 <div className="props-field">
                   <label className="props-field-label">Width</label>
                   <div className="props-face-btns">
-                    <button
-                      type="button"
-                      className={`props-face-btn${!fields.half_width ? ' active' : ''}`}
-                      onClick={() => { setFields((f) => ({ ...f, half_width: false })); patch({ half_width: 0 }); }}
-                    >
-                      Full
-                    </button>
-                    <button
-                      type="button"
-                      className={`props-face-btn${fields.half_width ? ' active' : ''}`}
-                      onClick={() => { setFields((f) => ({ ...f, half_width: true })); patch({ half_width: 1 }); }}
-                    >
-                      Half
-                    </button>
+                    {[['full', 'Full'], ['half-width', 'Half'], ['third', 'Third']].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`props-face-btn${fields.slot_width === value ? ' active' : ''}`}
+                        onClick={() => {
+                          // Re-derive slot_position for the new width at this
+                          // slot's own current spot (excluding itself) — if
+                          // no compatible column is open there, fall back to
+                          // 0 and let the backend's collision check surface
+                          // the conflict via the usual error banner.
+                          const resolved = resolveFractionalPlacement({
+                            slots: allSlots || [],
+                            rackId: slot.rack_id,
+                            face: slot.mounted_face || slot.front_back || 'front',
+                            uPosition: slot.u_position,
+                            slotWidth: value,
+                            excludeSlotId: slot.id,
+                          });
+                          const slot_position = resolved.ok ? resolved.slot_position : 0;
+                          setFields((f) => ({ ...f, slot_width: value }));
+                          patch({ slot_width: value, slot_position });
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 

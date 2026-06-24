@@ -66,8 +66,9 @@ export default function QuickConfigModal({ pending, onConfirm, onCancel }) {
           <div className="props-field">
             <label className="props-field-label">Width</label>
             <div className="props-face-btns">
-              <button type="button" className={`props-face-btn${!fields.half_width ? ' active' : ''}`} onClick={() => set('half_width', false)}>Full</button>
-              <button type="button" className={`props-face-btn${fields.half_width ? ' active' : ''}`} onClick={() => set('half_width', true)}>Half</button>
+              <button type="button" className={`props-face-btn${fields.slot_width === 'full' ? ' active' : ''}`} onClick={() => set('slot_width', 'full')}>Full</button>
+              <button type="button" className={`props-face-btn${fields.slot_width === 'half-width' ? ' active' : ''}`} onClick={() => set('slot_width', 'half-width')}>Half</button>
+              <button type="button" className={`props-face-btn${fields.slot_width === 'third' ? ' active' : ''}`} onClick={() => set('slot_width', 'third')}>Third</button>
             </div>
           </div>
 

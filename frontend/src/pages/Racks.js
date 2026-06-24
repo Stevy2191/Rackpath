@@ -10,7 +10,7 @@ import QuickConfigModal from '../components/racks/QuickConfigModal';
 import { SIMPLE_ITEM_TYPES } from '../components/racks/rackCatalog';
 import DevicePropertiesPanel from '../components/racks/DevicePropertiesPanel';
 import RackEditPanel from '../components/racks/RackEditPanel';
-import { countUsedU } from '../components/racks/rackPlacement';
+import { countUsedU, normalizeSlotWidth, resolveFractionalPlacement } from '../components/racks/rackPlacement';
 import AddRackModal from '../components/racks/AddRackModal';
 import RackDeviceContextMenu from '../components/racks/RackDeviceContextMenu';
 import RackContextMenu from '../components/racks/RackContextMenu';
@@ -149,6 +149,11 @@ export default function RacksPage() {
   const focusedRack = focusedRackId ? racks.find((r) => r.id === focusedRackId) || null : null;
 
   const actions = {
+    // Surfaced by RackCanvas's drag-and-drop when a fractional-width device
+    // (Mini PC, Regular PC, ...) is dropped onto a U slot that already has
+    // the max number of compatible siblings — a hard reject with a
+    // friendly message, rather than silently relocating elsewhere.
+    onPlacementRejected: (message) => setError(message),
     onSlotCreate: async (payload) => {
       try {
         const res = await client.post('/rack-slots', payload);
@@ -174,6 +179,8 @@ export default function RacksPage() {
           half_depth: slot.half_depth,
           half_width: slot.half_width,
           half_position: slot.half_position,
+          slot_width: slot.slot_width,
+          slot_position: slot.slot_position,
           catalog_id: slot.catalog_id,
           custom_image_url: slot.custom_image_url,
           vendor: slot.vendor,
@@ -260,7 +267,11 @@ export default function RacksPage() {
           u_size: slot.u_size,
           mounted_face: face,
           half_depth: slot.half_depth,
-          half_width: slot.half_width,
+          // Duplicate always lands on a fresh, fully-empty row (the scan
+          // above ignores fractional sharing), so it starts its own new
+          // group at column 0 rather than trying to join the original's.
+          slot_width: slot.slot_width,
+          slot_position: 0,
           color: slot.color,
           outlet_groups: slot.outlet_groups,
           input_voltage: slot.input_voltage,
@@ -338,7 +349,8 @@ export default function RacksPage() {
             u_size: slot.u_size,
             mounted_face: slot.mounted_face || slot.front_back || 'front',
             half_depth: slot.half_depth,
-            half_width: slot.half_width,
+            slot_width: slot.slot_width,
+            slot_position: slot.slot_position,
             color: slot.color,
             ip_address: slot.ip_address,
             slot_notes: slot.slot_notes,
@@ -392,6 +404,30 @@ export default function RacksPage() {
     const { source, entry, target } = pendingPlacement;
     const renderType = fields.render_type;
     const itemType = SIMPLE_ITEM_TYPES.includes(renderType) ? renderType : 'custom-device';
+
+    // Re-resolve the fractional column fresh, against current data, right
+    // before actually creating - the modal's tentative target.u_position
+    // may have been computed against a row that's since filled up (or was
+    // never guaranteed to be the exact compatible row to begin with, see
+    // RackCanvas's resolveFractionalDropU). Only the "full" case gets a
+    // hard reject with a friendly message; an incompatible row just goes
+    // through with column 0 and lets the backend's generic collision
+    // check reject it, same as any other mismatched drop.
+    const slotWidth = normalizeSlotWidth(fields.slot_width);
+    let slotPosition = 0;
+    if (slotWidth !== 'full') {
+      const resolved = resolveFractionalPlacement({
+        slots: allSlots, rackId: target.rack_id, face: target.mounted_face,
+        uPosition: target.u_position, slotWidth, deviceLabel: fields.label || entry.name,
+      });
+      if (!resolved.ok && resolved.reason === 'full') {
+        setError(resolved.error);
+        setPendingPlacement(null);
+        return;
+      }
+      if (resolved.ok) slotPosition = resolved.slot_position;
+    }
+
     actions.onSlotCreate({
       rack_id: target.rack_id,
       item_type: itemType,
@@ -403,7 +439,8 @@ export default function RacksPage() {
       mounted_face: target.mounted_face,
       color: fields.color,
       half_depth: fields.half_depth ? 1 : 0,
-      half_width: fields.half_width ? 1 : 0,
+      slot_width: slotWidth,
+      slot_position: slotPosition,
       outlet_groups: fields.outlet_groups || [],
       input_voltage: fields.input_voltage || null,
       input_plug_type: fields.input_plug_type || null,
@@ -426,7 +463,11 @@ export default function RacksPage() {
         render_type: slot.custom_type || slot.item_type,
         u_size: slot.u_size,
         color: slot.color,
-        half_width: slot.half_width,
+        // user_catalog_entries only models half-width, not thirds (no
+        // slot_width/slot_position columns there) - a third-width device
+        // saved here loses that down to plain full-width, the same
+        // backward-compat limitation documented in deviceFieldSchemas.js.
+        half_width: slot.slot_width === 'half-width' ? 1 : 0,
         half_depth: slot.half_depth,
         mounted_face: slot.mounted_face || slot.front_back || 'front',
         outlet_groups: slot.outlet_groups,
@@ -497,6 +538,8 @@ export default function RacksPage() {
         custom_type: s.custom_type,
         mounted_face: s.mounted_face,
         half_depth: s.half_depth,
+        slot_width: s.slot_width,
+        slot_position: s.slot_position,
         color: s.color,
         ip_address: s.ip_address,
         slot_notes: s.slot_notes,
