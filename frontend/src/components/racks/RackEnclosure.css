@@ -267,8 +267,12 @@
   min-width: 0;
 }
 
-/* Thin visual divider between every adjacent pair of columns */
-.rack-frac-col + .rack-frac-col {
+/* Thin visual divider between every adjacent pair of columns — only when
+   .rack-frac-row-divided marks this row as actually having 2+ occupied
+   columns (see RackEnclosure.js). A row with a single device and otherwise
+   empty drop-target columns gets no dividers at all, so it reads as one
+   clean block instead of a permanently-gridded row. */
+.rack-frac-row-divided > .rack-frac-col + .rack-frac-col {
   border-left: 1px solid rgba(0, 0, 0, 0.35);
 }
 

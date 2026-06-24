@@ -331,8 +331,18 @@ function RackPanel({
               // own), skip the whole row.
               if (contents.every((c) => c === null)) return null;
 
+              // Only draw the dividers between columns once 2+ of them are
+              // actually occupied by a real device — a single fractional
+              // device sharing the row with nothing but empty drop targets
+              // should read as one clean block, not a permanently-gridded
+              // row. The empty columns themselves still render (so they
+              // stay droppable for a sibling to join later), just without
+              // the divider line.
+              const occupiedColumns = info.columns.filter((col) => col.slot).length;
+              const divided = occupiedColumns >= 2;
+
               return (
-                <div key={`frac-row-${u}`} className="rack-frac-row" style={{ height: `${info.rowUSize * uHeight}px` }}>
+                <div key={`frac-row-${u}`} className={`rack-frac-row${divided ? ' rack-frac-row-divided' : ''}`} style={{ height: `${info.rowUSize * uHeight}px` }}>
                   {contents.map((content, i) => (
                     <div key={i} className="rack-frac-col">{content}</div>
                   ))}
