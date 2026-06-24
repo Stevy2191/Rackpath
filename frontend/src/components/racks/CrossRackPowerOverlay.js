@@ -1,33 +1,45 @@
 import React, { useEffect, useState } from 'react';
 
-// Draws a curved power-cord line between a vertical PDU and its UPS when
-// they're in DIFFERENT racks — same-rack connections are already drawn by
-// each RackEnclosure's own SVG (rack-power-cords), which is necessarily
-// scoped to that one rack's frame and can't reach into a neighbor's. This
-// overlay instead measures the ACTUAL rendered DOM positions of the PDU's
-// strip (data-pdu-id) and the UPS's device block (data-slot-id) — rather
-// than recomputing each rack's internal layout math from outside — so it
-// stays correct regardless of how either rack is laid out, and naturally
-// inherits the canvas's own pan/zoom transform since it renders as a
-// sibling inside the same transformed `.rack-canvas-content` container.
-function buildCurve(x1, y1, x2, y2) {
-  const dist = Math.hypot(x2 - x1, y2 - y1);
-  const sag = Math.min(70, Math.max(20, dist * 0.15));
-  const c1x = x1 + (x2 - x1) / 3;
-  const c2x = x1 + (x2 - x1) * 2 / 3;
-  const lowY = Math.max(y1, y2) + sag;
-  return { x1, y1, c1x, c1y: lowY, c2x, c2y: lowY, x2, y2 };
+// Identical values to RackEnclosure's same-rack cord animation so cross-rack
+// cords pulse at exactly the same rate and trail shape.
+const CORD_PULSE_DUR = 2.4;
+const CORD_PULSE_TRAIL = [
+  { delay: 0.07, r: 1.3, opacity: 0.5 },
+  { delay: 0.14, r: 1.0, opacity: 0.32 },
+  { delay: 0.21, r: 0.7, opacity: 0.18 },
+  { delay: 0.28, r: 0.45, opacity: 0.09 },
+];
+
+// Identical bezier-shape logic to verticalPduLayout.buildCordCurve — the cord
+// leaves the UPS at a shallow angle, droops to a single low point (like a real
+// cable under its own weight), then rises steeply into the PDU tip.
+function buildCordCurve(upsX, upsY, pduX, pduY, outward) {
+  const dist = Math.hypot(pduX - upsX, pduY - upsY);
+  const reach = Math.max(10, Math.min(40, dist * 0.3));
+  const droop = Math.max(16, Math.min(48, dist * 0.24));
+  const lowY = Math.max(upsY, pduY) + droop;
+
+  const c1x = upsX + outward * reach * 0.4;
+  const c1y = (upsY + lowY) / 2;
+  const c2x = pduX + outward * reach;
+  const c2y = lowY;
+
+  return `M ${upsX} ${upsY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${pduX} ${pduY}`;
 }
 
-function pathD(c) {
-  return `M ${c.x1} ${c.y1} C ${c.c1x} ${c.c1y}, ${c.c2x} ${c.c2y}, ${c.x2} ${c.y2}`;
-}
-
+// Draws power cords for vertical PDUs whose UPS is in a DIFFERENT rack.
+// Same-rack connections are RackEnclosure's job. This overlay lives as a
+// sibling inside rack-canvas-content (inside the pan/zoom transform), so
+// coordinates are in the same local space as the racks themselves — no
+// extra zoom correction needed.
 export default function CrossRackPowerOverlay({ allSlots, contentRef, vp, enabled }) {
-  const [lines, setLines] = useState([]);
+  const [cords, setCords] = useState([]);
+  const [reduceMotion] = useState(
+    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  );
 
   useEffect(() => {
-    if (!enabled) { setLines([]); return undefined; }
+    if (!enabled) { setCords([]); return undefined; }
     const contentEl = contentRef.current;
     if (!contentEl) return undefined;
 
@@ -42,54 +54,83 @@ export default function CrossRackPowerOverlay({ allSlots, contentRef, vp, enable
       const next = [];
       for (const pdu of verticalPdus) {
         const ups = allSlots.find((s) => s.id === pdu.power_source_slot_id);
-        // Same-rack connections are RackEnclosure's job, not this overlay's.
+        // Same-rack connections are RackEnclosure's responsibility.
         if (!ups || ups.rack_id === pdu.rack_id) continue;
 
         const pduEl = contentEl.querySelector(`[data-pdu-id="${pdu.id}"]`);
         const upsEl = contentEl.querySelector(`[data-slot-id="${ups.id}"]`);
-        if (!pduEl || !upsEl) continue; // either rack scrolled out / not rendered
+        if (!pduEl || !upsEl) continue;
 
         const pduRect = pduEl.getBoundingClientRect();
         const upsRect = upsEl.getBoundingClientRect();
-        const pduPoint = toLocal(pduRect.left + pduRect.width / 2, pduRect.bottom);
-        const upsPoint = toLocal(upsRect.left + upsRect.width / 2, upsRect.bottom);
 
-        const curve = buildCurve(pduPoint.x, pduPoint.y, upsPoint.x, upsPoint.y);
-        const side = pdu.mount_side === 'right' ? 'right' : 'left';
-        const upsLabel = ups.item_label || ups.hostname || 'UPS';
-        const pduLabel = pdu.item_label || 'PDU';
+        // PDU anchor: bottom-center of the floating strip (same as
+        // verticalPduLayout: pduX = leftPx + STRIP_WIDTH/2, pduY = pduBottomY).
+        const pduClientMidX = pduRect.left + pduRect.width / 2;
+        const pduPoint = toLocal(pduClientMidX, pduRect.bottom);
 
-        next.push({
-          key: pdu.id,
-          d: pathD(curve),
-          side,
-          label: `${pduLabel} → ${upsLabel}`,
-          labelX: (curve.c1x + curve.c2x) / 2,
-          labelY: curve.c1y,
-        });
+        // UPS anchor: the EDGE of the UPS device block that faces the PDU's
+        // rack — mirrors the same-rack code's upsX = 0 (left edge of Front)
+        // or upsX = frontWidth (right edge of Front) rather than using the
+        // UPS block's center, so the curve exits from the rack boundary.
+        const upsClientMidX = upsRect.left + upsRect.width / 2;
+        const pduIsLeft = pduClientMidX < upsClientMidX;
+        const upsEdgeClientX = pduIsLeft ? upsRect.left : upsRect.right;
+        const upsPoint = toLocal(upsEdgeClientX, upsRect.bottom);
+
+        // outward: which direction "away from the UPS's rack" is, so the
+        // bezier bows toward the inter-rack space instead of through the rack.
+        const outward = pduIsLeft ? -1 : 1;
+
+        const d = buildCordCurve(upsPoint.x, upsPoint.y, pduPoint.x, pduPoint.y, outward);
+        next.push({ key: pdu.id, d });
       }
-      setLines(next);
+      setCords(next);
     };
 
-    // Runs after the current paint so freshly-changed DOM (a rack added/
-    // moved/resized, a device repositioned) is measured correctly rather
-    // than from stale positions.
     const raf = requestAnimationFrame(measure);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, allSlots, vp, contentRef]);
 
-  if (!enabled || lines.length === 0) return null;
+  if (!enabled || cords.length === 0) return null;
 
   return (
     <svg className="cross-rack-power-overlay" overflow="visible">
-      {lines.map((line) => (
-        <g key={line.key} className={`cross-rack-power-line cross-rack-power-line-${line.side}`}>
-          <path d={line.d} className="cross-rack-power-line-glow" fill="none" />
-          <path d={line.d} className="cross-rack-power-line-stroke" fill="none" />
-          <text x={line.labelX} y={line.labelY - 4} className="cross-rack-power-line-label" textAnchor="middle">
-            {line.label}
-          </text>
+      {cords.map((cord) => (
+        <g key={cord.key}>
+          {/* Glow: wide blurred stroke — inline attrs so export capture keeps them */}
+          <path
+            d={cord.d}
+            stroke="#f59e0b"
+            strokeWidth={7}
+            fill="none"
+            opacity={0.28}
+            style={{ filter: 'blur(2px)' }}
+          />
+          {/* Cord: solid line matching same-rack style */}
+          <path d={cord.d} stroke="#f59e0b" strokeWidth={2} fill="none" />
+          {/* Traveling pulse + comet trail — skipped when OS prefers reduced motion */}
+          {!reduceMotion && (
+            <>
+              {CORD_PULSE_TRAIL.map((t, i) => (
+                <g key={i}>
+                  <animateMotion
+                    dur={`${CORD_PULSE_DUR}s`}
+                    begin={`${t.delay}s`}
+                    repeatCount="indefinite"
+                    path={cord.d}
+                  />
+                  <circle r={t.r} fill="#fbbf24" opacity={t.opacity} />
+                </g>
+              ))}
+              <g>
+                <animateMotion dur={`${CORD_PULSE_DUR}s`} repeatCount="indefinite" path={cord.d} />
+                <circle r={3.6} fill="#fbbf24" opacity={0.35} />
+                <circle r={1.6} fill="#ffe3a3" />
+              </g>
+            </>
+          )}
         </g>
       ))}
     </svg>
