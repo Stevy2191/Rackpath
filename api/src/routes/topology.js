@@ -60,13 +60,22 @@ const iconUpload = multer({
 // GET /api/topology - canvas nodes (device-linked or standalone), with position
 router.get('/', async (req, res, next) => {
   try {
-    const [nodes] = await pool.query(
-      `SELECT ${NODE_FIELDS}
-       FROM topology_nodes n
-       LEFT JOIN devices d ON d.id = n.device_id
-       WHERE n.project_id = ?`,
-      [req.projectId]
-    );
+    const topologyId = req.query.topologyId ? parseInt(req.query.topologyId, 10) : null;
+    const [nodes] = topologyId
+      ? await pool.query(
+          `SELECT ${NODE_FIELDS}
+           FROM topology_nodes n
+           LEFT JOIN devices d ON d.id = n.device_id
+           WHERE n.project_id = ? AND n.topology_id = ?`,
+          [req.projectId, topologyId]
+        )
+      : await pool.query(
+          `SELECT ${NODE_FIELDS}
+           FROM topology_nodes n
+           LEFT JOIN devices d ON d.id = n.device_id
+           WHERE n.project_id = ?`,
+          [req.projectId]
+        );
 
     res.json({ nodes });
   } catch (err) {
@@ -74,14 +83,18 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// DELETE /api/topology/all - clear the canvas (all nodes, edges, zones, and labels)
+// DELETE /api/topology/all - clear the canvas for the active topology
 router.delete('/all', async (req, res, next) => {
   try {
-    await pool.query('DELETE FROM topology_edges WHERE project_id = ?', [req.projectId]);
-    await pool.query('DELETE FROM topology_zones WHERE project_id = ?', [req.projectId]);
-    await pool.query('DELETE FROM topology_labels WHERE project_id = ?', [req.projectId]);
-    await pool.query('DELETE FROM topology_shapes WHERE project_id = ?', [req.projectId]);
-    await pool.query('DELETE FROM topology_nodes WHERE project_id = ?', [req.projectId]);
+    const topologyId = req.query.topologyId ? parseInt(req.query.topologyId, 10) : null;
+    const [col, val] = topologyId
+      ? ['topology_id', topologyId]
+      : ['project_id', req.projectId];
+    await pool.query(`DELETE FROM topology_edges  WHERE ${col} = ?`, [val]);
+    await pool.query(`DELETE FROM topology_zones  WHERE ${col} = ?`, [val]);
+    await pool.query(`DELETE FROM topology_labels WHERE ${col} = ?`, [val]);
+    await pool.query(`DELETE FROM topology_shapes WHERE ${col} = ?`, [val]);
+    await pool.query(`DELETE FROM topology_nodes  WHERE ${col} = ?`, [val]);
     res.status(204).send();
   } catch (err) {
     if (isTableMissing(err)) return res.status(204).send();
@@ -126,7 +139,7 @@ router.patch('/layout', async (req, res, next) => {
 // existing device or as a standalone documentation-only node.
 router.post('/nodes', async (req, res, next) => {
   try {
-    const { device_id, label, type, x, y, icon_color, text_color } = req.body;
+    const { device_id, label, type, x, y, icon_color, text_color, topology_id } = req.body;
 
     if (device_id) {
       const [devices] = await pool.query('SELECT id FROM devices WHERE id = ? AND project_id = ?', [
@@ -145,10 +158,11 @@ router.post('/nodes', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO topology_nodes (project_id, device_id, label, type, icon_color, text_color, x, y)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO topology_nodes (project_id, topology_id, device_id, label, type, icon_color, text_color, x, y)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId,
+        topology_id || null,
         device_id || null,
         device_id ? null : label || null,
         device_id ? null : type || null,
@@ -423,7 +437,10 @@ router.delete('/nodes/:id/connection-points/:pointId', async (req, res, next) =>
 // GET /api/topology/edges
 router.get('/edges', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM topology_edges WHERE project_id = ?', [req.projectId]);
+    const topologyId = req.query.topologyId ? parseInt(req.query.topologyId, 10) : null;
+    const [rows] = topologyId
+      ? await pool.query('SELECT * FROM topology_edges WHERE project_id = ? AND topology_id = ?', [req.projectId, topologyId])
+      : await pool.query('SELECT * FROM topology_edges WHERE project_id = ?', [req.projectId]);
     res.json(rows);
   } catch (err) {
     if (isTableMissing(err)) return res.json([]);
@@ -445,16 +462,18 @@ router.post('/edges', async (req, res, next) => {
       speed,
       cable_type,
       vlan,
+      topology_id,
     } = req.body;
     if (!source_node_id || !target_node_id) {
       return res.status(400).json({ error: 'source_node_id and target_node_id are required' });
     }
 
     const [result] = await pool.query(
-      `INSERT INTO topology_edges (project_id, source_node_id, target_node_id, source_handle, target_handle, source_interface, target_interface, label, speed, cable_type, vlan)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO topology_edges (project_id, topology_id, source_node_id, target_node_id, source_handle, target_handle, source_interface, target_interface, label, speed, cable_type, vlan)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId,
+        topology_id || null,
         source_node_id,
         target_node_id,
         source_handle || null,
@@ -565,7 +584,10 @@ router.delete('/edges/:id', async (req, res, next) => {
 // GET /api/topology/zones
 router.get('/zones', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM topology_zones WHERE project_id = ?', [req.projectId]);
+    const topologyId = req.query.topologyId ? parseInt(req.query.topologyId, 10) : null;
+    const [rows] = topologyId
+      ? await pool.query('SELECT * FROM topology_zones WHERE project_id = ? AND topology_id = ?', [req.projectId, topologyId])
+      : await pool.query('SELECT * FROM topology_zones WHERE project_id = ?', [req.projectId]);
     res.json(rows);
   } catch (err) {
     if (isTableMissing(err)) return res.json([]);
@@ -576,14 +598,15 @@ router.get('/zones', async (req, res, next) => {
 // POST /api/topology/zones
 router.post('/zones', async (req, res, next) => {
   try {
-    const { name, border_style, color, x, y, width, height } = req.body;
+    const { name, border_style, color, x, y, width, height, topology_id } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const [result] = await pool.query(
-      `INSERT INTO topology_zones (project_id, name, border_style, color, x, y, width, height)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO topology_zones (project_id, topology_id, name, border_style, color, x, y, width, height)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId,
+        topology_id || null,
         name,
         border_style === 'dotted' ? 'dotted' : 'solid',
         color || 'blue',
@@ -650,7 +673,10 @@ router.delete('/zones/:id', async (req, res, next) => {
 // GET /api/topology/labels - floating text labels on the canvas
 router.get('/labels', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM topology_labels WHERE project_id = ?', [req.projectId]);
+    const topologyId = req.query.topologyId ? parseInt(req.query.topologyId, 10) : null;
+    const [rows] = topologyId
+      ? await pool.query('SELECT * FROM topology_labels WHERE project_id = ? AND topology_id = ?', [req.projectId, topologyId])
+      : await pool.query('SELECT * FROM topology_labels WHERE project_id = ?', [req.projectId]);
     res.json(rows);
   } catch (err) {
     if (isTableMissing(err)) return res.json([]);
@@ -661,11 +687,11 @@ router.get('/labels', async (req, res, next) => {
 // POST /api/topology/labels
 router.post('/labels', async (req, res, next) => {
   try {
-    const { text, x, y, font_size, color } = req.body;
+    const { text, x, y, font_size, color, topology_id } = req.body;
 
     const [result] = await pool.query(
-      'INSERT INTO topology_labels (project_id, `text`, x, y, font_size, color) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.projectId, text || '', x ?? 0, y ?? 0, font_size || 14, color || null]
+      'INSERT INTO topology_labels (project_id, topology_id, `text`, x, y, font_size, color) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.projectId, topology_id || null, text || '', x ?? 0, y ?? 0, font_size || 14, color || null]
     );
 
     const [rows] = await pool.query('SELECT * FROM topology_labels WHERE id = ?', [result.insertId]);
@@ -725,7 +751,10 @@ router.delete('/labels/:id', async (req, res, next) => {
 // GET /api/topology/shapes
 router.get('/shapes', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM topology_shapes WHERE project_id = ? ORDER BY id ASC', [req.projectId]);
+    const topologyId = req.query.topologyId ? parseInt(req.query.topologyId, 10) : null;
+    const [rows] = topologyId
+      ? await pool.query('SELECT * FROM topology_shapes WHERE project_id = ? AND topology_id = ? ORDER BY id ASC', [req.projectId, topologyId])
+      : await pool.query('SELECT * FROM topology_shapes WHERE project_id = ? ORDER BY id ASC', [req.projectId]);
     res.json(rows);
   } catch (err) {
     next(err);
@@ -735,11 +764,11 @@ router.get('/shapes', async (req, res, next) => {
 // POST /api/topology/shapes
 router.post('/shapes', async (req, res, next) => {
   try {
-    const { shape_type, x, y, width, height, fill_color, border_color, label } = req.body;
+    const { shape_type, x, y, width, height, fill_color, border_color, label, topology_id } = req.body;
     const [result] = await pool.query(
-      `INSERT INTO topology_shapes (project_id, shape_type, x, y, width, height, fill_color, border_color, label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.projectId, shape_type || 'rect', x || 0, y || 0, width || 160, height || 100,
+      `INSERT INTO topology_shapes (project_id, topology_id, shape_type, x, y, width, height, fill_color, border_color, label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.projectId, topology_id || null, shape_type || 'rect', x || 0, y || 0, width || 160, height || 100,
        fill_color || '#3b82f620', border_color || '#3b82f6', label || null]
     );
     const [rows] = await pool.query('SELECT * FROM topology_shapes WHERE id = ?', [result.insertId]);

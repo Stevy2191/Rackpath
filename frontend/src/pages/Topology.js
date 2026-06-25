@@ -33,6 +33,8 @@ import EdgePropertiesPanel from '../components/topology/EdgePropertiesPanel';
 import LinkConfigModal from '../components/topology/LinkConfigModal';
 import AddNodeModal from '../components/topology/AddNodeModal';
 import TopologyToolbar from '../components/topology/TopologyToolbar';
+import TopologySwitcher from '../components/topology/TopologySwitcher';
+import TopologyModal from '../components/topology/TopologyModal';
 import { getLayoutedElements } from '../utils/layout';
 import './Topology.css';
 
@@ -218,6 +220,13 @@ function TopologyCanvas() {
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  // Multi-topology state
+  const [topologies, setTopologies] = useState([]);
+  const [activeTopologyId, setActiveTopologyId] = useState(null);
+  const [topologyModalOpen, setTopologyModalOpen] = useState(false);
+  const [editingTopology, setEditingTopology] = useState(null);
+  const [locations, setLocations] = useState([]);
+
   // Toolbar state.
   const [mode, setMode] = useState('select');
   const [linkSourceId, setLinkSourceId] = useState(null);
@@ -360,17 +369,77 @@ function TopologyCanvas() {
     client.patch(`/topology/shapes/${shapeId}`, patch).catch((err) => setError(err.message));
   }, []);
 
+  // Load topologies; auto-select master topology
   useEffect(() => {
+    if (!currentProjectId) return;
+    client
+      .get(`/projects/${currentProjectId}/topologies`)
+      .then((res) => {
+        setTopologies(res.data || []);
+        const master = (res.data || []).find((t) => t.is_master) || (res.data || [])[0];
+        if (master) setActiveTopologyId(master.id);
+        else setLoading(false);
+      })
+      .catch((err) => { setError(err.message); setLoading(false); });
+  }, [currentProjectId]);
+
+  // Load locations for the topology modal
+  useEffect(() => {
+    if (!currentProjectId) return;
+    client
+      .get(`/projects/${currentProjectId}/locations`)
+      .then((res) => setLocations(res.data || []))
+      .catch(() => {});
+  }, [currentProjectId]);
+
+  const handleCreateTopology = useCallback(async (data) => {
+    const res = await client.post(`/projects/${currentProjectId}/topologies`, data);
+    setTopologies((prev) => [...prev, res.data]);
+    setActiveTopologyId(res.data.id);
+  }, [currentProjectId]);
+
+  const handleSaveTopology = useCallback(async (data) => {
+    if (editingTopology) {
+      const res = await client.put(`/topologies/${editingTopology.id}`, data);
+      setTopologies((prev) => prev.map((t) => (t.id === editingTopology.id ? res.data : t)));
+    } else {
+      await handleCreateTopology(data);
+    }
+  }, [editingTopology, handleCreateTopology]);
+
+  const handleDeleteTopology = useCallback(async (topo) => {
+    const confirmed = window.confirm(`Delete "${topo.name}"? All canvas data in this topology will be permanently removed.`);
+    if (!confirmed) return;
+    await client.delete(`/topologies/${topo.id}`);
+    setTopologies((prev) => {
+      const next = prev.filter((t) => t.id !== topo.id);
+      if (activeTopologyId === topo.id) {
+        const master = next.find((t) => t.is_master) || next[0];
+        setActiveTopologyId(master?.id ?? null);
+      }
+      return next;
+    });
+  }, [activeTopologyId]);
+
+  const handleSwitchTopology = useCallback((id) => {
+    setActiveTopologyId(id);
+  }, []);
+
+  useEffect(() => {
+    if (activeTopologyId === null) return;
+
     let cancelled = false;
+    setLoading(true);
 
     async function load() {
+      const topoParams = { topologyId: activeTopologyId };
       try {
         const [topoRes, edgesRes, zonesRes, shapesRes, labelsRes, pointsRes, unplacedRes, vlansRes] = await Promise.all([
-          client.get('/topology'),
-          client.get('/topology/edges'),
-          client.get('/topology/zones'),
-          client.get('/topology/shapes'),
-          client.get('/topology/labels'),
+          client.get('/topology', { params: topoParams }),
+          client.get('/topology/edges', { params: topoParams }),
+          client.get('/topology/zones', { params: topoParams }),
+          client.get('/topology/shapes', { params: topoParams }),
+          client.get('/topology/labels', { params: topoParams }),
           client.get('/topology/connection-points'),
           client.get('/devices', { params: { unplaced: true } }),
           client.get(`/projects/${currentProjectId || 1}/vlans`),
@@ -431,6 +500,7 @@ function TopologyCanvas() {
     };
   }, [
     currentProjectId,
+    activeTopologyId,
     handleZoneResizeEnd,
     handleZoneDelete,
     handleZoneUpdate,
@@ -573,6 +643,7 @@ function TopologyCanvas() {
           target_node_id: nodeIdFromNodeId(pendingConnection.target),
           source_handle: pendingConnection.sourceHandle,
           target_handle: pendingConnection.targetHandle,
+          topology_id: activeTopologyId,
           ...formValues,
         });
         setEdges((eds) => addEdge(buildEdge(res.data, showEdgeLabels, edgeCallbacks), eds));
@@ -583,7 +654,7 @@ function TopologyCanvas() {
         setMode('select');
       }
     },
-    [pendingConnection, showEdgeLabels, edgeCallbacks]
+    [pendingConnection, showEdgeLabels, edgeCallbacks, activeTopologyId]
   );
 
   const handleEditConnectionSubmit = useCallback(
@@ -745,6 +816,7 @@ function TopologyCanvas() {
           x: position.x,
           y: position.y,
           font_size: 14,
+          topology_id: activeTopologyId,
         });
         setNodes((nds) => [
           ...nds,
@@ -755,7 +827,7 @@ function TopologyCanvas() {
         setError(err.message);
       }
     },
-    [handleLabelChange, handleLabelDelete]
+    [handleLabelChange, handleLabelDelete, activeTopologyId]
   );
 
   const addZoneAt = useCallback(
@@ -769,6 +841,7 @@ function TopologyCanvas() {
           y: position.y,
           width: 320,
           height: 220,
+          topology_id: activeTopologyId,
         });
         setNodes((nds) => [
           buildZoneNode(
@@ -783,7 +856,7 @@ function TopologyCanvas() {
         setError(err.message);
       }
     },
-    [handleZoneResizeEnd, handleZoneDelete, handleZoneUpdate, vlans]
+    [handleZoneResizeEnd, handleZoneDelete, handleZoneUpdate, vlans, activeTopologyId]
   );
 
   const addShapeAt = useCallback(
@@ -795,6 +868,7 @@ function TopologyCanvas() {
           y: position.y,
           width: 160,
           height: 100,
+          topology_id: activeTopologyId,
         });
         setNodes((nds) => [
           ...nds,
@@ -809,7 +883,7 @@ function TopologyCanvas() {
         setError(err.message);
       }
     },
-    [handleShapeResizeEnd, handleShapeDelete, handleShapeUpdate]
+    [handleShapeResizeEnd, handleShapeDelete, handleShapeUpdate, activeTopologyId]
   );
 
   const onPaneClick = useCallback(
@@ -906,6 +980,7 @@ function TopologyCanvas() {
         text_color: selectedNode.data.text_color,
         x: selectedNode.position.x + 40,
         y: selectedNode.position.y + 40,
+        topology_id: activeTopologyId,
       });
 
       const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
@@ -914,7 +989,7 @@ function TopologyCanvas() {
     } catch (err) {
       setError(err.message);
     }
-  }, [selectedNode, handleDeviceResizeEnd]);
+  }, [selectedNode, handleDeviceResizeEnd, activeTopologyId]);
 
   const handleAutoLayout = useCallback(() => {
     const deviceNodes = nodes.filter((n) => n.type === 'device');
@@ -945,7 +1020,7 @@ function TopologyCanvas() {
     if (!confirmed) return;
 
     try {
-      await client.delete('/topology/all');
+      await client.delete(`/topology/all${activeTopologyId ? `?topologyId=${activeTopologyId}` : ''}`);
       setUnplacedDevices((devs) => [
         ...devs,
         ...nodes
@@ -961,7 +1036,7 @@ function TopologyCanvas() {
     } catch (err) {
       setError(err.message);
     }
-  }, [nodes]);
+  }, [nodes, activeTopologyId]);
 
   const handleSaveAll = useCallback(async () => {
     try {
@@ -1098,6 +1173,7 @@ function TopologyCanvas() {
             device_id: deviceId,
             x: position.x,
             y: position.y,
+            topology_id: activeTopologyId,
           });
           const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
           setNodes((nds) => [...nds, newNode]);
@@ -1108,7 +1184,7 @@ function TopologyCanvas() {
         }
       }
     },
-    [reactFlowInstance, unplacedDevices, handleDeviceResizeEnd]
+    [reactFlowInstance, unplacedDevices, handleDeviceResizeEnd, activeTopologyId]
   );
 
   const handleAddNodeStandalone = useCallback(async () => {
@@ -1120,6 +1196,7 @@ function TopologyCanvas() {
         type: deviceInfo.type,
         x: position.x,
         y: position.y,
+        topology_id: activeTopologyId,
       });
       const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
       setNodes((nds) => [...nds, newNode]);
@@ -1129,7 +1206,7 @@ function TopologyCanvas() {
     } finally {
       setPendingNode(null);
     }
-  }, [pendingNode, handleDeviceResizeEnd]);
+  }, [pendingNode, handleDeviceResizeEnd, activeTopologyId]);
 
   const handleAddNodeLink = useCallback(
     async (deviceId) => {
@@ -1140,6 +1217,7 @@ function TopologyCanvas() {
           device_id: deviceId,
           x: position.x,
           y: position.y,
+          topology_id: activeTopologyId,
         });
         const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
         setNodes((nds) => [...nds, newNode]);
@@ -1151,7 +1229,7 @@ function TopologyCanvas() {
         setPendingNode(null);
       }
     },
-    [pendingNode, handleDeviceResizeEnd]
+    [pendingNode, handleDeviceResizeEnd, activeTopologyId]
   );
 
   // Inject the current interaction mode and per-node connection points into
@@ -1205,6 +1283,19 @@ function TopologyCanvas() {
         onToggleExportMenu={() => setExportMenuOpen((o) => !o)}
         onClearCanvas={handleClearCanvas}
       />
+
+      {topologies.length > 0 && (
+        <div className="topology-switcher-bar">
+          <TopologySwitcher
+            topologies={topologies}
+            activeTopologyId={activeTopologyId}
+            onSwitch={handleSwitchTopology}
+            onCreate={() => { setEditingTopology(null); setTopologyModalOpen(true); }}
+            onEdit={(topo) => { setEditingTopology(topo); setTopologyModalOpen(true); }}
+            onDelete={handleDeleteTopology}
+          />
+        </div>
+      )}
 
       <div className="topology-body">
         <DevicePicker unplacedDevices={unplacedDevices} />
@@ -1306,6 +1397,15 @@ function TopologyCanvas() {
           targetDevice={{ id: editTargetNode?.data.deviceId, hostname: editTargetNode?.data.hostname }}
           onSubmit={handleEditConnectionSubmit}
           onCancel={() => setEditingEdge(null)}
+        />
+      )}
+
+      {topologyModalOpen && (
+        <TopologyModal
+          topology={editingTopology}
+          locations={locations}
+          onSave={handleSaveTopology}
+          onClose={() => { setTopologyModalOpen(false); setEditingTopology(null); }}
         />
       )}
     </div>

@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS topologies (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  project_id  INT UNSIGNED NOT NULL,
+  name        VARCHAR(255) NOT NULL,
+  description TEXT DEFAULT NULL,
+  is_master   BOOLEAN DEFAULT FALSE,
+  location_id INT UNSIGNED DEFAULT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id)  REFERENCES projects(id)   ON DELETE CASCADE,
+  FOREIGN KEY (location_id) REFERENCES locations(id)  ON DELETE SET NULL,
+  INDEX idx_topologies_project (project_id)
+);

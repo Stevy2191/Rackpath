@@ -32,6 +32,15 @@
   }
 }
 
+.topology-switcher-bar {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  gap: 8px;
+}
+
 .topology-body {
   flex: 1;
   display: flex;

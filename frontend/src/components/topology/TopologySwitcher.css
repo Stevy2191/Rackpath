@@ -1,0 +1,167 @@
+.topo-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.topo-switcher-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  max-width: 240px;
+  white-space: nowrap;
+}
+
+.topo-switcher-trigger:hover {
+  background: var(--color-bg-subtle);
+}
+
+.topo-switcher-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topo-switcher-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topo-switcher-caret {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.topo-switcher-caret.open {
+  transform: rotate(180deg);
+}
+
+.topo-switcher-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.topo-switcher-add:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* ─── Dropdown ────────────────────────────────────────────── */
+.topo-switcher-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 200;
+  min-width: 220px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.topo-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 4px;
+}
+
+.topo-switcher-item:not(:last-child) {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.topo-switcher-item.active {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.topo-switcher-item-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.topo-switcher-item-name:hover {
+  color: var(--color-accent);
+}
+
+.topo-switcher-item.active .topo-switcher-item-name {
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.topo-switcher-item-loc {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+}
+
+.topo-switcher-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.topo-switcher-item-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.topo-switcher-item-actions button:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.topo-switcher-item-actions .topo-switcher-delete:hover:not(:disabled) {
+  color: var(--color-danger, #ef4444);
+}
+
+.topo-switcher-item-actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}

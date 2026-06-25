@@ -1,0 +1,139 @@
+.topo-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topo-modal {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  width: 420px;
+  max-width: calc(100vw - 32px);
+}
+
+.topo-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.topo-modal-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.topo-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.topo-modal-close:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.topo-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.topo-modal-error {
+  padding: 8px 10px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger, #ef4444) 30%, transparent);
+  color: var(--color-danger, #ef4444);
+  font-size: 0.82rem;
+}
+
+.topo-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.topo-modal-field input,
+.topo-modal-field textarea,
+.topo-modal-field select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.topo-modal-field input:focus,
+.topo-modal-field textarea:focus,
+.topo-modal-field select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.topo-modal-field textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.topo-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.topo-modal-footer button {
+  padding: 7px 16px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.topo-modal-footer button:hover {
+  background: var(--color-bg-subtle);
+}
+
+.topo-modal-footer button.primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.topo-modal-footer button.primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.topo-modal-footer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
