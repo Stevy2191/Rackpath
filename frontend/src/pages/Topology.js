@@ -225,6 +225,8 @@ function TopologyCanvas() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentProjectId } = useProject();
   const reactFlowInstance = useReactFlow();
+  const reactFlowInstanceRef = useRef(reactFlowInstance);
+  reactFlowInstanceRef.current = reactFlowInstance;
   const updateNodeInternals = useUpdateNodeInternals();
   const reactFlowWrapper = useRef(null);
 
@@ -289,17 +291,17 @@ function TopologyCanvas() {
 
   const handleEdgeEdit = useCallback(
     (edgeId) => {
-      const edge = reactFlowInstance.getEdge(edgeId);
+      const edge = reactFlowInstanceRef.current.getEdge(edgeId);
       if (edge) setEditingEdge(edge);
     },
-    [reactFlowInstance]
+    [] // stable — reads instance via ref
   );
 
   const handleEdgeDelete = useCallback(
     (edgeId) => {
-      reactFlowInstance.deleteElements({ edges: [{ id: edgeId }] });
+      reactFlowInstanceRef.current.deleteElements({ edges: [{ id: edgeId }] });
     },
-    [reactFlowInstance]
+    [] // stable
   );
 
   const handleEdgeReroute = useCallback((edgeId, point) => {
@@ -339,9 +341,9 @@ function TopologyCanvas() {
 
   const handleZoneDelete = useCallback(
     (nodeId) => {
-      reactFlowInstance.deleteElements({ nodes: [{ id: nodeId }] });
+      reactFlowInstanceRef.current.deleteElements({ nodes: [{ id: nodeId }] });
     },
-    [reactFlowInstance]
+    [] // stable
   );
 
   const handleZoneUpdate = useCallback((nodeId, patch) => {
@@ -358,9 +360,9 @@ function TopologyCanvas() {
 
   const handleLabelDelete = useCallback(
     (nodeId) => {
-      reactFlowInstance.deleteElements({ nodes: [{ id: nodeId }] });
+      reactFlowInstanceRef.current.deleteElements({ nodes: [{ id: nodeId }] });
     },
-    [reactFlowInstance]
+    [] // stable
   );
 
   const handleShapeResizeEnd = useCallback((nodeId, params) => {
@@ -383,9 +385,9 @@ function TopologyCanvas() {
 
   const handleShapeDelete = useCallback(
     (nodeId) => {
-      reactFlowInstance.deleteElements({ nodes: [{ id: nodeId }] });
+      reactFlowInstanceRef.current.deleteElements({ nodes: [{ id: nodeId }] });
     },
-    [reactFlowInstance]
+    [] // stable
   );
 
   const handleShapeUpdate = useCallback((nodeId, patch) => {
@@ -454,7 +456,6 @@ function TopologyCanvas() {
     if (activeTopologyId === null) return;
 
     let cancelled = false;
-    setLoading(true);
 
     async function load() {
       const topoParams = { topologyId: activeTopologyId };
