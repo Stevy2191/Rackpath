@@ -823,7 +823,6 @@ export default function TopologyPage() {
   }, [mode, handleCanvasClick]);
 
   // ── Render ────────────────────────────────────────────────────────────────
-  if (loading) return <div className="page-status">Loading topology...</div>;
 
   const selNodeData = selectedNode
     ? { type: 'device', id: selectedNodeId, data: selectedNode }
@@ -902,6 +901,7 @@ export default function TopologyPage() {
         <DevicePicker unplacedDevices={unplacedDevices} />
 
         <div className={`topology-canvas topology-mode-${mode}`}>
+          {loading && <div className="topology-canvas-loading">Loading topology…</div>}
           <X6Canvas
             ref={canvasRef}
             contextValue={contextValue}
@@ -933,8 +933,8 @@ export default function TopologyPage() {
 
           <EdgePropertiesPanel
             edge={selectedEdgePanelObj}
-            sourceHostname={selectedEdgeSourceNode?.hostname || (selectedEdgeSourceNode ? `Node ${selectedEdgeSourceNode.id}` : '')}
-            targetHostname={selectedEdgeTargetNode?.hostname || (selectedEdgeTargetNode ? `Node ${selectedEdgeTargetNode.id}` : '')}
+            sourceHostname={selectedEdgeSourceNode?.hostname || selectedEdgeSourceNode?.label || (selectedEdgeSourceNode ? `Node ${selectedEdgeSourceNode.id}` : '')}
+            targetHostname={selectedEdgeTargetNode?.hostname || selectedEdgeTargetNode?.label || (selectedEdgeTargetNode ? `Node ${selectedEdgeTargetNode.id}` : '')}
             onClose={() => setSelectedEdgeId(null)}
             onUpdate={handleUpdateEdge}
             onDelete={handleDeleteSelectedEdge}

@@ -49,6 +49,19 @@
   overflow: hidden;
 }
 
+.topology-canvas-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  z-index: 100;
+  pointer-events: none;
+}
+
 /* Cursor hints for placement modes */
 .topology-mode-text  .x6-canvas-wrapper,
 .topology-mode-shape .x6-canvas-wrapper {

@@ -24,10 +24,10 @@ import './X6Canvas.css';
 
 // ── Port group shared by all node shapes ──────────────────────────────────────
 const PORT_GROUPS = {
-  top:    { position: 'top',    attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', visibility: 'hidden' } } },
-  bottom: { position: 'bottom', attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', visibility: 'hidden' } } },
-  left:   { position: 'left',   attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', visibility: 'hidden' } } },
-  right:  { position: 'right',  attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', visibility: 'hidden' } } },
+  top:    { position: 'top',    attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', opacity: 0 } } },
+  bottom: { position: 'bottom', attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', opacity: 0 } } },
+  left:   { position: 'left',   attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', opacity: 0 } } },
+  right:  { position: 'right',  attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', opacity: 0 } } },
 };
 
 const PORT_ITEMS = [
@@ -445,8 +445,8 @@ const X6Canvas = forwardRef(function X6Canvas(props, ref) {
             zIndex: 10,
           });
         },
-        validateMagnet({ magnet }) {
-          return magnet.getAttribute('magnet') !== null;
+        validateMagnet() {
+          return modeRef.current === 'link';
         },
         validateConnection({ sourceCell, targetCell }) {
           return sourceCell !== targetCell;
@@ -487,15 +487,16 @@ const X6Canvas = forwardRef(function X6Canvas(props, ref) {
 
     graphRef.current = graph;
 
-    // ── Port visibility on hover ──────────────────────────────────────────────
+    // ── Port visibility on hover (only in link mode) ──────────────────────────
     graph.on('node:mouseenter', ({ node }) => {
+      if (modeRef.current !== 'link') return;
       node.getPorts().forEach((p) => {
-        node.setPortProp(p.id, 'attrs/circle/visibility', 'visible');
+        node.setPortProp(p.id, 'attrs/circle/opacity', 1);
       });
     });
     graph.on('node:mouseleave', ({ node }) => {
       node.getPorts().forEach((p) => {
-        node.setPortProp(p.id, 'attrs/circle/visibility', 'hidden');
+        node.setPortProp(p.id, 'attrs/circle/opacity', 0);
       });
     });
 
