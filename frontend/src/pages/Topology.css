@@ -19,17 +19,12 @@
   font-size: 0.85rem;
   z-index: 10;
   animation: topology-toast-fade 0.15s ease-out;
+  pointer-events: none;
 }
 
 @keyframes topology-toast-fade {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0);   }
 }
 
 .topology-switcher-bar {
@@ -51,46 +46,17 @@
   flex: 1;
   position: relative;
   min-height: 0;
+  overflow: hidden;
 }
 
-.topology-canvas .react-flow {
-  width: 100%;
-  height: 100%;
-}
-
-/* In Link/Text/Shape modes the pane cursor hints that clicking the canvas
-   performs an action rather than panning. */
-.topology-mode-text,
-.topology-mode-shape {
+/* Cursor hints for placement modes */
+.topology-mode-text  .x6-canvas-wrapper,
+.topology-mode-shape .x6-canvas-wrapper {
   cursor: crosshair;
 }
 
-.topology-mode-link .react-flow__pane {
-  cursor: crosshair;
-}
-
-/* Small floating Auto Layout / Fit View buttons at the bottom right, near the
-   zoom controls (which sit at the bottom left). */
-.topology-floating-actions {
-  position: absolute;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 8;
-  display: flex;
-  gap: 0.4rem;
-}
-
-.topology-floating-actions button {
-  padding: 0.4rem 0.7rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 5px;
-  background: var(--color-bg-elevated);
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 0.78rem;
-  box-shadow: 0 1px 4px var(--color-shadow);
-}
-
-.topology-floating-actions button:hover {
-  background: var(--color-bg-subtle);
+/* X6 scroller takes full space */
+.topology-canvas .x6-graph-scroller {
+  width: 100% !important;
+  height: 100% !important;
 }

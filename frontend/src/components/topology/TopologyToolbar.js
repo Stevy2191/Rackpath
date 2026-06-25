@@ -1,11 +1,31 @@
 import React from 'react';
-import { MousePointer2, Link as LinkIcon, Type, BoxSelect, Image, Shapes } from 'lucide-react';
+import {
+  MousePointer2,
+  Link as LinkIcon,
+  Type,
+  BoxSelect,
+  Image,
+  Shapes,
+  Grid3X3,
+  Map,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Undo2,
+  Redo2,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+} from 'lucide-react';
 import { SHAPE_TYPES } from './ShapeNode';
 import './TopologyToolbar.css';
 
 const MODES = [
   { id: 'select', label: 'Select', icon: MousePointer2, hint: 'Select and move nodes' },
-  { id: 'link',   label: 'Link',   icon: LinkIcon,       hint: 'Click a node, then another, to connect' },
+  { id: 'link',   label: 'Link',   icon: LinkIcon,       hint: 'Drag from a port to create a link' },
   { id: 'text',   label: 'Text',   icon: Type,           hint: 'Click the canvas to add a text label' },
   { id: 'zone',   label: 'Zone',   icon: BoxSelect,      hint: 'Click the canvas to add a zone' },
 ];
@@ -39,15 +59,32 @@ export default function TopologyToolbar({
   onBackgroundChange,
   showEdgeLabels,
   onToggleEdgeLabels,
+  showGrid,
+  onToggleGrid,
+  showMinimap,
+  onToggleMinimap,
   onSave,
   onExport,
   exporting,
   exportMenuOpen,
   onToggleExportMenu,
   onClearCanvas,
+  onFitView,
+  onZoomIn,
+  onZoomOut,
+  onAutoLayout,
+  onUndo,
+  onRedo,
+  onAlign,
+  onDistribute,
+  selectedCount = 0,
 }) {
+  const canAlign = selectedCount >= 2;
+  const canDistribute = selectedCount >= 3;
+
   return (
     <div className="topology-toolbar">
+      {/* ── Mode buttons ──────────────────────────────────── */}
       <div className="topology-toolbar-modes">
         {MODES.map(({ id, label, icon: Icon, hint }) => (
           <button
@@ -63,7 +100,7 @@ export default function TopologyToolbar({
           </button>
         ))}
 
-        {/* Shape button with type submenu */}
+        {/* Shape submenu */}
         <div className="topology-toolbar-popover-anchor">
           <button
             type="button"
@@ -82,10 +119,7 @@ export default function TopologyToolbar({
                   key={id}
                   type="button"
                   className={shapeType === id ? 'selected' : ''}
-                  onClick={() => {
-                    onShapeTypeChange(id);
-                    onModeChange('shape');
-                  }}
+                  onClick={() => { onShapeTypeChange(id); onModeChange('shape'); }}
                 >
                   {SHAPE_ICONS[id]} {label}
                 </button>
@@ -94,13 +128,13 @@ export default function TopologyToolbar({
           )}
         </div>
 
+        {/* Background submenu */}
         <div className="topology-toolbar-popover-anchor">
           <button
             type="button"
             className={`topology-mode-btn${backgroundMenuOpen ? ' active' : ''}`}
             onClick={onToggleBackgroundMenu}
             title="Canvas background"
-            aria-pressed={backgroundMenuOpen}
           >
             <Image size={16} strokeWidth={2} />
             <span>Background</span>
@@ -122,32 +156,61 @@ export default function TopologyToolbar({
         </div>
       </div>
 
+      {/* ── View controls ─────────────────────────────────── */}
+      <div className="topology-toolbar-view">
+        <button type="button" className="topology-icon-btn" onClick={onZoomIn}  title="Zoom in (Ctrl+)"><ZoomIn  size={15} /></button>
+        <button type="button" className="topology-icon-btn" onClick={onZoomOut} title="Zoom out (Ctrl-)"><ZoomOut size={15} /></button>
+        <button type="button" className="topology-icon-btn" onClick={onFitView}     title="Fit to screen (Ctrl+Shift+F)"><Maximize2 size={15} /></button>
+        <button type="button" className={`topology-icon-btn${showGrid ? ' active' : ''}`}    onClick={onToggleGrid}    title="Toggle grid"><Grid3X3 size={15} /></button>
+        <button type="button" className={`topology-icon-btn${showMinimap ? ' active' : ''}`} onClick={onToggleMinimap} title="Toggle minimap"><Map size={15} /></button>
+      </div>
+
+      {/* ── Align / Distribute (shown when ≥2 nodes selected) */}
+      {canAlign && (
+        <div className="topology-toolbar-align">
+          <button type="button" className="topology-icon-btn" onClick={() => onAlign('left')}   title="Align left"><AlignLeft           size={15} /></button>
+          <button type="button" className="topology-icon-btn" onClick={() => onAlign('center')} title="Align center"><AlignCenter        size={15} /></button>
+          <button type="button" className="topology-icon-btn" onClick={() => onAlign('right')}  title="Align right"><AlignRight          size={15} /></button>
+          <button type="button" className="topology-icon-btn" onClick={() => onAlign('top')}    title="Align top"><AlignStartVertical    size={15} /></button>
+          <button type="button" className="topology-icon-btn" onClick={() => onAlign('middle')} title="Align middle"><AlignCenterVertical size={15} /></button>
+          <button type="button" className="topology-icon-btn" onClick={() => onAlign('bottom')} title="Align bottom"><AlignEndVertical    size={15} /></button>
+          {canDistribute && (
+            <>
+              <button type="button" className="topology-icon-btn" onClick={() => onDistribute('horizontal')} title="Distribute horizontally">⇔</button>
+              <button type="button" className="topology-icon-btn" onClick={() => onDistribute('vertical')}   title="Distribute vertically">⇕</button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Actions ───────────────────────────────────────── */}
       <div className="topology-toolbar-actions">
+        <button type="button" className="topology-icon-btn" onClick={onUndo} title="Undo (Ctrl+Z)"><Undo2 size={15} /></button>
+        <button type="button" className="topology-icon-btn" onClick={onRedo} title="Redo (Ctrl+Shift+Z)"><Redo2 size={15} /></button>
+
+        <div className="topology-toolbar-sep" />
+
         <label className="topology-toggle">
           <input type="checkbox" checked={showEdgeLabels} onChange={onToggleEdgeLabels} />
           Edge labels
         </label>
-        <button type="button" onClick={onSave}>
-          Save
-        </button>
+
+        <button type="button" onClick={onAutoLayout}>Auto Layout</button>
+        <button type="button" onClick={onSave}>Save</button>
+
         <div className="topology-toolbar-popover-anchor">
           <button type="button" onClick={onToggleExportMenu} disabled={exporting}>
-            {exporting ? 'Exporting...' : 'Export ▾'}
+            {exporting ? 'Exporting…' : 'Export ▾'}
           </button>
           {exportMenuOpen && (
             <div className="topology-toolbar-menu">
-              <button type="button" onClick={() => onExport('png')}>
-                Export as PNG
-              </button>
-              <button type="button" onClick={() => onExport('svg')}>
-                Export as SVG
-              </button>
-              <button type="button" onClick={() => onExport('pdf')}>
-                Export as PDF
-              </button>
+              <button type="button" onClick={() => onExport('png')}>Export as PNG</button>
+              <button type="button" onClick={() => onExport('svg')}>Export as SVG</button>
+              <button type="button" onClick={() => onExport('pdf')}>Export as PDF</button>
             </div>
           )}
         </div>
+
         <button type="button" className="topology-danger-button" onClick={onClearCanvas}>
           Clear Canvas
         </button>

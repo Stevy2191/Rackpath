@@ -1,33 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import ReactFlow, {
-  addEdge,
-  applyEdgeChanges,
-  applyNodeChanges,
-  Background,
-  BackgroundVariant,
-  ConnectionMode,
-  Controls,
-  getNodesBounds,
-  getViewportForBounds,
-  ReactFlowProvider,
-  useReactFlow,
-  useUpdateNodeInternals,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { toPng, toSvg } from 'html-to-image';
-import jsPDF from 'jspdf';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
-import DeviceNode from '../components/DeviceNode';
-import ZoneNode from '../components/topology/ZoneNode';
-import ShapeNode from '../components/topology/ShapeNode';
-import TextLabelNode from '../components/topology/TextLabelNode';
-import ConnectionEdge from '../components/topology/ConnectionEdge';
-import DevicePicker, {
-  MANUAL_DRAG_TYPE,
-  DISCOVERED_DRAG_TYPE,
-} from '../components/topology/DevicePicker';
+import X6Canvas from '../components/topology/X6Canvas';
+import DevicePicker from '../components/topology/DevicePicker';
 import NodePropertiesPanel from '../components/topology/NodePropertiesPanel';
 import EdgePropertiesPanel from '../components/topology/EdgePropertiesPanel';
 import LinkConfigModal from '../components/topology/LinkConfigModal';
@@ -38,369 +14,178 @@ import TopologyModal from '../components/topology/TopologyModal';
 import { getLayoutedElements } from '../utils/layout';
 import './Topology.css';
 
-const nodeTypes = { device: DeviceNode, zone: ZoneNode, shape: ShapeNode, text: TextLabelNode };
-const edgeTypes = { connection: ConnectionEdge };
-
-function buildDeviceNode(node, callbacks) {
-  const linked = node.device_id != null;
-  return {
-    id: `device-${node.id}`,
-    type: 'device',
-    position: { x: node.x || 0, y: node.y || 0 },
-    style: { width: node.width || 120, height: node.height || 80 },
-    data: {
-      id: node.id,
-      deviceId: node.device_id || null,
-      hostname: linked ? node.hostname : node.label,
-      ip: linked ? node.ip : null,
-      mac: linked ? node.mac : null,
-      type: linked ? node.device_type : node.node_type,
-      snmp_community: linked ? node.snmp_community : null,
-      notes: linked ? node.notes : null,
-      icon_color: linked ? node.device_icon_color : node.node_icon_color,
-      text_color: linked ? node.device_text_color : node.node_text_color,
-      updated_at: node.updated_at,
-      onResizeEnd: callbacks?.onDeviceResizeEnd,
-    },
-  };
+// ── ID helpers ────────────────────────────────────────────────────────────────
+function rfIdToDbId(rfId) {
+  return Number(rfId.replace(/^[^-]+-/, ''));
 }
 
-function buildZoneNode(zone, callbacks, vlans) {
-  return {
-    id: `zone-${zone.id}`,
-    type: 'zone',
-    position: { x: zone.x, y: zone.y },
-    style: { width: zone.width, height: zone.height },
-    data: {
-      id: zone.id,
-      name: zone.name,
-      border_style: zone.border_style,
-      color: zone.color,
-      vlan_id: zone.vlan_id,
-      vlans: vlans || [],
-      onResizeEnd: callbacks.onZoneResizeEnd,
-      onDelete: callbacks.onZoneDelete,
-      onUpdate: callbacks.onZoneUpdate,
-    },
-  };
-}
-
-function buildShapeNode(shape, callbacks) {
-  return {
-    id: `shape-${shape.id}`,
-    type: 'shape',
-    position: { x: shape.x, y: shape.y },
-    style: { width: shape.width, height: shape.height },
-    data: {
-      id: shape.id,
-      shape_type: shape.shape_type || 'rect',
-      fill_color: shape.fill_color,
-      border_color: shape.border_color,
-      label: shape.label || null,
-      onResizeEnd: callbacks.onShapeResizeEnd,
-      onDelete: callbacks.onShapeDelete,
-      onUpdate: callbacks.onShapeUpdate,
-    },
-  };
-}
-
-function buildTextNode(label, callbacks) {
-  return {
-    id: `label-${label.id}`,
-    type: 'text',
-    position: { x: label.x, y: label.y },
-    data: {
-      id: label.id,
-      text: label.text,
-      font_size: label.font_size,
-      color: label.color,
-      onChange: callbacks.onLabelChange,
-      onDelete: callbacks.onLabelDelete,
-    },
-  };
-}
-
-function edgeLabelText(edge) {
-  return edge.label || undefined;
-}
-
-// Stroke dash pattern for an edge's line style. Both "dashed" and "animated"
-// use the same dash pattern; "animated" additionally flows the dashes along
-// the line via the connection-edge-flow keyframe animation below.
-function edgeDashArray(lineStyle) {
-  if (lineStyle === 'dashed' || lineStyle === 'animated') return '8 4';
-  return undefined;
-}
-
-function buildEdge(edge, showLabels, callbacks) {
-  const lineStyle = edge.line_style || 'solid';
-  const srcType = edge.source_element_type || 'node';
-  const tgtType = edge.target_element_type || 'node';
-  const srcPrefix = srcType === 'node' ? 'device' : srcType;
-  const tgtPrefix = tgtType === 'node' ? 'device' : tgtType;
-  return {
-    id: `edge-${edge.id}`,
-    source: `${srcPrefix}-${edge.source_node_id}`,
-    target: `${tgtPrefix}-${edge.target_node_id}`,
-    sourceHandle: edge.source_handle || null,
-    targetHandle: edge.target_handle || null,
-    type: 'connection',
-    label: showLabels ? edgeLabelText(edge) : undefined,
-    style: {
-      stroke: edge.label_color || undefined,
-      strokeDasharray: edgeDashArray(lineStyle),
-      animation: lineStyle === 'animated' ? 'connection-edge-flow 1s linear infinite' : undefined,
-    },
-    data: {
-      ...edge,
-      onEdit: callbacks?.onEdgeEdit,
-      onDelete: callbacks?.onEdgeDelete,
-      onReroute: callbacks?.onEdgeReroute,
-      onUpdate: callbacks?.onEdgeUpdate,
-    },
-  };
-}
-
-function nodeIdFromNodeId(nodeId) {
-  return Number(nodeId.replace('device-', ''));
-}
-
-function zoneIdFromNodeId(nodeId) {
-  return Number(nodeId.replace('zone-', ''));
-}
-
-function labelIdFromNodeId(nodeId) {
-  return Number(nodeId.replace('label-', ''));
-}
-
-function shapeIdFromNodeId(nodeId) {
-  return Number(nodeId.replace('shape-', ''));
-}
-
-// Strip the type prefix from any canvas-node ReactFlow ID to get the DB row id.
-function elementIdFromNodeId(nodeId) {
-  return Number(nodeId.replace(/^[^-]+-/, ''));
-}
-
-// Map a ReactFlow node ID prefix to the element type stored in topology_edges.
-function elementTypeFromNodeId(nodeId) {
-  if (nodeId.startsWith('shape-')) return 'shape';
-  if (nodeId.startsWith('zone-')) return 'zone';
-  if (nodeId.startsWith('label-')) return 'label';
+function cellTypeFromRfId(rfId) {
+  if (rfId.startsWith('shape-')) return 'shape';
+  if (rfId.startsWith('zone-'))  return 'zone';
+  if (rfId.startsWith('label-')) return 'label';
   return 'node';
 }
 
-// Best display label for any canvas element (device node, shape, zone, label).
-function nodeDisplayLabel(node) {
-  if (!node) return 'Unknown';
-  const d = node.data;
-  return d.hostname || d.name || d.text || d.label || node.type;
+function rfIdFromElementType(elementType, dbId) {
+  const prefix = elementType === 'node' ? 'device'
+    : elementType === 'shape' ? 'shape'
+    : elementType === 'zone'  ? 'zone'
+    : 'label';
+  return `${prefix}-${dbId}`;
 }
 
-// Pick which side of each node an auto-drawn connection should attach to,
-// based on the relative positions of the two nodes' centres.
-function nodeCenter(node) {
-  const w = node.style?.width || node.width || 120;
-  const h = node.style?.height || node.height || 80;
-  return { x: node.position.x + w / 2, y: node.position.y + h / 2 };
+// ── Node-data builders ────────────────────────────────────────────────────────
+function buildDeviceNodeData(node) {
+  const linked = node.device_id != null;
+  return {
+    _rfId: `device-${node.id}`,
+    _cellType: 'device',
+    id: node.id,
+    x: node.x || 0,
+    y: node.y || 0,
+    width: node.width || 120,
+    height: node.height || 80,
+    deviceId: node.device_id || null,
+    hostname: linked ? node.hostname : node.label,
+    label: linked ? node.hostname : node.label,
+    ip: linked ? node.ip : null,
+    mac: linked ? node.mac : null,
+    type: linked ? node.device_type : node.node_type,
+    snmp_community: linked ? node.snmp_community : null,
+    notes: linked ? node.notes : null,
+    icon_color: linked ? node.device_icon_color : node.node_icon_color,
+    text_color: linked ? node.device_text_color : node.node_text_color,
+  };
 }
 
-function computeHandles(source, target) {
-  const s = nodeCenter(source);
-  const t = nodeCenter(target);
-  const dx = t.x - s.x;
-  const dy = t.y - s.y;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return dx >= 0
-      ? { sourceHandle: 'right', targetHandle: 'left' }
-      : { sourceHandle: 'left', targetHandle: 'right' };
-  }
-  return dy >= 0
-    ? { sourceHandle: 'bottom', targetHandle: 'top' }
-    : { sourceHandle: 'top', targetHandle: 'bottom' };
+function buildZoneNodeData(zone, vlans) {
+  return {
+    _rfId: `zone-${zone.id}`,
+    _cellType: 'zone',
+    id: zone.id,
+    x: zone.x,
+    y: zone.y,
+    width: zone.width,
+    height: zone.height,
+    name: zone.name,
+    border_style: zone.border_style,
+    color: zone.color,
+    vlan_id: zone.vlan_id,
+    vlans: vlans || [],
+  };
 }
 
-function TopologyCanvas() {
+function buildShapeNodeData(shape) {
+  return {
+    _rfId: `shape-${shape.id}`,
+    _cellType: 'shape',
+    id: shape.id,
+    x: shape.x,
+    y: shape.y,
+    width: shape.width,
+    height: shape.height,
+    shape_type: shape.shape_type || 'rect',
+    fill_color: shape.fill_color,
+    border_color: shape.border_color,
+    label: shape.label || null,
+  };
+}
+
+function buildLabelNodeData(label) {
+  return {
+    _rfId: `label-${label.id}`,
+    _cellType: 'label',
+    id: label.id,
+    x: label.x,
+    y: label.y,
+    width: 140,
+    height: 30,
+    text: label.text,
+    font_size: label.font_size,
+    color: label.color,
+  };
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+export default function TopologyPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentProjectId } = useProject();
-  const reactFlowInstance = useReactFlow();
-  const reactFlowInstanceRef = useRef(reactFlowInstance);
-  reactFlowInstanceRef.current = reactFlowInstance;
-  const updateNodeInternals = useUpdateNodeInternals();
-  const reactFlowWrapper = useRef(null);
+  const canvasRef = useRef(null);
 
-  const [nodes, setNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
+  // ── Data state ────────────────────────────────────────────────────────────
+  const [nodesCache, setNodesCache] = useState([]); // raw node data for properties panel
+  const [edgesCache, setEdgesCache] = useState([]); // raw edge data
   const [vlans, setVlans] = useState([]);
   const [unplacedDevices, setUnplacedDevices] = useState([]);
-  const [connectionPointsByDevice, setConnectionPointsByDevice] = useState({});
+  const [, setConnectionPointsByDevice] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // ── Selection state ──────────────────────────────────────────────────────
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
-  const edgeStyleClipboardRef = useRef(null);
+
+  // ── UI state ─────────────────────────────────────────────────────────────
   const [showEdgeLabels, setShowEdgeLabels] = useState(true);
   const [pendingConnection, setPendingConnection] = useState(null);
   const [pendingNode, setPendingNode] = useState(null);
   const [editingEdge, setEditingEdge] = useState(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(false);
+  const [background, setBackground] = useState('dots');
+  const [mode, setMode] = useState('select');
+  const [shapeType, setShapeType] = useState('rect');
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+  const [backgroundMenuOpen, setBackgroundMenuOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
-  // Multi-topology state
+  // ── Multi-topology state ─────────────────────────────────────────────────
   const [topologies, setTopologies] = useState([]);
   const [activeTopologyId, setActiveTopologyId] = useState(null);
   const [topologyModalOpen, setTopologyModalOpen] = useState(false);
   const [editingTopology, setEditingTopology] = useState(null);
   const [locations, setLocations] = useState([]);
 
-  // Toolbar state.
-  const [mode, setMode] = useState('select');
-  const [linkSourceId, setLinkSourceId] = useState(null);
-  const [background, setBackground] = useState('dots');
-  const [backgroundMenuOpen, setBackgroundMenuOpen] = useState(false);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [shapeType, setShapeType] = useState('rect');
-  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
-
-  const handleDeviceResizeEnd = useCallback(
-    (nodeId, params) => {
-      const id = nodeIdFromNodeId(nodeId);
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId
-            ? {
-                ...n,
-                position: { x: params.x, y: params.y },
-                style: { ...n.style, width: params.width, height: params.height },
-              }
-            : n
-        )
-      );
-      updateNodeInternals(nodeId);
-      client
-        .patch('/topology/layout', {
-          positions: [
-            { node_id: id, x: params.x, y: params.y, width: params.width, height: params.height },
-          ],
-        })
-        .catch((err) => setError(err.message));
-    },
-    [updateNodeInternals]
+  // ── Derived selected items ───────────────────────────────────────────────
+  const selectedNode = useMemo(
+    () => nodesCache.find((n) => n._rfId === selectedNodeId) || null,
+    [nodesCache, selectedNodeId]
+  );
+  const selectedEdge = useMemo(
+    () => edgesCache.find((e) => `edge-${e.id}` === selectedEdgeId) || null,
+    [edgesCache, selectedEdgeId]
   );
 
-  const handleEdgeEdit = useCallback(
-    (edgeId) => {
-      const edge = reactFlowInstanceRef.current.getEdge(edgeId);
-      if (edge) setEditingEdge(edge);
-    },
-    [] // stable — reads instance via ref
-  );
+  // Reconstruct full edge object for EdgePropertiesPanel (it expects RF-style {id, source, target, data})
+  const selectedEdgePanelObj = useMemo(() => {
+    if (!selectedEdge) return null;
+    return {
+      id: `edge-${selectedEdge.id}`,
+      source: rfIdFromElementType(selectedEdge.source_element_type, selectedEdge.source_node_id),
+      target: rfIdFromElementType(selectedEdge.target_element_type, selectedEdge.target_node_id),
+      data: selectedEdge,
+    };
+  }, [selectedEdge]);
 
-  const handleEdgeDelete = useCallback(
-    (edgeId) => {
-      reactFlowInstanceRef.current.deleteElements({ edges: [{ id: edgeId }] });
-    },
-    [] // stable
-  );
+  const selectedEdgeSourceNode = useMemo(() => {
+    if (!selectedEdge) return null;
+    const rfId = rfIdFromElementType(selectedEdge.source_element_type, selectedEdge.source_node_id);
+    return nodesCache.find((n) => n._rfId === rfId) || null;
+  }, [selectedEdge, nodesCache]);
 
-  const handleEdgeReroute = useCallback((edgeId, point) => {
-    const edgeDbId = Number(edgeId.replace('edge-', ''));
-    const waypoint_x = point ? point.x : null;
-    const waypoint_y = point ? point.y : null;
-    setEdges((eds) =>
-      eds.map((e) => (e.id === edgeId ? { ...e, data: { ...e.data, waypoint_x, waypoint_y } } : e))
-    );
-    client
-      .patch(`/topology/edges/${edgeDbId}`, { waypoint_x, waypoint_y })
-      .catch((err) => setError(err.message));
-  }, []);
+  const selectedEdgeTargetNode = useMemo(() => {
+    if (!selectedEdge) return null;
+    const rfId = rfIdFromElementType(selectedEdge.target_element_type, selectedEdge.target_node_id);
+    return nodesCache.find((n) => n._rfId === rfId) || null;
+  }, [selectedEdge, nodesCache]);
 
-  const handleZoneResizeEnd = useCallback((nodeId, params) => {
-    const zoneId = zoneIdFromNodeId(nodeId);
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === nodeId
-          ? {
-              ...n,
-              position: { x: params.x, y: params.y },
-              style: { ...n.style, width: params.width, height: params.height },
-            }
-          : n
-      )
-    );
-    client
-      .patch(`/topology/zones/${zoneId}`, {
-        x: params.x,
-        y: params.y,
-        width: params.width,
-        height: params.height,
-      })
-      .catch((err) => setError(err.message));
-  }, []);
-
-  const handleZoneDelete = useCallback(
-    (nodeId) => {
-      reactFlowInstanceRef.current.deleteElements({ nodes: [{ id: nodeId }] });
-    },
-    [] // stable
-  );
-
-  const handleZoneUpdate = useCallback((nodeId, patch) => {
-    const zoneId = zoneIdFromNodeId(nodeId);
-    setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)));
-    client.patch(`/topology/zones/${zoneId}`, patch).catch((err) => setError(err.message));
-  }, []);
-
-  const handleLabelChange = useCallback((nodeId, text) => {
-    const labelId = labelIdFromNodeId(nodeId);
-    setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, text } } : n)));
-    client.patch(`/topology/labels/${labelId}`, { text }).catch((err) => setError(err.message));
-  }, []);
-
-  const handleLabelDelete = useCallback(
-    (nodeId) => {
-      reactFlowInstanceRef.current.deleteElements({ nodes: [{ id: nodeId }] });
-    },
-    [] // stable
-  );
-
-  const handleShapeResizeEnd = useCallback((nodeId, params) => {
-    const shapeId = shapeIdFromNodeId(nodeId);
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === nodeId
-          ? {
-              ...n,
-              position: { x: params.x, y: params.y },
-              style: { ...n.style, width: params.width, height: params.height },
-            }
-          : n
-      )
-    );
-    client
-      .patch(`/topology/shapes/${shapeId}`, { x: params.x, y: params.y, width: params.width, height: params.height })
-      .catch((err) => setError(err.message));
-  }, []);
-
-  const handleShapeDelete = useCallback(
-    (nodeId) => {
-      reactFlowInstanceRef.current.deleteElements({ nodes: [{ id: nodeId }] });
-    },
-    [] // stable
-  );
-
-  const handleShapeUpdate = useCallback((nodeId, patch) => {
-    const shapeId = shapeIdFromNodeId(nodeId);
-    setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)));
-    client.patch(`/topology/shapes/${shapeId}`, patch).catch((err) => setError(err.message));
-  }, []);
-
-  // Load topologies; auto-select master topology
+  // ── Topology list load ───────────────────────────────────────────────────
   useEffect(() => {
     if (!currentProjectId) return;
-    client
-      .get(`/projects/${currentProjectId}/topologies`)
+    client.get(`/projects/${currentProjectId}/topologies`)
       .then((res) => {
         setTopologies(res.data || []);
         const master = (res.data || []).find((t) => t.is_master) || (res.data || [])[0];
@@ -410,15 +195,565 @@ function TopologyCanvas() {
       .catch((err) => { setError(err.message); setLoading(false); });
   }, [currentProjectId]);
 
-  // Load locations for the topology modal
   useEffect(() => {
     if (!currentProjectId) return;
-    client
-      .get(`/projects/${currentProjectId}/locations`)
+    client.get(`/projects/${currentProjectId}/locations`)
       .then((res) => setLocations(res.data || []))
       .catch(() => {});
   }, [currentProjectId]);
 
+  // ── Canvas data load ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTopologyId === null) return;
+    let cancelled = false;
+
+    async function load() {
+      const tp = { topologyId: activeTopologyId };
+      try {
+        const [topoRes, edgesRes, zonesRes, shapesRes, labelsRes, pointsRes, unplacedRes, vlansRes] =
+          await Promise.all([
+            client.get('/topology', { params: tp }),
+            client.get('/topology/edges', { params: tp }),
+            client.get('/topology/zones', { params: tp }),
+            client.get('/topology/shapes', { params: tp }),
+            client.get('/topology/labels', { params: tp }),
+            client.get('/topology/connection-points'),
+            client.get('/devices', { params: { unplaced: true } }),
+            client.get(`/projects/${currentProjectId || 1}/vlans`),
+          ]);
+        if (cancelled) return;
+
+        const projectVlans = vlansRes.data || [];
+        setVlans(projectVlans);
+
+        const cpByDevice = {};
+        (pointsRes.data || []).forEach((p) => {
+          (cpByDevice[p.device_id] = cpByDevice[p.device_id] || []).push(p);
+        });
+        setConnectionPointsByDevice(cpByDevice);
+
+        const deviceNodes = (topoRes.data.nodes || []).map(buildDeviceNodeData);
+        const zoneNodes   = (zonesRes.data  || []).map((z) => buildZoneNodeData(z, projectVlans));
+        const shapeNodes  = (shapesRes.data  || []).map(buildShapeNodeData);
+        const labelNodes  = (labelsRes.data  || []).map(buildLabelNodeData);
+        const allNodes = [...zoneNodes, ...shapeNodes, ...deviceNodes, ...labelNodes];
+
+        setNodesCache(allNodes);
+        setEdgesCache(edgesRes.data || []);
+        setUnplacedDevices(unplacedRes.data || []);
+
+        // Initialise the X6 graph once we have the canvas ref
+        if (canvasRef.current) {
+          canvasRef.current.loadGraph(allNodes, edgesRes.data || [], true);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [currentProjectId, activeTopologyId]);
+
+  // Focus device cross-link from Rack Builder
+  useEffect(() => {
+    if (loading) return;
+    const focusDeviceId = searchParams.get('focusDevice');
+    if (!focusDeviceId) return;
+    const node = nodesCache.find((n) => n._cellType === 'device' && String(n.deviceId) === focusDeviceId);
+    if (node) {
+      setSelectedNodeId(node._rfId);
+      setSelectedEdgeId(null);
+      const g = canvasRef.current?.getGraph();
+      if (g) {
+        const cell = g.getCellById(node._rfId);
+        if (cell) g.centerCell(cell);
+      }
+    }
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('focusDevice'); return next; }, { replace: true });
+  }, [loading, nodesCache, searchParams, setSearchParams]);
+
+  // ── Canvas event handlers ─────────────────────────────────────────────────
+  const handleNodeSelect = useCallback((rfId, data) => {
+    setSelectedNodeId(rfId);
+    setSelectedEdgeId(null);
+  }, []);
+
+  const handleEdgeSelect = useCallback((rfId, data) => {
+    setSelectedEdgeId(rfId);
+    setSelectedNodeId(null);
+  }, []);
+
+  const handleSelectionClear = useCallback(() => {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+  }, []);
+
+  const handleNodeDeleted = useCallback((rfId, data) => {
+    const cellType = cellTypeFromRfId(rfId);
+    const dbId = rfIdToDbId(rfId);
+    if (cellType === 'device') {
+      client.delete(`/topology/nodes/${dbId}`).catch((err) => setError(err.message));
+      const node = nodesCache.find((n) => n._rfId === rfId);
+      if (node?.deviceId) {
+        const { deviceId, hostname, ip, mac, type } = node;
+        setUnplacedDevices((devs) => [...devs, { id: deviceId, hostname, ip, mac, device_type: type }]);
+      }
+    } else if (cellType === 'zone') {
+      client.delete(`/topology/zones/${dbId}`).catch((err) => setError(err.message));
+    } else if (cellType === 'label') {
+      client.delete(`/topology/labels/${dbId}`).catch((err) => setError(err.message));
+    } else if (cellType === 'shape') {
+      client.delete(`/topology/shapes/${dbId}`).catch((err) => setError(err.message));
+    }
+    setNodesCache((prev) => prev.filter((n) => n._rfId !== rfId));
+    if (selectedNodeId === rfId) setSelectedNodeId(null);
+  }, [nodesCache, selectedNodeId]);
+
+  const handleEdgeDeleted = useCallback((rfId) => {
+    const dbId = rfIdToDbId(rfId);
+    client.delete(`/topology/edges/${dbId}`).catch((err) => setError(err.message));
+    setEdgesCache((prev) => prev.filter((e) => `edge-${e.id}` !== rfId));
+    if (selectedEdgeId === rfId) setSelectedEdgeId(null);
+  }, [selectedEdgeId]);
+
+  const handleNodeMoved = useCallback((rfId, x, y, width, height) => {
+    const cellType = cellTypeFromRfId(rfId);
+    const dbId = rfIdToDbId(rfId);
+    setNodesCache((prev) => prev.map((n) => n._rfId === rfId ? { ...n, x, y, width, height } : n));
+    if (cellType === 'device') {
+      client.patch('/topology/layout', { positions: [{ node_id: dbId, x, y, width, height }] })
+        .catch((err) => setError(err.message));
+    } else if (cellType === 'zone') {
+      client.patch(`/topology/zones/${dbId}`, { x, y }).catch((err) => setError(err.message));
+    } else if (cellType === 'label') {
+      client.patch(`/topology/labels/${dbId}`, { x, y }).catch((err) => setError(err.message));
+    } else if (cellType === 'shape') {
+      client.patch(`/topology/shapes/${dbId}`, { x, y }).catch((err) => setError(err.message));
+    }
+  }, []);
+
+  const handleNodeResized = useCallback((rfId, x, y, width, height) => {
+    const cellType = cellTypeFromRfId(rfId);
+    const dbId = rfIdToDbId(rfId);
+    setNodesCache((prev) => prev.map((n) => n._rfId === rfId ? { ...n, x, y, width, height } : n));
+    if (cellType === 'device') {
+      client.patch('/topology/layout', { positions: [{ node_id: dbId, x, y, width, height }] })
+        .catch((err) => setError(err.message));
+    } else if (cellType === 'zone') {
+      client.patch(`/topology/zones/${dbId}`, { x, y, width, height }).catch((err) => setError(err.message));
+    } else if (cellType === 'shape') {
+      client.patch(`/topology/shapes/${dbId}`, { x, y, width, height }).catch((err) => setError(err.message));
+    }
+  }, []);
+
+  const handleEdgeVertexChanged = useCallback((rfId, vertices) => {
+    const dbId = rfIdToDbId(rfId);
+    const waypoint_x = vertices.length > 0 ? vertices[0].x : null;
+    const waypoint_y = vertices.length > 0 ? vertices[0].y : null;
+    setEdgesCache((prev) => prev.map((e) => `edge-${e.id}` === rfId ? { ...e, waypoint_x, waypoint_y } : e));
+    client.patch(`/topology/edges/${dbId}`, { waypoint_x, waypoint_y })
+      .catch((err) => setError(err.message));
+  }, []);
+
+  // ── Edge connect flow ─────────────────────────────────────────────────────
+  const handleEdgePendingConnect = useCallback(({ edge, sourceId, targetId, sourcePort, targetPort }) => {
+    const srcNode = nodesCache.find((n) => n._rfId === sourceId);
+    const tgtNode = nodesCache.find((n) => n._rfId === targetId);
+    setPendingConnection({
+      x6Edge: edge,
+      source: sourceId,
+      target: targetId,
+      sourceHandle: sourcePort,
+      targetHandle: targetPort,
+      sourceDevice: { id: srcNode?.deviceId, hostname: srcNode?.hostname || srcNode?.name || srcNode?.text || sourceId },
+      targetDevice: { id: tgtNode?.deviceId, hostname: tgtNode?.hostname || tgtNode?.name || tgtNode?.text || targetId },
+    });
+  }, [nodesCache]);
+
+  const handleConnectionSubmit = useCallback(async (formValues) => {
+    if (!pendingConnection) return;
+    const { x6Edge, source, target, sourceHandle, targetHandle } = pendingConnection;
+    try {
+      const srcType = cellTypeFromRfId(source);
+      const tgtType = cellTypeFromRfId(target);
+      const res = await client.post('/topology/edges', {
+        source_node_id: rfIdToDbId(source),
+        target_node_id: rfIdToDbId(target),
+        source_element_type: srcType === 'device' ? 'node' : srcType,
+        target_element_type: tgtType === 'device' ? 'node' : tgtType,
+        source_handle: sourceHandle,
+        target_handle: targetHandle,
+        topology_id: activeTopologyId,
+        ...formValues,
+      });
+      canvasRef.current?.finalizeEdge(x6Edge, res.data, showEdgeLabels);
+      setEdgesCache((prev) => [...prev, res.data]);
+    } catch (err) {
+      canvasRef.current?.removeEdge(x6Edge.id);
+      setError(err.message);
+    } finally {
+      setPendingConnection(null);
+      setMode('select');
+    }
+  }, [pendingConnection, activeTopologyId, showEdgeLabels]);
+
+  const handleConnectionCancel = useCallback(() => {
+    if (pendingConnection?.x6Edge) {
+      canvasRef.current?.removeEdge(pendingConnection.x6Edge.id);
+    }
+    setPendingConnection(null);
+    setMode('select');
+  }, [pendingConnection]);
+
+  // ── Edge edit flow ────────────────────────────────────────────────────────
+  const handleEditConnectionSubmit = useCallback(async (formValues) => {
+    if (!editingEdge) return;
+    const rfId = `edge-${editingEdge.id}`;
+    try {
+      const res = await client.patch(`/topology/edges/${editingEdge.id}`, formValues);
+      canvasRef.current?.updateEdge(rfId, res.data, showEdgeLabels);
+      setEdgesCache((prev) => prev.map((e) => e.id === editingEdge.id ? res.data : e));
+      if (selectedEdgeId === rfId) setSelectedEdgeId(rfId); // keep selected
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEditingEdge(null);
+    }
+  }, [editingEdge, showEdgeLabels, selectedEdgeId]);
+
+  // ── Edge property panel update ───────────────────────────────────────────
+  const handleUpdateEdge = useCallback((edgeDbId, patch) => {
+    const rfId = `edge-${edgeDbId}`;
+    setEdgesCache((prev) => prev.map((e) => e.id === edgeDbId ? { ...e, ...patch } : e));
+    canvasRef.current?.updateEdge(rfId, { ...edgesCache.find((e) => e.id === edgeDbId), ...patch }, showEdgeLabels);
+    client.patch(`/topology/edges/${edgeDbId}`, patch).catch((err) => setError(err.message));
+  }, [edgesCache, showEdgeLabels]);
+
+  // Edge style copy/paste clipboard
+  const edgeStyleClipboardRef = useRef(null);
+  const handleCopyEdgeStyle = useCallback((edge) => {
+    const data = edge.data || {};
+    edgeStyleClipboardRef.current = {
+      cable_type: data.cable_type,
+      source_label_visible: data.source_label_visible,
+      target_label_visible: data.target_label_visible,
+      label_color: data.label_color,
+      line_style: data.line_style,
+      snapping: data.snapping,
+    };
+  }, []);
+  const handlePasteEdgeStyle = useCallback((edgeDbId) => {
+    if (!edgeStyleClipboardRef.current) return;
+    handleUpdateEdge(edgeDbId, edgeStyleClipboardRef.current);
+  }, [handleUpdateEdge]);
+
+  // ── Node property panel handlers ─────────────────────────────────────────
+  const handleUpdateDevice = useCallback((deviceId, patch) => {
+    setNodesCache((prev) => prev.map((n) => n.deviceId === deviceId ? { ...n, ...patch } : n));
+    if (selectedNodeId) canvasRef.current?.updateNode(selectedNodeId, patch);
+    client.patch(`/devices/${deviceId}`, patch).catch((err) => setError(err.message));
+  }, [selectedNodeId]);
+
+  const handleUpdateNode = useCallback((nodeId, patch) => {
+    const displayPatch = 'label' in patch ? { ...patch, hostname: patch.label } : patch;
+    setNodesCache((prev) => prev.map((n) => n.id === nodeId ? { ...n, ...displayPatch } : n));
+    if (selectedNodeId) canvasRef.current?.updateNode(selectedNodeId, displayPatch);
+    client.patch(`/topology/nodes/${nodeId}`, patch).catch((err) => setError(err.message));
+  }, [selectedNodeId]);
+
+  const handleRemoveSelected = useCallback(() => {
+    if (!selectedNodeId) return;
+    const g = canvasRef.current?.getGraph();
+    const cell = g?.getCellById(selectedNodeId);
+    if (cell) g.removeCell(cell);
+    setSelectedNodeId(null);
+  }, [selectedNodeId]);
+
+  const handleDeleteSelectedEdge = useCallback((rfId) => {
+    const g = canvasRef.current?.getGraph();
+    const cell = g?.getCellById(rfId);
+    if (cell) g.removeCell(cell);
+    setSelectedEdgeId(null);
+  }, []);
+
+  const handleCopyNode = useCallback(async () => {
+    if (!selectedNode) return;
+    try {
+      const res = await client.post('/topology/nodes', {
+        label: selectedNode.hostname ? `${selectedNode.hostname} (copy)` : null,
+        type: selectedNode.type,
+        icon_color: selectedNode.icon_color,
+        text_color: selectedNode.text_color,
+        x: (selectedNode.x || 0) + 40,
+        y: (selectedNode.y || 0) + 40,
+        topology_id: activeTopologyId,
+      });
+      const newData = buildDeviceNodeData(res.data);
+      setNodesCache((prev) => [...prev, newData]);
+      canvasRef.current?.addNode(newData);
+      setSelectedNodeId(newData._rfId);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [selectedNode, activeTopologyId]);
+
+  const handleConnectionPointsChange = useCallback((deviceId, points) => {
+    setConnectionPointsByDevice((prev) => ({ ...prev, [deviceId]: points }));
+  }, []);
+
+  // ── Zone callbacks (passed via context) ─────────────────────────────────
+  const handleZoneUpdate = useCallback((zoneId, patch) => {
+    setNodesCache((prev) => prev.map((n) => n.id === zoneId && n._cellType === 'zone' ? { ...n, ...patch } : n));
+    client.patch(`/topology/zones/${zoneId}`, patch).catch((err) => setError(err.message));
+  }, []);
+
+  const handleZoneDelete = useCallback((rfId) => {
+    const g = canvasRef.current?.getGraph();
+    const cell = g?.getCellById(rfId);
+    if (cell) g.removeCell(cell);
+  }, []);
+
+  // ── Shape callbacks (passed via context) ─────────────────────────────────
+  const handleShapeUpdate = useCallback((shapeId, patch) => {
+    setNodesCache((prev) => prev.map((n) => n.id === shapeId && n._cellType === 'shape' ? { ...n, ...patch } : n));
+    client.patch(`/topology/shapes/${shapeId}`, patch).catch((err) => setError(err.message));
+  }, []);
+
+  const handleShapeDelete = useCallback((rfId) => {
+    const g = canvasRef.current?.getGraph();
+    const cell = g?.getCellById(rfId);
+    if (cell) g.removeCell(cell);
+  }, []);
+
+  // ── Label callbacks (passed via context) ─────────────────────────────────
+  const handleLabelChange = useCallback((labelId, text) => {
+    setNodesCache((prev) => prev.map((n) => n.id === labelId && n._cellType === 'label' ? { ...n, text } : n));
+    client.patch(`/topology/labels/${labelId}`, { text }).catch((err) => setError(err.message));
+  }, []);
+
+  const handleLabelDelete = useCallback((rfId) => {
+    const g = canvasRef.current?.getGraph();
+    const cell = g?.getCellById(rfId);
+    if (cell) g.removeCell(cell);
+  }, []);
+
+  const handleNodeDblClick = useCallback((deviceId) => {
+    navigate(`/devices/${deviceId}`);
+  }, [navigate]);
+
+  // Context value for node cells
+  const contextValue = useMemo(() => ({
+    onZoneUpdate: handleZoneUpdate,
+    onZoneDelete: handleZoneDelete,
+    onShapeUpdate: handleShapeUpdate,
+    onShapeDelete: handleShapeDelete,
+    onLabelChange: handleLabelChange,
+    onLabelDelete: handleLabelDelete,
+    onNodeDblClick: handleNodeDblClick,
+    vlans,
+    mode,
+  }), [handleZoneUpdate, handleZoneDelete, handleShapeUpdate, handleShapeDelete,
+      handleLabelChange, handleLabelDelete, handleNodeDblClick, vlans, mode]);
+
+  // ── Add-to-canvas actions ────────────────────────────────────────────────
+  const addLabelAt = useCallback(async (point) => {
+    try {
+      const res = await client.post('/topology/labels', { text: '', x: point.x, y: point.y, font_size: 14, topology_id: activeTopologyId });
+      const data = buildLabelNodeData(res.data);
+      setNodesCache((prev) => [...prev, data]);
+      canvasRef.current?.addNode(data);
+      setMode('select');
+    } catch (err) { setError(err.message); }
+  }, [activeTopologyId]);
+
+  const addZoneAt = useCallback(async (point) => {
+    try {
+      const res = await client.post('/topology/zones', { name: 'Zone', border_style: 'solid', color: 'blue', x: point.x, y: point.y, width: 320, height: 220, topology_id: activeTopologyId });
+      const data = buildZoneNodeData(res.data, vlans);
+      setNodesCache((prev) => [...prev, data]);
+      canvasRef.current?.addNode(data);
+      setMode('select');
+    } catch (err) { setError(err.message); }
+  }, [activeTopologyId, vlans]);
+
+  const addShapeAt = useCallback(async (point, type) => {
+    try {
+      const res = await client.post('/topology/shapes', { shape_type: type || 'rect', x: point.x, y: point.y, width: 160, height: 100, topology_id: activeTopologyId });
+      const data = buildShapeNodeData(res.data);
+      setNodesCache((prev) => [...prev, data]);
+      canvasRef.current?.addNode(data);
+      setMode('select');
+    } catch (err) { setError(err.message); }
+  }, [activeTopologyId]);
+
+  // ── Drop handler from DevicePicker ──────────────────────────────────────
+  const handleDrop = useCallback(async ({ point, manualData, discoveredId }) => {
+    if (manualData) {
+      setPendingNode({ position: point, deviceInfo: manualData });
+    } else if (discoveredId) {
+      const deviceId = Number(discoveredId);
+      const device = unplacedDevices.find((d) => d.id === deviceId);
+      if (!device) return;
+      try {
+        const res = await client.post('/topology/nodes', { device_id: deviceId, x: point.x, y: point.y, topology_id: activeTopologyId });
+        const data = buildDeviceNodeData(res.data);
+        setNodesCache((prev) => [...prev, data]);
+        canvasRef.current?.addNode(data);
+        setUnplacedDevices((devs) => devs.filter((d) => d.id !== deviceId));
+        setSelectedNodeId(data._rfId);
+      } catch (err) { setError(err.message); }
+    }
+  }, [unplacedDevices, activeTopologyId]);
+
+  // Canvas click — add elements in text/zone/shape modes
+  const handleCanvasClick = useCallback((point) => {
+    if (mode === 'text')  { addLabelAt(point); return; }
+    if (mode === 'zone')  { addZoneAt(point);  return; }
+    if (mode === 'shape') { addShapeAt(point, shapeType); return; }
+  }, [mode, shapeType, addLabelAt, addZoneAt, addShapeAt]);
+
+  // ── Add node modal handlers ──────────────────────────────────────────────
+  const handleAddNodeStandalone = useCallback(async () => {
+    if (!pendingNode) return;
+    const { position, deviceInfo } = pendingNode;
+    try {
+      const res = await client.post('/topology/nodes', { label: deviceInfo.label, type: deviceInfo.type, x: position.x, y: position.y, topology_id: activeTopologyId });
+      const data = buildDeviceNodeData(res.data);
+      setNodesCache((prev) => [...prev, data]);
+      canvasRef.current?.addNode(data);
+      setSelectedNodeId(data._rfId);
+    } catch (err) { setError(err.message); }
+    finally { setPendingNode(null); }
+  }, [pendingNode, activeTopologyId]);
+
+  const handleAddNodeLink = useCallback(async (deviceId) => {
+    if (!pendingNode) return;
+    const { position } = pendingNode;
+    try {
+      const res = await client.post('/topology/nodes', { device_id: deviceId, x: position.x, y: position.y, topology_id: activeTopologyId });
+      const data = buildDeviceNodeData(res.data);
+      setNodesCache((prev) => [...prev, data]);
+      canvasRef.current?.addNode(data);
+      setUnplacedDevices((devs) => devs.filter((d) => d.id !== deviceId));
+      setSelectedNodeId(data._rfId);
+    } catch (err) { setError(err.message); }
+    finally { setPendingNode(null); }
+  }, [pendingNode, activeTopologyId]);
+
+  // ── Toolbar actions ───────────────────────────────────────────────────────
+  const handleModeChange = useCallback((next) => {
+    setMode(next);
+    setBackgroundMenuOpen(false);
+    setShapeMenuOpen(false);
+  }, []);
+
+  const toggleEdgeLabels = useCallback(() => {
+    setShowEdgeLabels((prev) => {
+      const next = !prev;
+      canvasRef.current?.setShowLabels(next);
+      return next;
+    });
+  }, []);
+
+  const handleFitView = useCallback(() => { canvasRef.current?.fitView(); }, []);
+
+  const handleAutoLayout = useCallback(() => {
+    const deviceNodes = nodesCache.filter((n) => n._cellType === 'device');
+    const rfNodes = deviceNodes.map((n) => ({ id: n._rfId, position: { x: n.x, y: n.y }, style: { width: n.width, height: n.height } }));
+    const rfEdges = edgesCache
+      .filter((e) => e.source_element_type === 'node' && e.target_element_type === 'node')
+      .map((e) => ({ id: `edge-${e.id}`, source: `device-${e.source_node_id}`, target: `device-${e.target_node_id}` }));
+    const { nodes: layouted } = getLayoutedElements(rfNodes, rfEdges);
+    const g = canvasRef.current?.getGraph();
+    if (!g) return;
+    layouted.forEach((n) => {
+      const cell = g.getCellById(n.id);
+      if (cell) cell.setPosition(n.position.x, n.position.y);
+    });
+    client.patch('/topology/layout', {
+      positions: layouted.map((n) => ({ node_id: rfIdToDbId(n.id), x: n.position.x, y: n.position.y })),
+    }).catch((err) => setError(err.message));
+  }, [nodesCache, edgesCache]);
+
+  const handleSaveAll = useCallback(async () => {
+    try {
+      const g = canvasRef.current?.getGraph();
+      if (!g) return;
+      const devicePositions = nodesCache
+        .filter((n) => n._cellType === 'device')
+        .map((n) => {
+          const cell = g.getCellById(n._rfId);
+          const pos  = cell?.getPosition() || { x: n.x, y: n.y };
+          const size = cell?.getSize()     || { width: n.width, height: n.height };
+          return { node_id: n.id, x: pos.x, y: pos.y, width: size.width, height: size.height };
+        });
+      if (devicePositions.length > 0)
+        await client.patch('/topology/layout', { positions: devicePositions });
+
+      await Promise.all([
+        ...nodesCache.filter((n) => n._cellType === 'zone').map((n) => {
+          const cell = g.getCellById(n._rfId);
+          const pos  = cell?.getPosition() || { x: n.x, y: n.y };
+          const size = cell?.getSize()     || { width: n.width, height: n.height };
+          return client.patch(`/topology/zones/${n.id}`, { x: pos.x, y: pos.y, width: size.width, height: size.height });
+        }),
+        ...nodesCache.filter((n) => n._cellType === 'shape').map((n) => {
+          const cell = g.getCellById(n._rfId);
+          const pos  = cell?.getPosition() || { x: n.x, y: n.y };
+          const size = cell?.getSize()     || { width: n.width, height: n.height };
+          return client.patch(`/topology/shapes/${n.id}`, { x: pos.x, y: pos.y, width: size.width, height: size.height });
+        }),
+      ]);
+
+      setShowSavedToast(true);
+      setTimeout(() => setShowSavedToast(false), 2000);
+    } catch (err) { setError(err.message); }
+  }, [nodesCache]);
+
+  const handleClearCanvas = useCallback(async () => {
+    if (!window.confirm('Clear the canvas? All nodes, edges, zones, and labels will be permanently removed.')) return;
+    try {
+      await client.delete(`/topology/all${activeTopologyId ? `?topologyId=${activeTopologyId}` : ''}`);
+      const devicesBack = nodesCache
+        .filter((n) => n._cellType === 'device' && n.deviceId)
+        .map((n) => ({ id: n.deviceId, hostname: n.hostname, ip: n.ip, mac: n.mac, device_type: n.type }));
+      setUnplacedDevices((prev) => [...prev, ...devicesBack]);
+      setNodesCache([]);
+      setEdgesCache([]);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      canvasRef.current?.getGraph()?.clearCells();
+    } catch (err) { setError(err.message); }
+  }, [nodesCache, activeTopologyId]);
+
+  const handleExport = useCallback(async (format) => {
+    setExportMenuOpen(false);
+    setExporting(true);
+    try {
+      const dataUrl = await canvasRef.current?.toDataUrl(format === 'svg' ? 'svg' : 'png');
+      if (!dataUrl) return;
+      if (format === 'pdf') {
+        const { default: jsPDF } = await import('jspdf');
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise((resolve) => { img.onload = resolve; });
+        const pdf = new jsPDF({ orientation: img.width >= img.height ? 'landscape' : 'portrait', unit: 'px', format: [img.width, img.height] });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, img.width, img.height);
+        pdf.save('rackpath-topology.pdf');
+      } else {
+        const link = document.createElement('a');
+        link.download = `rackpath-topology.${format}`;
+        link.href = dataUrl;
+        link.click();
+      }
+    } catch (err) { setError(err.message); }
+    finally { setExporting(false); }
+  }, []);
+
+  // ── Topology CRUD ─────────────────────────────────────────────────────────
   const handleCreateTopology = useCallback(async (data) => {
     const res = await client.post(`/projects/${currentProjectId}/topologies`, data);
     setTopologies((prev) => [...prev, res.data]);
@@ -435,8 +770,7 @@ function TopologyCanvas() {
   }, [editingTopology, handleCreateTopology]);
 
   const handleDeleteTopology = useCallback(async (topo) => {
-    const confirmed = window.confirm(`Delete "${topo.name}"? All canvas data in this topology will be permanently removed.`);
-    if (!confirmed) return;
+    if (!window.confirm(`Delete "${topo.name}"? All canvas data will be permanently removed.`)) return;
     await client.delete(`/topologies/${topo.id}`);
     setTopologies((prev) => {
       const next = prev.filter((t) => t.id !== topo.id);
@@ -449,864 +783,69 @@ function TopologyCanvas() {
   }, [activeTopologyId]);
 
   const handleSwitchTopology = useCallback((id) => {
+    setLoading(true);
+    setNodesCache([]);
+    setEdgesCache([]);
+    canvasRef.current?.getGraph()?.clearCells();
     setActiveTopologyId(id);
   }, []);
 
+  // ── Undo / Redo ───────────────────────────────────────────────────────────
+  const handleUndo = useCallback(() => canvasRef.current?.undo(), []);
+  const handleRedo = useCallback(() => canvasRef.current?.redo(), []);
+
+  // ── Align / Distribute ────────────────────────────────────────────────────
+  const handleAlign = useCallback((dir) => canvasRef.current?.alignSelected(dir), []);
+  const handleDistribute = useCallback((dir) => canvasRef.current?.distributeSelected(dir), []);
+
+  // ── Escape to select mode ─────────────────────────────────────────────────
   useEffect(() => {
-    if (activeTopologyId === null) return;
-
-    let cancelled = false;
-
-    async function load() {
-      const topoParams = { topologyId: activeTopologyId };
-      try {
-        const [topoRes, edgesRes, zonesRes, shapesRes, labelsRes, pointsRes, unplacedRes, vlansRes] = await Promise.all([
-          client.get('/topology', { params: topoParams }),
-          client.get('/topology/edges', { params: topoParams }),
-          client.get('/topology/zones', { params: topoParams }),
-          client.get('/topology/shapes', { params: topoParams }),
-          client.get('/topology/labels', { params: topoParams }),
-          client.get('/topology/connection-points'),
-          client.get('/devices', { params: { unplaced: true } }),
-          client.get(`/projects/${currentProjectId || 1}/vlans`),
-        ]);
-        if (cancelled) return;
-
-        const projectVlans = vlansRes.data || [];
-        setVlans(projectVlans);
-
-        const deviceNodes = (topoRes.data.nodes || []).map((device) =>
-          buildDeviceNode(device, { onDeviceResizeEnd: handleDeviceResizeEnd })
-        );
-        const zoneNodes = (zonesRes.data || []).map((zone) =>
-          buildZoneNode(
-            zone,
-            { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneUpdate: handleZoneUpdate },
-            projectVlans
-          )
-        );
-        const shapeNodes = (shapesRes.data || []).map((shape) =>
-          buildShapeNode(shape, {
-            onShapeResizeEnd: handleShapeResizeEnd,
-            onShapeDelete: handleShapeDelete,
-            onShapeUpdate: handleShapeUpdate,
-          })
-        );
-        const labelNodes = (labelsRes.data || []).map((label) =>
-          buildTextNode(label, { onLabelChange: handleLabelChange, onLabelDelete: handleLabelDelete })
-        );
-
-        const cpByDevice = {};
-        (pointsRes.data || []).forEach((p) => {
-          (cpByDevice[p.device_id] = cpByDevice[p.device_id] || []).push(p);
-        });
-        setConnectionPointsByDevice(cpByDevice);
-
-        setNodes([...zoneNodes, ...shapeNodes, ...deviceNodes, ...labelNodes]);
-        setEdges(
-          (edgesRes.data || []).map((edge) =>
-            buildEdge(edge, true, {
-              onEdgeEdit: handleEdgeEdit,
-              onEdgeDelete: handleEdgeDelete,
-              onEdgeReroute: handleEdgeReroute,
-            })
-          )
-        );
-        setUnplacedDevices(unplacedRes.data || []);
-      } catch (err) {
-        if (!cancelled) setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    currentProjectId,
-    activeTopologyId,
-    handleZoneResizeEnd,
-    handleZoneDelete,
-    handleZoneUpdate,
-    handleShapeResizeEnd,
-    handleShapeDelete,
-    handleShapeUpdate,
-    handleDeviceResizeEnd,
-    handleEdgeEdit,
-    handleEdgeDelete,
-    handleEdgeReroute,
-    handleLabelChange,
-    handleLabelDelete,
-  ]);
-
-  // Cross-link from the Rack Builder: ?focusDevice=<id> selects and centers
-  // the matching device node once it's loaded, then clears the param so it
-  // doesn't re-trigger on subsequent renders.
-  useEffect(() => {
-    if (loading) return;
-    const focusDeviceId = searchParams.get('focusDevice');
-    if (!focusDeviceId) return;
-    const node = nodes.find((n) => n.type === 'device' && String(n.data.deviceId) === focusDeviceId);
-    if (node) {
-      setSelectedNodeId(node.id);
-      setSelectedEdgeId(null);
-      const width = node.style?.width || 120;
-      const height = node.style?.height || 80;
-      reactFlowInstance.setCenter(node.position.x + width / 2, node.position.y + height / 2, {
-        zoom: 1,
-        duration: 400,
-      });
-    }
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('focusDevice');
-        return next;
-      },
-      { replace: true }
-    );
-  }, [loading, nodes, searchParams, setSearchParams, reactFlowInstance]);
-
-  // Persist a patch to an edge's link-properties-panel settings and update
-  // the canvas in place (recomputes label/line-style/animation from the
-  // merged data, same as the edit-connection submit handler).
-  // Defined before edgeCallbacks to avoid a circular dependency; rebuilds
-  // the edge with an inline callbacks object that includes a self-reference.
-  // eslint-disable-next-line no-use-before-define
-  const handleUpdateEdge = useCallback(
-    (edgeDbId, patch) => {
-      setEdges((eds) =>
-        eds.map((e) =>
-          e.id === `edge-${edgeDbId}`
-            ? buildEdge({ ...e.data, ...patch }, showEdgeLabels, {
-                onEdgeEdit: handleEdgeEdit,
-                onEdgeDelete: handleEdgeDelete,
-                onEdgeReroute: handleEdgeReroute,
-                // eslint-disable-next-line no-use-before-define
-                onEdgeUpdate: handleUpdateEdge,
-              })
-            : e
-        )
-      );
-      client.patch(`/topology/edges/${edgeDbId}`, patch).catch((err) => setError(err.message));
-    },
-    [showEdgeLabels, handleEdgeEdit, handleEdgeDelete, handleEdgeReroute] // handleUpdateEdge omitted — self-ref
-  );
-
-  const edgeCallbacks = useMemo(
-    () => ({ onEdgeEdit: handleEdgeEdit, onEdgeDelete: handleEdgeDelete, onEdgeReroute: handleEdgeReroute, onEdgeUpdate: handleUpdateEdge }),
-    [handleEdgeEdit, handleEdgeDelete, handleEdgeReroute, handleUpdateEdge]
-  );
-
-  const onNodesChange = useCallback(
-    (changes) => {
-      changes.forEach((change) => {
-        if (change.type !== 'remove') return;
-
-        if (change.id.startsWith('device-')) {
-          const id = nodeIdFromNodeId(change.id);
-          const node = nodes.find((n) => n.id === change.id);
-          client.delete(`/topology/nodes/${id}`).catch((err) => setError(err.message));
-          if (node && node.data.deviceId) {
-            const { onResizeEnd, id: _nodeId, deviceId, ...deviceData } = node.data;
-            setUnplacedDevices((devs) => [...devs, { ...deviceData, id: deviceId }]);
-          }
-        } else if (change.id.startsWith('zone-')) {
-          const zoneId = zoneIdFromNodeId(change.id);
-          client.delete(`/topology/zones/${zoneId}`).catch((err) => setError(err.message));
-          setEdges((eds) => eds.filter((e) => e.source !== change.id && e.target !== change.id));
-        } else if (change.id.startsWith('label-')) {
-          const labelId = labelIdFromNodeId(change.id);
-          client.delete(`/topology/labels/${labelId}`).catch((err) => setError(err.message));
-          setEdges((eds) => eds.filter((e) => e.source !== change.id && e.target !== change.id));
-        } else if (change.id.startsWith('shape-')) {
-          const shapeId = shapeIdFromNodeId(change.id);
-          client.delete(`/topology/shapes/${shapeId}`).catch((err) => setError(err.message));
-          setEdges((eds) => eds.filter((e) => e.source !== change.id && e.target !== change.id));
-        }
-      });
-
-      setNodes((nds) => applyNodeChanges(changes, nds));
-    },
-    [nodes]
-  );
-
-  const onEdgesChange = useCallback(
-    (changes) => {
-      const touchedNodeIds = new Set();
-
-      changes.forEach((change) => {
-        if (change.type === 'remove') {
-          const edgeId = Number(change.id.replace('edge-', ''));
-          client.delete(`/topology/edges/${edgeId}`).catch((err) => setError(err.message));
-
-          const removed = reactFlowInstance.getEdge(change.id);
-          if (removed) {
-            touchedNodeIds.add(removed.source);
-            touchedNodeIds.add(removed.target);
-          }
-        }
-      });
-
-      setEdges((eds) => applyEdgeChanges(changes, eds));
-      touchedNodeIds.forEach((nodeId) => updateNodeInternals(nodeId));
-    },
-    [reactFlowInstance, updateNodeInternals]
-  );
-
-  // Open the Link Configuration modal for a source/target pair, computing the
-  // attachment handles from geometry when they weren't supplied.
-  const openLinkModal = useCallback(
-    (sourceNodeId, targetNodeId, sourceHandle, targetHandle) => {
-      if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) return;
-      const sourceNode = reactFlowInstance.getNode(sourceNodeId);
-      const targetNode = reactFlowInstance.getNode(targetNodeId);
-      if (!sourceNode || !targetNode) return;
-
-      let handles = { sourceHandle: sourceHandle ?? null, targetHandle: targetHandle ?? null };
-      if (!handles.sourceHandle && !handles.targetHandle) {
-        handles = computeHandles(sourceNode, targetNode);
-      }
-
-      setPendingConnection({
-        source: sourceNodeId,
-        target: targetNodeId,
-        sourceHandle: handles.sourceHandle,
-        targetHandle: handles.targetHandle,
-        sourceDevice: { id: sourceNode.data.deviceId, hostname: nodeDisplayLabel(sourceNode) },
-        targetDevice: { id: targetNode.data.deviceId, hostname: nodeDisplayLabel(targetNode) },
-      });
-    },
-    [reactFlowInstance]
-  );
-
-  const onConnect = useCallback(
-    (params) => {
-      openLinkModal(params.source, params.target, params.sourceHandle, params.targetHandle);
-    },
-    [openLinkModal]
-  );
-
-  const handleConnectionSubmit = useCallback(
-    async (formValues) => {
-      if (!pendingConnection) return;
-      try {
-        const res = await client.post('/topology/edges', {
-          source_node_id: elementIdFromNodeId(pendingConnection.source),
-          target_node_id: elementIdFromNodeId(pendingConnection.target),
-          source_element_type: elementTypeFromNodeId(pendingConnection.source),
-          target_element_type: elementTypeFromNodeId(pendingConnection.target),
-          source_handle: pendingConnection.sourceHandle,
-          target_handle: pendingConnection.targetHandle,
-          topology_id: activeTopologyId,
-          ...formValues,
-        });
-        setEdges((eds) => addEdge(buildEdge(res.data, showEdgeLabels, edgeCallbacks), eds));
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setPendingConnection(null);
-        setMode('select');
-      }
-    },
-    [pendingConnection, showEdgeLabels, edgeCallbacks, activeTopologyId]
-  );
-
-  const handleEditConnectionSubmit = useCallback(
-    async (formValues) => {
-      if (!editingEdge) return;
-      const edgeDbId = Number(editingEdge.id.replace('edge-', ''));
-      try {
-        const res = await client.patch(`/topology/edges/${edgeDbId}`, formValues);
-        setEdges((eds) =>
-          eds.map((e) => (e.id === editingEdge.id ? buildEdge(res.data, showEdgeLabels, edgeCallbacks) : e))
-        );
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setEditingEdge(null);
-      }
-    },
-    [editingEdge, showEdgeLabels, edgeCallbacks]
-  );
-
-
-  // "Copy"/"Paste" on the link properties panel transfers style settings
-  // (type, label visibility/color, line style, snapping) from one edge to
-  // another via an in-memory clipboard.
-  const handleCopyEdgeStyle = useCallback((edge) => {
-    const data = edge.data || {};
-    edgeStyleClipboardRef.current = {
-      cable_type: data.cable_type,
-      source_label_visible: data.source_label_visible,
-      target_label_visible: data.target_label_visible,
-      label_color: data.label_color,
-      line_style: data.line_style,
-      snapping: data.snapping,
-    };
-  }, []);
-
-  const handlePasteEdgeStyle = useCallback(
-    (edgeDbId) => {
-      if (!edgeStyleClipboardRef.current) return;
-      handleUpdateEdge(edgeDbId, edgeStyleClipboardRef.current);
-    },
-    [handleUpdateEdge]
-  );
-
-  const onEdgeClick = useCallback((_event, edge) => {
-    setSelectedEdgeId(edge.id);
-    setSelectedNodeId(null);
-  }, []);
-
-  const onEdgeUpdate = useCallback(
-    (oldEdge, newConnection) => {
-      const edgeDbId = Number(oldEdge.id.replace('edge-', ''));
-      client
-        .patch(`/topology/edges/${edgeDbId}`, {
-          source_node_id: nodeIdFromNodeId(newConnection.source),
-          target_node_id: nodeIdFromNodeId(newConnection.target),
-          source_handle: newConnection.sourceHandle ?? null,
-          target_handle: newConnection.targetHandle ?? null,
-        })
-        .then((res) => {
-          setEdges((eds) =>
-            eds.map((e) => (e.id === oldEdge.id ? buildEdge(res.data, showEdgeLabels, edgeCallbacks) : e))
-          );
-        })
-        .catch((err) => setError(err.message));
-    },
-    [showEdgeLabels, edgeCallbacks]
-  );
-
-  const toggleEdgeLabels = useCallback(() => {
-    setShowEdgeLabels((prev) => {
-      const next = !prev;
-      setEdges((eds) => eds.map((e) => ({ ...e, label: next ? edgeLabelText(e.data) : undefined })));
-      return next;
-    });
-  }, []);
-
-  const saveNodePosition = useCallback((node) => {
-    if (node.type === 'device') {
-      return client.patch('/topology/layout', {
-        positions: [{ node_id: nodeIdFromNodeId(node.id), x: node.position.x, y: node.position.y }],
-      });
-    } else if (node.type === 'zone') {
-      return client.patch(`/topology/zones/${zoneIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y });
-    } else if (node.type === 'text') {
-      return client.patch(`/topology/labels/${labelIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y });
-    } else if (node.type === 'shape') {
-      return client.patch(`/topology/shapes/${shapeIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y });
-    }
-    return Promise.resolve();
-  }, []);
-
-  const onNodeDragStop = useCallback((_event, node) => {
-    saveNodePosition(node).catch((err) => setError(err.message));
-  }, [saveNodePosition]);
-
-  const onSelectionDragStop = useCallback((_event, _node, selectedNodes) => {
-    Promise.all(selectedNodes.map((n) => saveNodePosition(n)))
-      .catch((err) => setError(err.message));
-  }, [saveNodePosition]);
-
-  const onNodeClick = useCallback(
-    (_event, node) => {
-      if (mode === 'link') {
-        if (!linkSourceId) {
-          setLinkSourceId(node.id);
-        } else if (linkSourceId !== node.id) {
-          openLinkModal(linkSourceId, node.id);
-          setLinkSourceId(null);
-        } else {
-          setLinkSourceId(null);
-        }
-        return;
-      }
-      if (mode === 'select') {
-        if (node.type === 'device') {
-          setSelectedNodeId(node.id);
-          setSelectedEdgeId(null);
-        }
-      }
-    },
-    [mode, linkSourceId, openLinkModal]
-  );
-
-  const onNodeDoubleClick = useCallback(
-    (_event, node) => {
-      // Double-click edits an element regardless of the active mode. Text and
-      // zone nodes handle their own inline editors; a device node opens the
-      // linked device's page (standalone nodes have nothing to navigate to).
-      if (node.type === 'device' && node.data.deviceId) navigate(`/devices/${node.data.deviceId}`);
-    },
-    [navigate]
-  );
-
-  const projectFromEvent = useCallback(
-    (event) => {
-      const bounds = reactFlowWrapper.current.getBoundingClientRect();
-      return reactFlowInstance.project({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
-    },
-    [reactFlowInstance]
-  );
-
-  const addLabelAt = useCallback(
-    async (position) => {
-      try {
-        const res = await client.post('/topology/labels', {
-          text: '',
-          x: position.x,
-          y: position.y,
-          font_size: 14,
-          topology_id: activeTopologyId,
-        });
-        setNodes((nds) => [
-          ...nds,
-          buildTextNode(res.data, { onLabelChange: handleLabelChange, onLabelDelete: handleLabelDelete }),
-        ]);
-        setMode('select');
-      } catch (err) {
-        setError(err.message);
-      }
-    },
-    [handleLabelChange, handleLabelDelete, activeTopologyId]
-  );
-
-  const addZoneAt = useCallback(
-    async (position) => {
-      try {
-        const res = await client.post('/topology/zones', {
-          name: 'Zone',
-          border_style: 'solid',
-          color: 'blue',
-          x: position.x,
-          y: position.y,
-          width: 320,
-          height: 220,
-          topology_id: activeTopologyId,
-        });
-        setNodes((nds) => [
-          buildZoneNode(
-            res.data,
-            { onZoneResizeEnd: handleZoneResizeEnd, onZoneDelete: handleZoneDelete, onZoneUpdate: handleZoneUpdate },
-            vlans
-          ),
-          ...nds,
-        ]);
-        setMode('select');
-      } catch (err) {
-        setError(err.message);
-      }
-    },
-    [handleZoneResizeEnd, handleZoneDelete, handleZoneUpdate, vlans, activeTopologyId]
-  );
-
-  const addShapeAt = useCallback(
-    async (position, type) => {
-      try {
-        const res = await client.post('/topology/shapes', {
-          shape_type: type || 'rect',
-          x: position.x,
-          y: position.y,
-          width: 160,
-          height: 100,
-          topology_id: activeTopologyId,
-        });
-        setNodes((nds) => [
-          ...nds,
-          buildShapeNode(res.data, {
-            onShapeResizeEnd: handleShapeResizeEnd,
-            onShapeDelete: handleShapeDelete,
-            onShapeUpdate: handleShapeUpdate,
-          }),
-        ]);
-        setMode('select');
-      } catch (err) {
-        setError(err.message);
-      }
-    },
-    [handleShapeResizeEnd, handleShapeDelete, handleShapeUpdate, activeTopologyId]
-  );
-
-  const onPaneClick = useCallback(
-    (event) => {
-      setExportMenuOpen(false);
-      setBackgroundMenuOpen(false);
-      setShapeMenuOpen(false);
-      setLinkSourceId(null);
-
-      if (mode === 'text') {
-        addLabelAt(projectFromEvent(event));
-        return;
-      }
-      if (mode === 'zone') {
-        addZoneAt(projectFromEvent(event));
-        return;
-      }
-      if (mode === 'shape') {
-        addShapeAt(projectFromEvent(event), shapeType);
-        return;
-      }
-      if (mode === 'link') setMode('select');
-      setSelectedNodeId(null);
-      setSelectedEdgeId(null);
-    },
-    [mode, shapeType, addLabelAt, addZoneAt, addShapeAt, projectFromEvent]
-  );
-
-  const handleModeChange = useCallback((next) => {
-    setMode(next);
-    setLinkSourceId(null);
-    setBackgroundMenuOpen(false);
-    setShapeMenuOpen(false);
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (e) => {
+    const onKey = (e) => {
       if (e.key === 'Escape' && mode !== 'select') handleModeChange('select');
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [mode, handleModeChange]);
 
-  const handleConnectionPointsChange = useCallback((deviceId, points) => {
-    setConnectionPointsByDevice((prev) => ({ ...prev, [deviceId]: points }));
-  }, []);
-
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
-  const selectedEdge = edges.find((e) => e.id === selectedEdgeId) || null;
-  const selectedEdgeSourceNode = selectedEdge ? nodes.find((n) => n.id === selectedEdge.source) : null;
-  const selectedEdgeTargetNode = selectedEdge ? nodes.find((n) => n.id === selectedEdge.target) : null;
-
-  const handleRemoveSelected = useCallback(() => {
-    if (!selectedNodeId) return;
-    reactFlowInstance.deleteElements({ nodes: [{ id: selectedNodeId }] });
-    setSelectedNodeId(null);
-  }, [selectedNodeId, reactFlowInstance]);
-
-  const handleDeleteSelectedEdge = useCallback(
-    (edgeId) => {
-      reactFlowInstance.deleteElements({ edges: [{ id: edgeId }] });
-      setSelectedEdgeId(null);
-    },
-    [reactFlowInstance]
-  );
-
-  const handleUpdateDevice = useCallback((deviceId, patch) => {
-    setNodes((nds) =>
-      nds.map((n) => (n.data.deviceId === deviceId ? { ...n, data: { ...n.data, ...patch } } : n))
-    );
-    client.patch(`/devices/${deviceId}`, patch).catch((err) => setError(err.message));
-  }, []);
-
-  // Updates a standalone node's own label/type/colors (linked nodes are
-  // edited via handleUpdateDevice instead, which patches the device record).
-  const handleUpdateNode = useCallback((nodeId, patch) => {
-    const displayPatch = 'label' in patch ? { ...patch, hostname: patch.label } : patch;
-    setNodes((nds) =>
-      nds.map((n) => (n.data.id === nodeId ? { ...n, data: { ...n.data, ...displayPatch } } : n))
-    );
-    client.patch(`/topology/nodes/${nodeId}`, patch).catch((err) => setError(err.message));
-  }, []);
-
-  // Copying a node always creates a standalone diagram node from the
-  // resolved display values of the source node — it never duplicates a
-  // Device Inventory record or its interfaces.
-  const handleCopyNode = useCallback(async () => {
-    if (!selectedNode) return;
-    try {
-      const res = await client.post('/topology/nodes', {
-        label: selectedNode.data.hostname ? `${selectedNode.data.hostname} (copy)` : null,
-        type: selectedNode.data.type,
-        icon_color: selectedNode.data.icon_color,
-        text_color: selectedNode.data.text_color,
-        x: selectedNode.position.x + 40,
-        y: selectedNode.position.y + 40,
-        topology_id: activeTopologyId,
-      });
-
-      const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
-      setNodes((nds) => [...nds, newNode]);
-      setSelectedNodeId(newNode.id);
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [selectedNode, handleDeviceResizeEnd, activeTopologyId]);
-
-  const handleAutoLayout = useCallback(() => {
-    const deviceNodes = nodes.filter((n) => n.type === 'device');
-    const otherNodes = nodes.filter((n) => n.type !== 'device');
-    const { nodes: layouted } = getLayoutedElements(deviceNodes, edges);
-
-    setNodes([...otherNodes, ...layouted]);
-
-    client
-      .patch('/topology/layout', {
-        positions: layouted.map((n) => ({
-          node_id: nodeIdFromNodeId(n.id),
-          x: n.position.x,
-          y: n.position.y,
-        })),
-      })
-      .catch((err) => setError(err.message));
-  }, [nodes, edges]);
-
-  const handleFitView = useCallback(() => {
-    reactFlowInstance.fitView({ padding: 0.2 });
-  }, [reactFlowInstance]);
-
-  const handleClearCanvas = useCallback(async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to clear the canvas? This will delete all nodes, edges, zones, and text labels. This cannot be undone.'
-    );
-    if (!confirmed) return;
-
-    try {
-      await client.delete(`/topology/all${activeTopologyId ? `?topologyId=${activeTopologyId}` : ''}`);
-      setUnplacedDevices((devs) => [
-        ...devs,
-        ...nodes
-          .filter((n) => n.type === 'device' && n.data.deviceId)
-          .map((n) => {
-            const { onResizeEnd, id: _nodeId, deviceId, ...deviceData } = n.data;
-            return { ...deviceData, id: deviceId };
-          }),
-      ]);
-      setNodes([]);
-      setEdges([]);
-      setSelectedNodeId(null);
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [nodes, activeTopologyId]);
-
-  const handleSaveAll = useCallback(async () => {
-    try {
-      const deviceNodes = nodes.filter((n) => n.type === 'device');
-      const zoneNodes = nodes.filter((n) => n.type === 'zone');
-      const shapeNodes = nodes.filter((n) => n.type === 'shape');
-
-      if (deviceNodes.length > 0) {
-        await client.patch('/topology/layout', {
-          positions: deviceNodes.map((n) => ({
-            node_id: nodeIdFromNodeId(n.id),
-            x: n.position.x,
-            y: n.position.y,
-            width: n.style?.width,
-            height: n.style?.height,
-          })),
-        });
+  // ── Click on canvas in placement modes ───────────────────────────────────
+  useEffect(() => {
+    const g = canvasRef.current?.getGraph();
+    if (!g) return;
+    const handler = ({ x, y }) => {
+      if (mode === 'text' || mode === 'zone' || mode === 'shape') {
+        handleCanvasClick({ x, y });
       }
+    };
+    g.on('blank:click', handler);
+    return () => g.off('blank:click', handler);
+  // Re-register when mode or canvas changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, handleCanvasClick]);
 
-      await Promise.all([
-        ...zoneNodes.map((n) =>
-          client.patch(`/topology/zones/${zoneIdFromNodeId(n.id)}`, {
-            x: n.position.x,
-            y: n.position.y,
-            width: n.style?.width,
-            height: n.style?.height,
-          })
-        ),
-        ...shapeNodes.map((n) =>
-          client.patch(`/topology/shapes/${shapeIdFromNodeId(n.id)}`, {
-            x: n.position.x,
-            y: n.position.y,
-            width: n.style?.width,
-            height: n.style?.height,
-          })
-        ),
-      ]);
-
-      setShowSavedToast(true);
-      setTimeout(() => setShowSavedToast(false), 2000);
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [nodes]);
-
-  const handleExport = useCallback(
-    async (format) => {
-      setExportMenuOpen(false);
-      if (!reactFlowWrapper.current) return;
-
-      const viewportEl = reactFlowWrapper.current.querySelector('.react-flow__viewport');
-      if (!viewportEl) return;
-
-      setExporting(true);
-      try {
-        const bounds = getNodesBounds(reactFlowInstance.getNodes());
-        const paddingRatio = 0.1;
-        const imageWidth = Math.max(Math.ceil(bounds.width * (1 + paddingRatio * 2)), 800);
-        const imageHeight = Math.max(Math.ceil(bounds.height * (1 + paddingRatio * 2)), 600);
-        const { x, y, zoom } = getViewportForBounds(bounds, imageWidth, imageHeight, 0.5, 2, paddingRatio);
-
-        const captureOptions = {
-          backgroundColor:
-            getComputedStyle(document.documentElement).getPropertyValue('--color-bg').trim() || '#ffffff',
-          width: imageWidth,
-          height: imageHeight,
-          style: {
-            width: `${imageWidth}px`,
-            height: `${imageHeight}px`,
-            transform: `translate(${x}px, ${y}px) scale(${zoom})`,
-          },
-        };
-
-        const downloadDataUrl = (dataUrl, filename) => {
-          const link = document.createElement('a');
-          link.download = filename;
-          link.href = dataUrl;
-          link.click();
-        };
-
-        if (format === 'svg') {
-          const dataUrl = await toSvg(viewportEl, captureOptions);
-          downloadDataUrl(dataUrl, 'rackpath-topology.svg');
-        } else {
-          const dataUrl = await toPng(viewportEl, captureOptions);
-          if (format === 'pdf') {
-            const orientation = imageWidth >= imageHeight ? 'landscape' : 'portrait';
-            const pdf = new jsPDF({ orientation, unit: 'px', format: [imageWidth, imageHeight] });
-            pdf.addImage(dataUrl, 'PNG', 0, 0, imageWidth, imageHeight);
-            pdf.save('rackpath-topology.pdf');
-          } else {
-            downloadDataUrl(dataUrl, 'rackpath-topology.png');
-          }
-        }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setExporting(false);
-      }
-    },
-    [reactFlowInstance]
-  );
-
-  const onDragOver = useCallback((event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const onDrop = useCallback(
-    async (event) => {
-      event.preventDefault();
-      if (!reactFlowWrapper.current) return;
-
-      const bounds = reactFlowWrapper.current.getBoundingClientRect();
-      const position = reactFlowInstance.project({
-        x: event.clientX - bounds.left,
-        y: event.clientY - bounds.top,
-      });
-
-      const manualData = event.dataTransfer.getData(MANUAL_DRAG_TYPE);
-      const discoveredId = event.dataTransfer.getData(DISCOVERED_DRAG_TYPE);
-
-      if (manualData) {
-        // Dragging a palette card doesn't immediately create a node — open the
-        // Add Node modal so the user can choose standalone vs. linked.
-        setPendingNode({ position, deviceInfo: JSON.parse(manualData) });
-      } else if (discoveredId) {
-        const deviceId = Number(discoveredId);
-        const device = unplacedDevices.find((d) => d.id === deviceId);
-        if (!device) return;
-
-        try {
-          const res = await client.post('/topology/nodes', {
-            device_id: deviceId,
-            x: position.x,
-            y: position.y,
-            topology_id: activeTopologyId,
-          });
-          const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
-          setNodes((nds) => [...nds, newNode]);
-          setUnplacedDevices((devs) => devs.filter((d) => d.id !== deviceId));
-          setSelectedNodeId(newNode.id);
-        } catch (err) {
-          setError(err.message);
-        }
-      }
-    },
-    [reactFlowInstance, unplacedDevices, handleDeviceResizeEnd, activeTopologyId]
-  );
-
-  const handleAddNodeStandalone = useCallback(async () => {
-    if (!pendingNode) return;
-    const { position, deviceInfo } = pendingNode;
-    try {
-      const res = await client.post('/topology/nodes', {
-        label: deviceInfo.label,
-        type: deviceInfo.type,
-        x: position.x,
-        y: position.y,
-        topology_id: activeTopologyId,
-      });
-      const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
-      setNodes((nds) => [...nds, newNode]);
-      setSelectedNodeId(newNode.id);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setPendingNode(null);
-    }
-  }, [pendingNode, handleDeviceResizeEnd, activeTopologyId]);
-
-  const handleAddNodeLink = useCallback(
-    async (deviceId) => {
-      if (!pendingNode) return;
-      const { position } = pendingNode;
-      try {
-        const res = await client.post('/topology/nodes', {
-          device_id: deviceId,
-          x: position.x,
-          y: position.y,
-          topology_id: activeTopologyId,
-        });
-        const newNode = buildDeviceNode(res.data, { onDeviceResizeEnd: handleDeviceResizeEnd });
-        setNodes((nds) => [...nds, newNode]);
-        setUnplacedDevices((devs) => devs.filter((d) => d.id !== deviceId));
-        setSelectedNodeId(newNode.id);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setPendingNode(null);
-      }
-    },
-    [pendingNode, handleDeviceResizeEnd, activeTopologyId]
-  );
-
-  // Inject the current interaction mode and per-node connection points into
-  // device nodes so they render the right handles for the active mode.
-  const displayNodes = useMemo(
-    () =>
-      nodes.map((n) => {
-        if (n.type === 'device') {
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              mode,
-              isLinkSource: n.id === linkSourceId,
-              connectionPoints: connectionPointsByDevice[n.data.deviceId] || [],
-            },
-          };
-        }
-        // Pass mode to shape/zone/label so they can show handles in link mode
-        if (n.type === 'shape' || n.type === 'zone' || n.type === 'text') {
-          return { ...n, data: { ...n.data, mode } };
-        }
-        return n;
-      }),
-    [nodes, mode, linkSourceId, connectionPointsByDevice]
-  );
-
-  const editSourceNode = editingEdge ? nodes.find((n) => n.id === editingEdge.source) : null;
-  const editTargetNode = editingEdge ? nodes.find((n) => n.id === editingEdge.target) : null;
-
+  // ── Render ────────────────────────────────────────────────────────────────
   if (loading) return <div className="page-status">Loading topology...</div>;
+
+  const selNodeData = selectedNode
+    ? { type: 'device', id: selectedNodeId, data: selectedNode }
+    : null;
+
+  // Reconstruct a node-panel compatible object
+  const panelNode = selNodeData
+    ? {
+        id: selectedNodeId,
+        type: selectedNode._cellType === 'device' ? 'device' : selectedNode._cellType,
+        data: selectedNode,
+      }
+    : null;
+
+  const editSrcNode = editingEdge
+    ? nodesCache.find((n) => n._rfId === rfIdFromElementType(editingEdge.source_element_type, editingEdge.source_node_id))
+    : null;
+  const editTgtNode = editingEdge
+    ? nodesCache.find((n) => n._rfId === rfIdFromElementType(editingEdge.target_element_type, editingEdge.target_node_id))
+    : null;
+
+  const selectedCount = canvasRef.current?.getSelectedNodes()?.length ?? 0;
 
   return (
     <div className="topology-page">
@@ -1322,18 +861,28 @@ function TopologyCanvas() {
         background={background}
         backgroundMenuOpen={backgroundMenuOpen}
         onToggleBackgroundMenu={() => setBackgroundMenuOpen((o) => !o)}
-        onBackgroundChange={(bg) => {
-          setBackground(bg);
-          setBackgroundMenuOpen(false);
-        }}
+        onBackgroundChange={(bg) => { setBackground(bg); setBackgroundMenuOpen(false); }}
         showEdgeLabels={showEdgeLabels}
         onToggleEdgeLabels={toggleEdgeLabels}
+        showGrid={showGrid}
+        onToggleGrid={() => setShowGrid((v) => !v)}
+        showMinimap={showMinimap}
+        onToggleMinimap={() => setShowMinimap((v) => !v)}
         onSave={handleSaveAll}
         onExport={handleExport}
         exporting={exporting}
         exportMenuOpen={exportMenuOpen}
         onToggleExportMenu={() => setExportMenuOpen((o) => !o)}
         onClearCanvas={handleClearCanvas}
+        onFitView={handleFitView}
+        onZoomIn={() => canvasRef.current?.zoomIn()}
+        onZoomOut={() => canvasRef.current?.zoomOut()}
+        onAutoLayout={handleAutoLayout}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onAlign={handleAlign}
+        onDistribute={handleDistribute}
+        selectedCount={selectedCount}
       />
 
       {topologies.length > 0 && (
@@ -1352,51 +901,28 @@ function TopologyCanvas() {
       <div className="topology-body">
         <DevicePicker unplacedDevices={unplacedDevices} />
 
-        <div className={`topology-canvas topology-mode-${mode}`} ref={reactFlowWrapper}>
-          <ReactFlow
-            nodes={displayNodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            connectionMode={ConnectionMode.Loose}
-            nodesDraggable={mode === 'select'}
-            elevateNodesOnSelect={false}
-            zoomOnDoubleClick={false}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onEdgeUpdate={onEdgeUpdate}
-            onNodeDragStop={onNodeDragStop}
-            onSelectionDragStop={onSelectionDragStop}
-            onNodeClick={onNodeClick}
-            onNodeDoubleClick={onNodeDoubleClick}
-            onEdgeClick={onEdgeClick}
-            onPaneClick={onPaneClick}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            deleteKeyCode={['Backspace', 'Delete']}
-            fitView
-          >
-            {background === 'dots' && (
-              <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="var(--color-border-strong)" />
-            )}
-            {background === 'lines' && (
-              <Background variant={BackgroundVariant.Lines} gap={24} size={1} color="var(--color-border)" />
-            )}
-            <Controls />
-          </ReactFlow>
-
-          <div className="topology-floating-actions">
-            <button type="button" onClick={handleAutoLayout} title="Auto layout">
-              Auto Layout
-            </button>
-            <button type="button" onClick={handleFitView} title="Fit view">
-              Fit View
-            </button>
-          </div>
+        <div className={`topology-canvas topology-mode-${mode}`}>
+          <X6Canvas
+            ref={canvasRef}
+            contextValue={contextValue}
+            background={background}
+            showGrid={showGrid}
+            showMinimap={showMinimap}
+            mode={mode}
+            onNodeSelect={handleNodeSelect}
+            onEdgeSelect={handleEdgeSelect}
+            onSelectionClear={handleSelectionClear}
+            onEdgePendingConnect={handleEdgePendingConnect}
+            onNodeDeleted={handleNodeDeleted}
+            onEdgeDeleted={handleEdgeDeleted}
+            onNodeMoved={handleNodeMoved}
+            onNodeResized={handleNodeResized}
+            onEdgeVertexChanged={handleEdgeVertexChanged}
+            onDrop={handleDrop}
+          />
 
           <NodePropertiesPanel
-            node={selectedNode}
+            node={panelNode}
             onClose={() => setSelectedNodeId(null)}
             onUpdateDevice={handleUpdateDevice}
             onUpdateNode={handleUpdateNode}
@@ -1406,13 +932,9 @@ function TopologyCanvas() {
           />
 
           <EdgePropertiesPanel
-            edge={selectedEdge}
-            sourceHostname={
-              selectedEdgeSourceNode?.data?.hostname || (selectedEdgeSourceNode ? `Node ${selectedEdgeSourceNode.data.id}` : '')
-            }
-            targetHostname={
-              selectedEdgeTargetNode?.data?.hostname || (selectedEdgeTargetNode ? `Node ${selectedEdgeTargetNode.data.id}` : '')
-            }
+            edge={selectedEdgePanelObj}
+            sourceHostname={selectedEdgeSourceNode?.hostname || (selectedEdgeSourceNode ? `Node ${selectedEdgeSourceNode.id}` : '')}
+            targetHostname={selectedEdgeTargetNode?.hostname || (selectedEdgeTargetNode ? `Node ${selectedEdgeTargetNode.id}` : '')}
             onClose={() => setSelectedEdgeId(null)}
             onUpdate={handleUpdateEdge}
             onDelete={handleDeleteSelectedEdge}
@@ -1439,15 +961,15 @@ function TopologyCanvas() {
           sourceDevice={pendingConnection.sourceDevice}
           targetDevice={pendingConnection.targetDevice}
           onSubmit={handleConnectionSubmit}
-          onCancel={() => { setPendingConnection(null); setMode('select'); }}
+          onCancel={handleConnectionCancel}
         />
       )}
 
       {editingEdge && (
         <LinkConfigModal
-          initialValues={editingEdge.data}
-          sourceDevice={{ id: editSourceNode?.data.deviceId, hostname: editSourceNode?.data.hostname }}
-          targetDevice={{ id: editTargetNode?.data.deviceId, hostname: editTargetNode?.data.hostname }}
+          initialValues={editingEdge}
+          sourceDevice={{ id: editSrcNode?.deviceId, hostname: editSrcNode?.hostname || editSrcNode?.label }}
+          targetDevice={{ id: editTgtNode?.deviceId, hostname: editTgtNode?.hostname || editTgtNode?.label }}
           onSubmit={handleEditConnectionSubmit}
           onCancel={() => setEditingEdge(null)}
         />
@@ -1462,13 +984,5 @@ function TopologyCanvas() {
         />
       )}
     </div>
-  );
-}
-
-export default function TopologyPage() {
-  return (
-    <ReactFlowProvider>
-      <TopologyCanvas />
-    </ReactFlowProvider>
   );
 }
