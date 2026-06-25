@@ -54,3 +54,18 @@
 .text-label-delete:hover {
   color: var(--color-danger);
 }
+
+.text-label-handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--color-accent) !important;
+  border: 2px solid #fff !important;
+  border-radius: 50% !important;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.text-label-node:hover .text-label-handle,
+.text-label-linkmode .text-label-handle {
+  opacity: 1;
+}

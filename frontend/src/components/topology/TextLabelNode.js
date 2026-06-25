@@ -1,8 +1,16 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
+import { Handle, Position } from 'reactflow';
 import { X } from 'lucide-react';
 import './TextLabelNode.css';
 
-function TextLabelNode({ id, data, selected }) {
+const HANDLES = [
+  { id: 'top',    position: Position.Top    },
+  { id: 'right',  position: Position.Right  },
+  { id: 'bottom', position: Position.Bottom },
+  { id: 'left',   position: Position.Left   },
+];
+
+function TextLabelNode({ id, data, selected, isConnectable }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(data.text || '');
   const inputRef = useRef(null);
@@ -24,15 +32,23 @@ function TextLabelNode({ id, data, selected }) {
     if (next !== (data.text || '')) data.onChange?.(id, next);
   };
 
+  const inLinkMode = data.mode === 'link';
+
   return (
     <div
-      className={`text-label-node${selected ? ' selected' : ''}`}
+      className={`text-label-node${selected ? ' selected' : ''}${inLinkMode ? ' text-label-linkmode' : ''}`}
       onDoubleClick={(e) => {
         e.stopPropagation();
         setEditing(true);
       }}
       style={{ fontSize: `${data.font_size || 14}px`, color: data.color || 'var(--color-text)' }}
     >
+      {HANDLES.map((h) => (
+        <React.Fragment key={h.id}>
+          <Handle id={h.id} type="target" position={h.position} className="text-label-handle" isConnectable={isConnectable} />
+          <Handle id={h.id} type="source" position={h.position} className="text-label-handle" isConnectable={isConnectable} />
+        </React.Fragment>
+      ))}
       {editing ? (
         <textarea
           ref={inputRef}

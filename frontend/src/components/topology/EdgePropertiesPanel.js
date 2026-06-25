@@ -122,6 +122,26 @@ export default function EdgePropertiesPanel({ edge, sourceHostname, targetHostna
       </div>
 
       <div className="edge-properties-section">
+        <span className="edge-properties-label">Path</span>
+        <div className="edge-properties-segmented">
+          <button
+            type="button"
+            className={`edge-properties-segment${(data.path_style || 'bezier') === 'bezier' ? ' active' : ''}`}
+            onClick={() => onUpdate(edgeDbId, { path_style: 'bezier' })}
+          >
+            Curved
+          </button>
+          <button
+            type="button"
+            className={`edge-properties-segment${data.path_style === 'straight' ? ' active' : ''}`}
+            onClick={() => onUpdate(edgeDbId, { path_style: 'straight' })}
+          >
+            Straight
+          </button>
+        </div>
+      </div>
+
+      <div className="edge-properties-section">
         <button
           type="button"
           className={`edge-properties-eye-toggle${data.snapping ? ' active' : ''}`}

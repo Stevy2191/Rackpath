@@ -5,6 +5,22 @@
   cursor: move;
 }
 
+/* Connection handles — invisible until hovered or link mode active */
+.shape-node-handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: var(--color-accent) !important;
+  border: 2px solid #fff !important;
+  border-radius: 50% !important;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.shape-node:hover .shape-node-handle,
+.shape-node-linkmode .shape-node-handle {
+  opacity: 1;
+}
+
 .shape-node-label {
   position: absolute;
   inset: 0;

@@ -1,6 +1,13 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { NodeResizer } from 'reactflow';
+import { Handle, NodeResizer, Position } from 'reactflow';
 import './ShapeNode.css';
+
+const HANDLES = [
+  { id: 'top',    position: Position.Top    },
+  { id: 'right',  position: Position.Right  },
+  { id: 'bottom', position: Position.Bottom },
+  { id: 'left',   position: Position.Left   },
+];
 
 export const SHAPE_TYPES = [
   { id: 'rect',        label: 'Rectangle' },
@@ -92,7 +99,7 @@ function ShapeSvg({ type, fill, stroke, width, height }) {
   }
 }
 
-function ShapeNode({ id, data, selected }) {
+function ShapeNode({ id, data, selected, isConnectable }) {
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(data.label || '');
   const [fill, setFill] = useState(data.fill_color || '#3b82f620');
@@ -133,8 +140,16 @@ function ShapeNode({ id, data, selected }) {
 
   const stop = (e) => e.stopPropagation();
 
+  const inLinkMode = data.mode === 'link';
+
   return (
-    <div ref={wrapRef} className="shape-node" onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}>
+    <div ref={wrapRef} className={`shape-node${inLinkMode ? ' shape-node-linkmode' : ''}`} onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}>
+      {HANDLES.map((h) => (
+        <React.Fragment key={h.id}>
+          <Handle id={h.id} type="target" position={h.position} className="shape-node-handle" isConnectable={isConnectable} />
+          <Handle id={h.id} type="source" position={h.position} className="shape-node-handle" isConnectable={isConnectable} />
+        </React.Fragment>
+      ))}
       <NodeResizer
         color={border}
         isVisible={selected}

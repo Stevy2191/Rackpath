@@ -6,6 +6,21 @@
   box-sizing: border-box;
 }
 
+.zone-node-handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: var(--color-accent) !important;
+  border: 2px solid #fff !important;
+  border-radius: 50% !important;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.zone-node:hover .zone-node-handle,
+.zone-node-linkmode .zone-node-handle {
+  opacity: 1;
+}
+
 .zone-label {
   position: absolute;
   top: 0.4rem;

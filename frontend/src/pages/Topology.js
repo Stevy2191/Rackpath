@@ -134,10 +134,14 @@ function edgeDashArray(lineStyle) {
 
 function buildEdge(edge, showLabels, callbacks) {
   const lineStyle = edge.line_style || 'solid';
+  const srcType = edge.source_element_type || 'node';
+  const tgtType = edge.target_element_type || 'node';
+  const srcPrefix = srcType === 'node' ? 'device' : srcType;
+  const tgtPrefix = tgtType === 'node' ? 'device' : tgtType;
   return {
     id: `edge-${edge.id}`,
-    source: `device-${edge.source_node_id}`,
-    target: `device-${edge.target_node_id}`,
+    source: `${srcPrefix}-${edge.source_node_id}`,
+    target: `${tgtPrefix}-${edge.target_node_id}`,
     sourceHandle: edge.source_handle || null,
     targetHandle: edge.target_handle || null,
     type: 'connection',
@@ -152,6 +156,7 @@ function buildEdge(edge, showLabels, callbacks) {
       onEdit: callbacks?.onEdgeEdit,
       onDelete: callbacks?.onEdgeDelete,
       onReroute: callbacks?.onEdgeReroute,
+      onUpdate: callbacks?.onEdgeUpdate,
     },
   };
 }
@@ -170,6 +175,26 @@ function labelIdFromNodeId(nodeId) {
 
 function shapeIdFromNodeId(nodeId) {
   return Number(nodeId.replace('shape-', ''));
+}
+
+// Strip the type prefix from any canvas-node ReactFlow ID to get the DB row id.
+function elementIdFromNodeId(nodeId) {
+  return Number(nodeId.replace(/^[^-]+-/, ''));
+}
+
+// Map a ReactFlow node ID prefix to the element type stored in topology_edges.
+function elementTypeFromNodeId(nodeId) {
+  if (nodeId.startsWith('shape-')) return 'shape';
+  if (nodeId.startsWith('zone-')) return 'zone';
+  if (nodeId.startsWith('label-')) return 'label';
+  return 'node';
+}
+
+// Best display label for any canvas element (device node, shape, zone, label).
+function nodeDisplayLabel(node) {
+  if (!node) return 'Unknown';
+  const d = node.data;
+  return d.hostname || d.name || d.text || d.label || node.type;
 }
 
 // Pick which side of each node an auto-drawn connection should attach to,
@@ -543,9 +568,35 @@ function TopologyCanvas() {
     );
   }, [loading, nodes, searchParams, setSearchParams, reactFlowInstance]);
 
+  // Persist a patch to an edge's link-properties-panel settings and update
+  // the canvas in place (recomputes label/line-style/animation from the
+  // merged data, same as the edit-connection submit handler).
+  // Defined before edgeCallbacks to avoid a circular dependency; rebuilds
+  // the edge with an inline callbacks object that includes a self-reference.
+  // eslint-disable-next-line no-use-before-define
+  const handleUpdateEdge = useCallback(
+    (edgeDbId, patch) => {
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === `edge-${edgeDbId}`
+            ? buildEdge({ ...e.data, ...patch }, showEdgeLabels, {
+                onEdgeEdit: handleEdgeEdit,
+                onEdgeDelete: handleEdgeDelete,
+                onEdgeReroute: handleEdgeReroute,
+                // eslint-disable-next-line no-use-before-define
+                onEdgeUpdate: handleUpdateEdge,
+              })
+            : e
+        )
+      );
+      client.patch(`/topology/edges/${edgeDbId}`, patch).catch((err) => setError(err.message));
+    },
+    [showEdgeLabels, handleEdgeEdit, handleEdgeDelete, handleEdgeReroute] // handleUpdateEdge omitted — self-ref
+  );
+
   const edgeCallbacks = useMemo(
-    () => ({ onEdgeEdit: handleEdgeEdit, onEdgeDelete: handleEdgeDelete, onEdgeReroute: handleEdgeReroute }),
-    [handleEdgeEdit, handleEdgeDelete, handleEdgeReroute]
+    () => ({ onEdgeEdit: handleEdgeEdit, onEdgeDelete: handleEdgeDelete, onEdgeReroute: handleEdgeReroute, onEdgeUpdate: handleUpdateEdge }),
+    [handleEdgeEdit, handleEdgeDelete, handleEdgeReroute, handleUpdateEdge]
   );
 
   const onNodesChange = useCallback(
@@ -564,12 +615,15 @@ function TopologyCanvas() {
         } else if (change.id.startsWith('zone-')) {
           const zoneId = zoneIdFromNodeId(change.id);
           client.delete(`/topology/zones/${zoneId}`).catch((err) => setError(err.message));
+          setEdges((eds) => eds.filter((e) => e.source !== change.id && e.target !== change.id));
         } else if (change.id.startsWith('label-')) {
           const labelId = labelIdFromNodeId(change.id);
           client.delete(`/topology/labels/${labelId}`).catch((err) => setError(err.message));
+          setEdges((eds) => eds.filter((e) => e.source !== change.id && e.target !== change.id));
         } else if (change.id.startsWith('shape-')) {
           const shapeId = shapeIdFromNodeId(change.id);
           client.delete(`/topology/shapes/${shapeId}`).catch((err) => setError(err.message));
+          setEdges((eds) => eds.filter((e) => e.source !== change.id && e.target !== change.id));
         }
       });
 
@@ -620,8 +674,8 @@ function TopologyCanvas() {
         target: targetNodeId,
         sourceHandle: handles.sourceHandle,
         targetHandle: handles.targetHandle,
-        sourceDevice: { id: sourceNode.data.deviceId, hostname: sourceNode.data.hostname },
-        targetDevice: { id: targetNode.data.deviceId, hostname: targetNode.data.hostname },
+        sourceDevice: { id: sourceNode.data.deviceId, hostname: nodeDisplayLabel(sourceNode) },
+        targetDevice: { id: targetNode.data.deviceId, hostname: nodeDisplayLabel(targetNode) },
       });
     },
     [reactFlowInstance]
@@ -639,8 +693,10 @@ function TopologyCanvas() {
       if (!pendingConnection) return;
       try {
         const res = await client.post('/topology/edges', {
-          source_node_id: nodeIdFromNodeId(pendingConnection.source),
-          target_node_id: nodeIdFromNodeId(pendingConnection.target),
+          source_node_id: elementIdFromNodeId(pendingConnection.source),
+          target_node_id: elementIdFromNodeId(pendingConnection.target),
+          source_element_type: elementTypeFromNodeId(pendingConnection.source),
+          target_element_type: elementTypeFromNodeId(pendingConnection.target),
           source_handle: pendingConnection.sourceHandle,
           target_handle: pendingConnection.targetHandle,
           topology_id: activeTopologyId,
@@ -675,20 +731,6 @@ function TopologyCanvas() {
     [editingEdge, showEdgeLabels, edgeCallbacks]
   );
 
-  // Persist a patch to an edge's link-properties-panel settings and update
-  // the canvas in place (recomputes label/line-style/animation from the
-  // merged data, same as the edit-connection submit handler).
-  const handleUpdateEdge = useCallback(
-    (edgeDbId, patch) => {
-      setEdges((eds) =>
-        eds.map((e) =>
-          e.id === `edge-${edgeDbId}` ? buildEdge({ ...e.data, ...patch }, showEdgeLabels, edgeCallbacks) : e
-        )
-      );
-      client.patch(`/topology/edges/${edgeDbId}`, patch).catch((err) => setError(err.message));
-    },
-    [showEdgeLabels, edgeCallbacks]
-  );
 
   // "Copy"/"Paste" on the link properties panel transfers style settings
   // (type, label visibility/color, line style, snapping) from one edge to
@@ -746,31 +788,32 @@ function TopologyCanvas() {
     });
   }, []);
 
-  const onNodeDragStop = useCallback((_event, node) => {
+  const saveNodePosition = useCallback((node) => {
     if (node.type === 'device') {
-      client
-        .patch('/topology/layout', {
-          positions: [{ node_id: nodeIdFromNodeId(node.id), x: node.position.x, y: node.position.y }],
-        })
-        .catch((err) => setError(err.message));
+      return client.patch('/topology/layout', {
+        positions: [{ node_id: nodeIdFromNodeId(node.id), x: node.position.x, y: node.position.y }],
+      });
     } else if (node.type === 'zone') {
-      client
-        .patch(`/topology/zones/${zoneIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y })
-        .catch((err) => setError(err.message));
+      return client.patch(`/topology/zones/${zoneIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y });
     } else if (node.type === 'text') {
-      client
-        .patch(`/topology/labels/${labelIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y })
-        .catch((err) => setError(err.message));
+      return client.patch(`/topology/labels/${labelIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y });
     } else if (node.type === 'shape') {
-      client
-        .patch(`/topology/shapes/${shapeIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y })
-        .catch((err) => setError(err.message));
+      return client.patch(`/topology/shapes/${shapeIdFromNodeId(node.id)}`, { x: node.position.x, y: node.position.y });
     }
+    return Promise.resolve();
   }, []);
+
+  const onNodeDragStop = useCallback((_event, node) => {
+    saveNodePosition(node).catch((err) => setError(err.message));
+  }, [saveNodePosition]);
+
+  const onSelectionDragStop = useCallback((_event, _node, selectedNodes) => {
+    Promise.all(selectedNodes.map((n) => saveNodePosition(n)))
+      .catch((err) => setError(err.message));
+  }, [saveNodePosition]);
 
   const onNodeClick = useCallback(
     (_event, node) => {
-      if (node.type !== 'device') return;
       if (mode === 'link') {
         if (!linkSourceId) {
           setLinkSourceId(node.id);
@@ -783,8 +826,10 @@ function TopologyCanvas() {
         return;
       }
       if (mode === 'select') {
-        setSelectedNodeId(node.id);
-        setSelectedEdgeId(null);
+        if (node.type === 'device') {
+          setSelectedNodeId(node.id);
+          setSelectedEdgeId(null);
+        }
       }
     },
     [mode, linkSourceId, openLinkModal]
@@ -1237,16 +1282,22 @@ function TopologyCanvas() {
   const displayNodes = useMemo(
     () =>
       nodes.map((n) => {
-        if (n.type !== 'device') return n;
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            mode,
-            isLinkSource: n.id === linkSourceId,
-            connectionPoints: connectionPointsByDevice[n.data.deviceId] || [],
-          },
-        };
+        if (n.type === 'device') {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              mode,
+              isLinkSource: n.id === linkSourceId,
+              connectionPoints: connectionPointsByDevice[n.data.deviceId] || [],
+            },
+          };
+        }
+        // Pass mode to shape/zone/label so they can show handles in link mode
+        if (n.type === 'shape' || n.type === 'zone' || n.type === 'text') {
+          return { ...n, data: { ...n.data, mode } };
+        }
+        return n;
       }),
     [nodes, mode, linkSourceId, connectionPointsByDevice]
   );
@@ -1315,6 +1366,7 @@ function TopologyCanvas() {
             onConnect={onConnect}
             onEdgeUpdate={onEdgeUpdate}
             onNodeDragStop={onNodeDragStop}
+            onSelectionDragStop={onSelectionDragStop}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
             onEdgeClick={onEdgeClick}

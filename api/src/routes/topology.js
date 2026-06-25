@@ -454,6 +454,8 @@ router.post('/edges', async (req, res, next) => {
     const {
       source_node_id,
       target_node_id,
+      source_element_type,
+      target_element_type,
       source_handle,
       target_handle,
       source_interface,
@@ -462,6 +464,7 @@ router.post('/edges', async (req, res, next) => {
       speed,
       cable_type,
       vlan,
+      path_style,
       topology_id,
     } = req.body;
     if (!source_node_id || !target_node_id) {
@@ -469,13 +472,15 @@ router.post('/edges', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO topology_edges (project_id, topology_id, source_node_id, target_node_id, source_handle, target_handle, source_interface, target_interface, label, speed, cable_type, vlan)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO topology_edges (project_id, topology_id, source_node_id, target_node_id, source_element_type, target_element_type, source_handle, target_handle, source_interface, target_interface, label, speed, cable_type, vlan, path_style)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId,
         topology_id || null,
         source_node_id,
         target_node_id,
+        source_element_type || 'node',
+        target_element_type || 'node',
         source_handle || null,
         target_handle || null,
         source_interface || null,
@@ -484,6 +489,7 @@ router.post('/edges', async (req, res, next) => {
         speed || null,
         cable_type || null,
         vlan || null,
+        path_style || 'bezier',
       ]
     );
 
@@ -507,6 +513,8 @@ router.patch('/edges/:id', async (req, res, next) => {
     const allowedFields = [
       'source_node_id',
       'target_node_id',
+      'source_element_type',
+      'target_element_type',
       'source_handle',
       'target_handle',
       'waypoint_x',
@@ -523,6 +531,7 @@ router.patch('/edges/:id', async (req, res, next) => {
       'animate',
       'snapping',
       'vlan',
+      'path_style',
     ];
     const updates = [];
     const values = [];
@@ -659,6 +668,13 @@ router.patch('/zones/:id', async (req, res, next) => {
 // DELETE /api/topology/zones/:id
 router.delete('/zones/:id', async (req, res, next) => {
   try {
+    await pool.query(
+      `DELETE FROM topology_edges WHERE project_id = ? AND (
+        (source_element_type = 'zone' AND source_node_id = ?) OR
+        (target_element_type = 'zone' AND target_node_id = ?)
+      )`,
+      [req.projectId, req.params.id, req.params.id]
+    );
     const [result] = await pool.query('DELETE FROM topology_zones WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
@@ -737,6 +753,13 @@ router.patch('/labels/:id', async (req, res, next) => {
 // DELETE /api/topology/labels/:id
 router.delete('/labels/:id', async (req, res, next) => {
   try {
+    await pool.query(
+      `DELETE FROM topology_edges WHERE project_id = ? AND (
+        (source_element_type = 'label' AND source_node_id = ?) OR
+        (target_element_type = 'label' AND target_node_id = ?)
+      )`,
+      [req.projectId, req.params.id, req.params.id]
+    );
     const [result] = await pool.query('DELETE FROM topology_labels WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,
@@ -803,6 +826,13 @@ router.patch('/shapes/:id', async (req, res, next) => {
 // DELETE /api/topology/shapes/:id
 router.delete('/shapes/:id', async (req, res, next) => {
   try {
+    await pool.query(
+      `DELETE FROM topology_edges WHERE project_id = ? AND (
+        (source_element_type = 'shape' AND source_node_id = ?) OR
+        (target_element_type = 'shape' AND target_node_id = ?)
+      )`,
+      [req.projectId, req.params.id, req.params.id]
+    );
     const [result] = await pool.query('DELETE FROM topology_shapes WHERE id = ? AND project_id = ?', [
       req.params.id,
       req.projectId,

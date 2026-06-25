@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useReactFlow } from 'reactflow';
-import { Pencil, X } from 'lucide-react';
+import { Minus, Pencil, Spline, X } from 'lucide-react';
 import './ConnectionEdge.css';
 
 // Linear interpolation between two points; t=0 is `a`, t=1 is `b`.
@@ -48,6 +48,7 @@ export default function ConnectionEdge({
   const storedWaypoint =
     data?.waypoint_x != null && data?.waypoint_y != null ? { x: data.waypoint_x, y: data.waypoint_y } : null;
   const waypoint = preview || storedWaypoint;
+  const pathStyle = data?.path_style || 'bezier';
 
   let edgePath;
   let labelX;
@@ -56,6 +57,10 @@ export default function ConnectionEdge({
     edgePath = `M ${sourceX},${sourceY} L ${waypoint.x},${waypoint.y} L ${targetX},${targetY}`;
     labelX = waypoint.x;
     labelY = waypoint.y;
+  } else if (pathStyle === 'straight') {
+    edgePath = `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
+    labelX = (sourceX + targetX) / 2;
+    labelY = (sourceY + targetY) / 2;
   } else {
     [edgePath, labelX, labelY] = getBezierPath({
       sourceX,
@@ -172,6 +177,19 @@ export default function ConnectionEdge({
                 aria-label="Edit connection"
               >
                 <Pencil size={12} strokeWidth={2.5} />
+              </button>
+              <button
+                type="button"
+                className="connection-edge-btn"
+                title={pathStyle === 'straight' ? 'Switch to curved' : 'Switch to straight'}
+                aria-label="Toggle path style"
+                onClick={() => {
+                  const edgeDbId = Number(id.replace('edge-', ''));
+                  const next = pathStyle === 'straight' ? 'bezier' : 'straight';
+                  data?.onUpdate?.(edgeDbId, { path_style: next });
+                }}
+              >
+                {pathStyle === 'straight' ? <Spline size={12} strokeWidth={2.5} /> : <Minus size={12} strokeWidth={2.5} />}
               </button>
               <button
                 type="button"

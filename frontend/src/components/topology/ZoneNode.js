@@ -1,6 +1,13 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { NodeResizer } from 'reactflow';
+import { Handle, NodeResizer, Position } from 'reactflow';
 import './ZoneNode.css';
+
+const HANDLES = [
+  { id: 'top',    position: Position.Top    },
+  { id: 'right',  position: Position.Right  },
+  { id: 'bottom', position: Position.Bottom },
+  { id: 'left',   position: Position.Left   },
+];
 
 export const ZONE_COLORS = {
   blue: { fill: 'rgba(37, 99, 235, 0.08)', border: 'rgba(37, 99, 235, 0.5)' },
@@ -24,7 +31,7 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function ZoneNode({ id, data, selected }) {
+function ZoneNode({ id, data, selected, isConnectable }) {
   const vlans = data.vlans || [];
   const vlan = data.vlan_id != null ? vlans.find((v) => v.id === data.vlan_id) : null;
 
@@ -63,15 +70,23 @@ function ZoneNode({ id, data, selected }) {
 
   const stop = (e) => e.stopPropagation();
 
+  const inLinkMode = data.mode === 'link';
+
   return (
     <div
-      className="zone-node"
+      className={`zone-node${inLinkMode ? ' zone-node-linkmode' : ''}`}
       style={{
         background: palette.fill,
         border: `2px ${borderStyle} ${palette.border}`,
       }}
       onDoubleClick={openEditor}
     >
+      {HANDLES.map((h) => (
+        <React.Fragment key={h.id}>
+          <Handle id={h.id} type="target" position={h.position} className="zone-node-handle" isConnectable={isConnectable} />
+          <Handle id={h.id} type="source" position={h.position} className="zone-node-handle" isConnectable={isConnectable} />
+        </React.Fragment>
+      ))}
       <NodeResizer
         color={palette.border}
         isVisible={selected}
