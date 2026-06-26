@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronUp, ChevronDown, Upload, Plus, Trash2, BookmarkPlus, Copy } from 'lucide-react';
 import CopySettingsModal from './CopySettingsModal';
-import { useScrollOverflow } from './useScrollOverflow';
 import client from '../../api/client';
 import {
   isPassiveItem, isPowerDevice, isUps, isAts, getOutletCount, getPowerLabel, getPowerSourceLabel,
@@ -118,7 +117,6 @@ const WALL_DIRECT = '';
 
 export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, allSlots, racks, userCatalogEntries, devices, actions, onClose, onUpdated, onSelectSlot, onSaveToCatalog, onDeleteRequest }) {
   const [fields, setFields] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [savingToCatalog, setSavingToCatalog] = useState(false);
   const [catalogName, setCatalogName] = useState('');
@@ -133,7 +131,6 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
   const frontFileRef = useRef(null);
   const rearFileRef = useRef(null);
   const saveTimer = useRef(null);
-  const [setBodyEl, setBodyContentEl, hasMoreBelow] = useScrollOverflow();
 
   const isVerticalPdu = slot?.item_type === 'vertical-pdu';
   const isAtsSlot = slot ? isAts(slot) : false;
@@ -204,15 +201,21 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
   if (!slot || !fields) return null;
 
   const patch = async (changes) => {
-    setSaving(true);
+    // Capture state before applying this change so we can revert on error.
+    const prevSlot = slot;
+    const prevFieldSnapshot = Object.fromEntries(
+      Object.keys(changes).filter((k) => k in fields).map((k) => [k, fields[k]])
+    );
+    // Optimistic: parent sees the change immediately without waiting for the API.
+    onUpdated({ ...slot, ...changes });
+    setError(null);
     try {
-      const updated = await client.patch(`/rack-slots/${slot.id}`, changes);
-      onUpdated(updated.data);
-      setError(null);
+      await client.patch(`/rack-slots/${slot.id}`, changes);
     } catch (err) {
+      // Revert parent and any fields the API rejected.
+      onUpdated(prevSlot);
+      setFields((f) => ({ ...f, ...prevFieldSnapshot }));
       setError(err.response?.data?.error || err.message);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -322,20 +325,17 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     const formData = new FormData();
     formData.append('image', file);
     formData.append('face', face);
-    setSaving(true);
     try {
       await client.post(`/rack-slots/${slot.id}/images`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      // Refresh the slot so the image shows in the faceplate
+      // Fetch updated slot to get the new image URL for the faceplate.
       const updated = await client.get('/rack-slots', { params: { rack_id: slot.rack_id } });
       const updatedSlot = updated.data.find((s) => s.id === slot.id);
       if (updatedSlot) onUpdated(updatedSlot);
       setError(null);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -503,11 +503,10 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
         </div>
       )}
 
-      {saving && <div className="props-panel-saving">Saving…</div>}
       {error && <div className="props-panel-error" onClick={() => setError(null)}>{error}</div>}
 
-      <div className="props-panel-body" ref={setBodyEl}>
-      <div className="props-panel-fields" ref={setBodyContentEl}>
+      <div className="props-panel-body">
+      <div className="props-panel-fields">
         {showGeneral && (
           <>
             {/* Label */}
@@ -1134,11 +1133,6 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
           </>
         )}
       </div>
-        {hasMoreBelow && (
-          <div className="props-more-below">
-            <ChevronDown size={11} /> More below
-          </div>
-        )}
       </div>
 
       {showCopyModal && (

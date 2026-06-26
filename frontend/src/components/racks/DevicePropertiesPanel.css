@@ -153,13 +153,6 @@
   color: #e6e9f0;
 }
 
-.props-panel-saving {
-  padding: 4px 14px;
-  font-size: 0.68rem;
-  color: #4adede;
-  border-bottom: 1px solid #2a2e38;
-}
-
 .props-panel-error {
   padding: 6px 14px;
   font-size: 0.7rem;
@@ -170,16 +163,9 @@
 }
 
 .props-panel-body {
-  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: 10px 14px 24px;
-  /* The panel routinely has more fields (Power section included) than fit
-     a normal laptop viewport, and OS-overlay scrollbars (macOS "when
-     scrolling", most Linux/Windows browsers by default) render with zero
-     width at rest — keep a persistent thin bar as a secondary cue. The
-     primary cue is the explicit .props-more-below chip rendered in JS
-     below, since a scrollbar alone is too easy to miss on a dark theme. */
   scrollbar-width: thin;
   scrollbar-color: #3a3f4b #12141a;
 }
@@ -205,29 +191,6 @@
 
 .props-panel-body::-webkit-scrollbar-thumb:hover {
   background: #4b515f;
-}
-
-/* ─── "More below" scroll hint ──────────────────────────────
-   Pinned to the bottom edge of the panel (not the scrolling body itself)
-   so it stays put regardless of scroll position; toggled in JS based on
-   whether the body is scrolled to its end. */
-.props-more-below {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 5px 0 7px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #9aa1ad;
-  background: linear-gradient(rgba(18, 20, 26, 0), #12141a 55%);
-  pointer-events: none;
 }
 
 /* ─── Field ─────────────────────────────────────────────── */
