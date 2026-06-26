@@ -118,9 +118,9 @@ export function listPowerSources(allSlots, excludeSlotId) {
     .map((s) => ({
       slot: s,
       rackId: s.rack_id,
-      outlets: flattenOutlets(s).map(({ n, type, indexInGroup }) => {
+      outlets: flattenOutlets(s).map(({ n, groupIndex, type, indexInGroup }) => {
         const found = findOccupant(allSlots, s.id, n);
-        return { n, type, indexInGroup, occupant: found?.slot || null, occupantPsu: found?.psu || null };
+        return { n, groupIndex, type, indexInGroup, occupant: found?.slot || null, occupantPsu: found?.psu || null };
       }),
     }));
 }

@@ -1183,7 +1183,7 @@ function PsuField({ slot, allSlots, racks, fieldPrefix, label, fields, onChange 
   const summary = currentSourceId
     ? `${getPowerSourceLabel(currentSourceSlot, allSlots)} → ${
         sourceHasMultipleGroups && currentOutletInfo
-          ? `Group ${currentOutletInfo.groupIndex} — Outlet ${currentOutletInfo.indexInGroup}`
+          ? `${currentOutletInfo.type} — Group ${currentOutletInfo.groupIndex} / Outlet ${currentOutletInfo.indexInGroup}`
           : `Outlet ${currentOutlet}`
       }`
     : unsetLabel;
@@ -1256,38 +1256,17 @@ function PsuField({ slot, allSlots, racks, fieldPrefix, label, fields, onChange 
           {(() => {
             const outlets = selectedSourceEntry.outlets;
             const hasMultipleGroups = outlets.some((o) => o.groupIndex > 1);
-
-            if (!hasMultipleGroups) {
-              return outlets.map(({ n, type, indexInGroup, occupant, occupantPsu }) => {
-                const occupiedByOther = occupant && !(occupant.id === slot.id && occupantPsu === fieldPrefix);
-                return (
-                  <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
-                    {type} — Outlet {indexInGroup}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
-                  </option>
-                );
-              });
-            }
-
-            // Multiple groups: bucket outlets by groupIndex and render with <optgroup>
-            const byGroup = outlets.reduce((acc, o) => {
-              const g = o.groupIndex;
-              if (!acc[g]) acc[g] = { groupIndex: g, type: o.type, outlets: [] };
-              acc[g].outlets.push(o);
-              return acc;
-            }, {});
-
-            return Object.values(byGroup).map((grp) => (
-              <optgroup key={grp.groupIndex} label={`Group ${grp.groupIndex} — ${grp.type}`}>
-                {grp.outlets.map(({ n, indexInGroup, occupant, occupantPsu }) => {
-                  const occupiedByOther = occupant && !(occupant.id === slot.id && occupantPsu === fieldPrefix);
-                  return (
-                    <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
-                      Outlet {indexInGroup}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
-                    </option>
-                  );
-                })}
-              </optgroup>
-            ));
+            return outlets.map(({ n, groupIndex, type, indexInGroup, occupant, occupantPsu }) => {
+              const occupiedByOther = occupant && !(occupant.id === slot.id && occupantPsu === fieldPrefix);
+              const label = hasMultipleGroups
+                ? `${type} — Group ${groupIndex} / Outlet ${indexInGroup}`
+                : `${type} — Outlet ${indexInGroup}`;
+              return (
+                <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
+                  {label}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
+                </option>
+              );
+            });
           })()}
         </select>
       )}
