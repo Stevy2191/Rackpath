@@ -426,15 +426,13 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     <>
       <div className="props-section-divider">Actions</div>
       <div className="props-danger-zone">
-        {sameTypeSlots.length > 0 && (
-          <button
-            type="button"
-            className="props-upload-btn"
-            onClick={() => setShowCopyModal(true)}
-          >
-            <Copy size={12} /> Copy Settings To…
-          </button>
-        )}
+        <button
+          type="button"
+          className="props-upload-btn"
+          onClick={() => setShowCopyModal(true)}
+        >
+          <Copy size={12} /> Copy Settings To…
+        </button>
         {savingToCatalog ? (
           <div className="props-save-catalog-row">
             <input

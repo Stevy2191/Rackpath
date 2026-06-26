@@ -70,30 +70,33 @@ export default function CopySettingsModal({ slot, fields, targets, racks, onUpda
     const val = (v) => (v !== '' && v != null ? v : null);
 
     const payload = {
-      color:             fields.color,
-      mounted_face:      fields.mounted_face,
-      half_depth:        fields.half_depth ? 1 : 0,
-      slot_notes:        fields.slot_notes || null,
-      ip_address:        fields.ip_address || null,
-      serial_number:     fields.serial_number || null,
-      asset_tag:         fields.asset_tag || null,
-      outlet_groups:     fields.outlet_groups,
-      input_voltage:     fields.input_voltage || null,
-      input_plug_type:   fields.input_plug_type || null,
-      capacity_va:       val(fields.capacity_va),
-      capacity_w:        val(fields.capacity_w),
-      capacity_value:    val(fields.capacity_value),
-      capacity_unit:     fields.capacity_unit || null,
-      port_count:        val(fields.port_count),
-      bay_count:         val(fields.bay_count),
-      device_type:       fields.device_type || null,
-      ups_va_rating:     val(fields.ups_va_rating),
-      ups_watt_rating:   val(fields.ups_watt_rating),
-      ups_runtime_full:  val(fields.ups_runtime_full),
-      ups_runtime_half:  val(fields.ups_runtime_half),
-      ups_max_ebm_slots: val(fields.ups_max_ebm_slots),
-      ebm_runtime_full:  val(fields.ebm_runtime_full),
-      ebm_runtime_half:  val(fields.ebm_runtime_half),
+      color:              fields.color,
+      mounted_face:       fields.mounted_face,
+      half_depth:         fields.half_depth ? 1 : 0,
+      slot_width:         fields.slot_width || 'full',
+      slot_notes:         fields.slot_notes || null,
+      ip_address:         fields.ip_address || null,
+      serial_number:      fields.serial_number || null,
+      asset_tag:          fields.asset_tag || null,
+      outlet_groups:      fields.outlet_groups,
+      input_voltage:      fields.input_voltage || null,
+      input_plug_type:    fields.input_plug_type || null,
+      capacity_va:        val(fields.capacity_va),
+      capacity_w:         val(fields.capacity_w),
+      capacity_value:     val(fields.capacity_value),
+      capacity_unit:      fields.capacity_unit || null,
+      port_count:         val(fields.port_count),
+      bay_count:          val(fields.bay_count),
+      device_type:        fields.device_type || null,
+      ups_va_rating:      val(fields.ups_va_rating),
+      ups_watt_rating:    val(fields.ups_watt_rating),
+      ups_runtime_full:   val(fields.ups_runtime_full),
+      ups_runtime_half:   val(fields.ups_runtime_half),
+      runtime_curve:      fields.runtime_curve || null,
+      ups_max_ebm_slots:  val(fields.ups_max_ebm_slots),
+      ebm_runtime_full:   val(fields.ebm_runtime_full),
+      ebm_runtime_half:   val(fields.ebm_runtime_half),
+      ebm_runtime_curve:  fields.ebm_runtime_curve || null,
     };
 
     try {
@@ -132,13 +135,25 @@ export default function CopySettingsModal({ slot, fields, targets, racks, onUpda
             <Check size={18} />
             <span>Settings copied to {copyCount} device{copyCount !== 1 ? 's' : ''}</span>
           </div>
+        ) : targets.length === 0 ? (
+          <>
+            <div className="copy-settings-source">
+              From: <strong>{deviceLabel(slot)}</strong>
+            </div>
+            <div className="copy-settings-desc">
+              No other devices of the same type found in this project.
+            </div>
+            <div className="copy-settings-footer">
+              <button type="button" className="copy-settings-cancel" onClick={onClose}>Close</button>
+            </div>
+          </>
         ) : (
           <>
             <div className="copy-settings-source">
               From: <strong>{deviceLabel(slot)}</strong>
             </div>
             <div className="copy-settings-desc">
-              Copies power, outlet, and device settings. Label and rack position are preserved on each target device.
+              Copies device settings. Label and rack position are preserved on each target device.
             </div>
 
             <div className="copy-settings-list-hdr">
