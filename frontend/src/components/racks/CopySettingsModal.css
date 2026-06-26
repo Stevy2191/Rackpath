@@ -71,6 +71,16 @@
   flex-shrink: 0;
 }
 
+.copy-settings-match-label {
+  padding: 4px 14px 8px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #d4913a;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #1e2128;
+  flex-shrink: 0;
+}
+
 .copy-settings-list-hdr {
   display: flex;
   align-items: center;

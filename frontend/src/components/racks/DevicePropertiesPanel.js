@@ -413,14 +413,63 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
     </>
   );
 
-  // All devices across all project racks with the same catalog type —
-  // shown in Copy Settings modal, grouped by rack.
-  const sameTypeSlots = !isVerticalPdu ? (allSlots || []).filter((s) => {
-    if (s.id === slot.id) return false;
-    if (s.item_type === 'vertical-pdu') return false;
-    if (slot.catalog_id) return s.catalog_id === slot.catalog_id;
-    return slot.custom_type && s.custom_type === slot.custom_type;
-  }) : [];
+  // Tiered matching for Copy Settings — finds same-type devices across all
+  // project racks. Each tier is tried in order; first non-empty result wins.
+  const { sameTypeSlots, copyMatchLabel } = (() => {
+    const candidates = (allSlots || []).filter((s) => s.id !== slot.id);
+
+    // Tier 1: exact catalog entry ID
+    if (slot.catalog_id) {
+      const t1 = candidates.filter((s) => s.catalog_id === slot.catalog_id);
+      if (t1.length > 0) {
+        console.debug('[CopySettings] tier 1 (catalog_id=%s): %d match(es)', slot.catalog_id, t1.length);
+        return { sameTypeSlots: t1, copyMatchLabel: null };
+      }
+    }
+
+    // Tier 2: same render/catalog type string (custom_type) or item_type for
+    // built-in types like vertical-pdu, patch-panel, blank, cable-manager
+    const srcType = (slot.custom_type || '').toLowerCase().trim();
+    const srcItemType = slot.item_type || '';
+    const t2 = candidates.filter((s) => {
+      const tType = (s.custom_type || '').toLowerCase().trim();
+      if (srcType && tType && srcType === tType) return true;
+      if (!srcType && srcItemType && s.item_type === srcItemType) return true;
+      return false;
+    });
+    if (t2.length > 0) {
+      console.debug('[CopySettings] tier 2 (custom_type=%s / item_type=%s): %d match(es)', srcType, srcItemType, t2.length);
+      return { sameTypeSlots: t2, copyMatchLabel: null };
+    }
+
+    // Tier 3: device_type field (ups / ebm)
+    if (slot.device_type) {
+      const t3 = candidates.filter((s) => s.device_type === slot.device_type);
+      if (t3.length > 0) {
+        console.debug('[CopySettings] tier 3 (device_type=%s): %d match(es)', slot.device_type, t3.length);
+        return { sameTypeSlots: t3, copyMatchLabel: 'Showing devices with the same device type' };
+      }
+    }
+
+    // Tier 4: word overlap between item_label / custom_type strings
+    const srcWords = `${slot.item_label || ''} ${slot.custom_type || ''}`.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+    if (srcWords.length > 0) {
+      const t4 = candidates.filter((s) => {
+        const tgtWords = `${s.item_label || ''} ${s.custom_type || ''}`.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+        return srcWords.some((w) => tgtWords.includes(w));
+      });
+      if (t4.length > 0) {
+        console.debug('[CopySettings] tier 4 (name similarity, srcWords=%o): %d match(es)', srcWords, t4.length);
+        return { sameTypeSlots: t4, copyMatchLabel: 'Showing similar devices' };
+      }
+    }
+
+    console.debug(
+      '[CopySettings] no matches. source: catalog_id=%s custom_type=%s item_type=%s device_type=%s label=%s',
+      slot.catalog_id, slot.custom_type, slot.item_type, slot.device_type, slot.item_label,
+    );
+    return { sameTypeSlots: [], copyMatchLabel: null };
+  })();
 
   const actionsSection = (
     <>
@@ -1139,6 +1188,7 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
           slot={slot}
           fields={fields}
           targets={sameTypeSlots}
+          matchLabel={copyMatchLabel}
           racks={racks || []}
           onUpdated={onUpdated}
           onClose={() => setShowCopyModal(false)}

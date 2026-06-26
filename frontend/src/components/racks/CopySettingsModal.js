@@ -7,7 +7,7 @@ function deviceLabel(s) {
   return s.item_label || s.custom_type || `Device ${s.id}`;
 }
 
-export default function CopySettingsModal({ slot, fields, targets, racks, onUpdated, onClose }) {
+export default function CopySettingsModal({ slot, fields, targets, matchLabel, racks, onUpdated, onClose }) {
   const [selected, setSelected] = useState(new Set(targets.map((t) => t.id)));
   const [copying, setCopying] = useState(false);
   const [copyCount, setCopyCount] = useState(null);
@@ -155,6 +155,9 @@ export default function CopySettingsModal({ slot, fields, targets, racks, onUpda
             <div className="copy-settings-desc">
               Copies device settings. Label and rack position are preserved on each target device.
             </div>
+            {matchLabel && (
+              <div className="copy-settings-match-label">{matchLabel}</div>
+            )}
 
             <div className="copy-settings-list-hdr">
               <span>
