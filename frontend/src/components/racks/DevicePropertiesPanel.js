@@ -5,6 +5,7 @@ import client from '../../api/client';
 import {
   isPassiveItem, isPowerDevice, isUps, isAts, getOutletCount, getPowerLabel, getPowerSourceLabel,
   groupPowerSourcesByRack, countOccupiedOutlets, verticalPdusForUps, firstFreeOutlet, findOccupant,
+  flattenOutlets,
 } from '../../utils/power';
 import { pduCatalogEntries } from './rackCatalog';
 import {
@@ -1175,8 +1176,16 @@ function PsuField({ slot, allSlots, racks, fieldPrefix, label, fields, onChange 
   const currentOutlet = fields[outletKey];
   const currentSourceSlot = currentSourceId ? allSlots.find((s) => s.id === currentSourceId) : null;
 
+  const currentSourceOutlets = currentSourceSlot ? flattenOutlets(currentSourceSlot) : [];
+  const currentOutletInfo = currentOutlet != null ? currentSourceOutlets.find((o) => o.n === currentOutlet) : null;
+  const sourceHasMultipleGroups = currentSourceOutlets.some((o) => o.groupIndex > 1);
+
   const summary = currentSourceId
-    ? `${getPowerSourceLabel(currentSourceSlot, allSlots)} → Outlet ${currentOutlet}`
+    ? `${getPowerSourceLabel(currentSourceSlot, allSlots)} → ${
+        sourceHasMultipleGroups && currentOutletInfo
+          ? `Group ${currentOutletInfo.groupIndex} — Outlet ${currentOutletInfo.indexInGroup}`
+          : `Outlet ${currentOutlet}`
+      }`
     : unsetLabel;
 
   const startEditing = () => {
@@ -1244,18 +1253,42 @@ function PsuField({ slot, allSlots, racks, fieldPrefix, label, fields, onChange 
           onChange={(e) => handleOutletChange(Number(e.target.value))}
         >
           <option value="" disabled>Select outlet…</option>
-          {selectedSourceEntry.outlets.map(({ n, type, indexInGroup, occupant, occupantPsu }) => {
-            // An outlet already claimed by this *same* device's other PSU
-            // is just as real a conflict as one claimed by another device
-            // entirely — but the field's own current value (this exact
-            // PSU's existing claim) isn't a conflict with itself.
-            const occupiedByOther = occupant && !(occupant.id === slot.id && occupantPsu === fieldPrefix);
-            return (
-              <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
-                {type} — Outlet {indexInGroup}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
-              </option>
-            );
-          })}
+          {(() => {
+            const outlets = selectedSourceEntry.outlets;
+            const hasMultipleGroups = outlets.some((o) => o.groupIndex > 1);
+
+            if (!hasMultipleGroups) {
+              return outlets.map(({ n, type, indexInGroup, occupant, occupantPsu }) => {
+                const occupiedByOther = occupant && !(occupant.id === slot.id && occupantPsu === fieldPrefix);
+                return (
+                  <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
+                    {type} — Outlet {indexInGroup}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
+                  </option>
+                );
+              });
+            }
+
+            // Multiple groups: bucket outlets by groupIndex and render with <optgroup>
+            const byGroup = outlets.reduce((acc, o) => {
+              const g = o.groupIndex;
+              if (!acc[g]) acc[g] = { groupIndex: g, type: o.type, outlets: [] };
+              acc[g].outlets.push(o);
+              return acc;
+            }, {});
+
+            return Object.values(byGroup).map((grp) => (
+              <optgroup key={grp.groupIndex} label={`Group ${grp.groupIndex} — ${grp.type}`}>
+                {grp.outlets.map(({ n, indexInGroup, occupant, occupantPsu }) => {
+                  const occupiedByOther = occupant && !(occupant.id === slot.id && occupantPsu === fieldPrefix);
+                  return (
+                    <option key={n} value={n} disabled={Boolean(occupiedByOther)}>
+                      Outlet {indexInGroup}{occupiedByOther ? ` — in use (${getPowerLabel(occupant)})` : ''}
+                    </option>
+                  );
+                })}
+              </optgroup>
+            ));
+          })()}
         </select>
       )}
 

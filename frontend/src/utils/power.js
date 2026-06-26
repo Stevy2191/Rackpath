@@ -51,11 +51,13 @@ export function getOutletCount(slot) {
 export function flattenOutlets(slot) {
   const result = [];
   let n = 0;
-  for (const group of getOutletGroups(slot)) {
+  const groups = getOutletGroups(slot);
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi];
     const count = Number(group?.count) || 0;
     for (let i = 1; i <= count; i++) {
       n++;
-      result.push({ n, type: group.type || 'Outlet', indexInGroup: i });
+      result.push({ n, groupIndex: gi + 1, type: group.type || 'Outlet', indexInGroup: i });
     }
   }
   return result;
