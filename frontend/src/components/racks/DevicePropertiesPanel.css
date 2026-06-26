@@ -578,3 +578,74 @@
   border-color: #ef4444;
   background: rgba(239, 68, 68, 0.08);
 }
+
+.runtime-curve-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.runtime-curve-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr 24px;
+  gap: 6px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6b7280;
+  padding: 0 2px;
+}
+
+.runtime-curve-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 24px;
+  gap: 6px;
+  align-items: center;
+}
+
+.runtime-curve-input {
+  padding: 4px 6px;
+  font-size: 0.78rem;
+}
+
+.runtime-curve-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.runtime-curve-remove:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.runtime-curve-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px dashed #2a2e38;
+  border-radius: 4px;
+  color: #6b7280;
+  font-size: 0.72rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.runtime-curve-add:hover {
+  border-color: var(--color-accent, #6366f1);
+  color: var(--color-accent, #6366f1);
+}
+
+.props-field-full {
+  grid-column: 1 / -1;
+}

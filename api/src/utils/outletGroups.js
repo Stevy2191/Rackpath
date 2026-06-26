@@ -32,4 +32,27 @@ function sumOutletGroups(value) {
   return groups.reduce((sum, g) => sum + (Number(g?.count) || 0), 0);
 }
 
-module.exports = { parseOutletGroups, parseRowOutletGroups, parseRowsOutletGroups, sumOutletGroups };
+// Parse a generic JSON array column (same workaround as parseOutletGroups).
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return null;
+  try { const v = JSON.parse(value); return Array.isArray(v) ? v : null; } catch { return null; }
+}
+
+// Mutates runtime_curve / ebm_runtime_curve from strings to arrays in place.
+function parseRowRuntimeCurves(row) {
+  if (!row) return row;
+  if ('runtime_curve' in row) row.runtime_curve = parseJsonArray(row.runtime_curve);
+  if ('ebm_runtime_curve' in row) row.ebm_runtime_curve = parseJsonArray(row.ebm_runtime_curve);
+  return row;
+}
+
+function parseRowsRuntimeCurves(rows) {
+  rows.forEach(parseRowRuntimeCurves);
+  return rows;
+}
+
+module.exports = {
+  parseOutletGroups, parseRowOutletGroups, parseRowsOutletGroups, sumOutletGroups,
+  parseJsonArray, parseRowRuntimeCurves, parseRowsRuntimeCurves,
+};

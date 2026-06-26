@@ -530,6 +530,8 @@ export default function RacksPage() {
         capacity_unit: slot.capacity_unit,
         port_count: slot.port_count,
         bay_count: slot.bay_count,
+        runtime_curve: slot.runtime_curve || null,
+        ebm_runtime_curve: slot.ebm_runtime_curve || null,
       });
       setUserCatalogEntries((cur) => [...cur, res.data]);
     } catch (err) {

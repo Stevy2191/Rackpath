@@ -56,6 +56,7 @@ export default function NodePropertiesPanel({
   onDelete,
   onCopy,
   onConnectionPointsChange,
+  onLabelChange,
 }) {
   const { currentProjectId } = useProject();
   const navigate = useNavigate();
@@ -296,7 +297,10 @@ export default function NodePropertiesPanel({
           id="node-prop-hostname"
           className="node-properties-input"
           value={hostname}
-          onChange={(e) => setHostname(e.target.value)}
+          onChange={(e) => {
+              setHostname(e.target.value);
+              onLabelChange?.(displayNode?.id, e.target.value);
+            }}
           onBlur={commitHostname}
           onKeyDown={(e) => {
             if (e.key === 'Enter') e.target.blur();

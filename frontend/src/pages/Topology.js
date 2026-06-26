@@ -464,6 +464,10 @@ export default function TopologyPage() {
     client.patch(`/topology/nodes/${nodeId}`, patch).catch((err) => setError(err.message));
   }, [selectedNodeId]);
 
+  const handleNodeLabelChange = useCallback((rfId, label) => {
+    if (rfId) canvasRef.current?.updateNode(rfId, { hostname: label, label });
+  }, []);
+
   const handleRemoveSelected = useCallback(() => {
     if (!selectedNodeId) return;
     const g = canvasRef.current?.getGraph();
@@ -929,6 +933,7 @@ export default function TopologyPage() {
             onDelete={handleRemoveSelected}
             onCopy={handleCopyNode}
             onConnectionPointsChange={handleConnectionPointsChange}
+            onLabelChange={handleNodeLabelChange}
           />
 
           <EdgePropertiesPanel

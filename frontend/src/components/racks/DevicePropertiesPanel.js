@@ -18,6 +18,91 @@ import { resolveRenderType } from './deviceRenderConfig';
 import { computeVerticalPduPositions, resolveFractionalPlacement, resolveVerticalPduSide } from './rackPlacement';
 import './DevicePropertiesPanel.css';
 
+const DEFAULT_UPS_CURVE = [
+  { load_watts: 500,  runtime_minutes: 90 },
+  { load_watts: 1000, runtime_minutes: 30 },
+  { load_watts: 1500, runtime_minutes: 18 },
+  { load_watts: 2000, runtime_minutes: 12 },
+  { load_watts: 2500, runtime_minutes: 7  },
+  { load_watts: 3000, runtime_minutes: 6  },
+  { load_watts: 3500, runtime_minutes: 5  },
+  { load_watts: 4000, runtime_minutes: 5  },
+  { load_watts: 4500, runtime_minutes: 4  },
+  { load_watts: 5000, runtime_minutes: 3  },
+];
+
+const DEFAULT_EBM_CURVE = [
+  { load_watts: 1000, added_runtime_minutes: 13 },
+  { load_watts: 1500, added_runtime_minutes: 11 },
+  { load_watts: 2000, added_runtime_minutes: 9  },
+  { load_watts: 2500, added_runtime_minutes: 8  },
+  { load_watts: 3000, added_runtime_minutes: 7  },
+  { load_watts: 3500, added_runtime_minutes: 6  },
+  { load_watts: 4000, added_runtime_minutes: 5  },
+  { load_watts: 4500, added_runtime_minutes: 4  },
+  { load_watts: 5000, added_runtime_minutes: 3  },
+];
+
+function RuntimeCurveEditor({ curve, runtimeKey, runtimeLabel, onChange }) {
+  const sorted = [...curve].sort((a, b) => a.load_watts - b.load_watts);
+
+  const commitRow = (idx, field, raw) => {
+    const num = raw === '' ? null : Number(raw);
+    if (num === null || isNaN(num)) return;
+    const next = [...sorted];
+    next[idx] = { ...next[idx], [field]: num };
+    const finalSorted = [...next].sort((a, b) => a.load_watts - b.load_watts);
+    onChange(finalSorted);
+  };
+
+  const addRow = () => {
+    const maxLoad = sorted.length ? sorted[sorted.length - 1].load_watts : 0;
+    const newRow = { load_watts: maxLoad + 500, [runtimeKey]: 1 };
+    onChange([...sorted, newRow]);
+  };
+
+  const removeRow = (idx) => {
+    const next = sorted.filter((_, i) => i !== idx);
+    onChange(next);
+  };
+
+  return (
+    <div className="runtime-curve-editor">
+      <div className="runtime-curve-header">
+        <span>Load (W)</span>
+        <span>{runtimeLabel}</span>
+        <span />
+      </div>
+      {sorted.map((row, idx) => (
+        <div key={idx} className="runtime-curve-row">
+          <input
+            className="props-input runtime-curve-input"
+            type="number"
+            min="0"
+            defaultValue={row.load_watts}
+            onBlur={(e) => commitRow(idx, 'load_watts', e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+          />
+          <input
+            className="props-input runtime-curve-input"
+            type="number"
+            min="0"
+            defaultValue={row[runtimeKey]}
+            onBlur={(e) => commitRow(idx, runtimeKey, e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+          />
+          <button type="button" className="runtime-curve-remove" onClick={() => removeRow(idx)} title="Remove row">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}
+      <button type="button" className="runtime-curve-add" onClick={addRow}>
+        <Plus size={13} /> Add Point
+      </button>
+    </div>
+  );
+}
+
 const FACE_OPTIONS = [
   { value: 'front', label: 'Front' },
   { value: 'rear',  label: 'Rear' },
@@ -93,10 +178,12 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
       ups_watt_rating:          slot.ups_watt_rating          ?? '',
       ups_runtime_full:         slot.ups_runtime_full         ?? '',
       ups_runtime_half:         slot.ups_runtime_half         ?? '',
+      runtime_curve:            Array.isArray(slot.runtime_curve) ? slot.runtime_curve : null,
       ups_max_ebm_slots:        slot.ups_max_ebm_slots        ?? '',
       ebm_connected_ups_id:     slot.ebm_connected_ups_id     || null,
       ebm_runtime_full:         slot.ebm_runtime_full         ?? '',
       ebm_runtime_half:         slot.ebm_runtime_half         ?? '',
+      ebm_runtime_curve:        Array.isArray(slot.ebm_runtime_curve) ? slot.ebm_runtime_curve : null,
       slot_width:    slot.slot_width || 'full',
       half_depth:    !!slot.half_depth,
       power_source_slot_id: slot.power_source_slot_id || null,
@@ -808,26 +895,13 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
                         placeholder="e.g. 4500"
                       />
                     </div>
-                    <div className="props-field">
-                      <label className="props-field-label">Runtime at 100% Load (min)</label>
-                      <input
-                        className="props-input"
-                        type="number"
-                        min="0"
-                        value={fields.ups_runtime_full}
-                        onChange={(e) => setField('ups_runtime_full', e.target.value === '' ? null : Number(e.target.value))}
-                        placeholder="e.g. 10"
-                      />
-                    </div>
-                    <div className="props-field">
-                      <label className="props-field-label">Runtime at 50% Load (min)</label>
-                      <input
-                        className="props-input"
-                        type="number"
-                        min="0"
-                        value={fields.ups_runtime_half}
-                        onChange={(e) => setField('ups_runtime_half', e.target.value === '' ? null : Number(e.target.value))}
-                        placeholder="e.g. 25"
+                    <div className="props-field props-field-full">
+                      <label className="props-field-label">Runtime Curve</label>
+                      <RuntimeCurveEditor
+                        curve={fields.runtime_curve || DEFAULT_UPS_CURVE}
+                        runtimeKey="runtime_minutes"
+                        runtimeLabel="Runtime (min)"
+                        onChange={(c) => setField('runtime_curve', c)}
                       />
                     </div>
                     <div className="props-field">
@@ -864,26 +938,13 @@ export default function DevicePropertiesPanel({ slot, rackHeight, rackSlots, all
                           ))}
                       </select>
                     </div>
-                    <div className="props-field">
-                      <label className="props-field-label">Added Runtime at 100% Load (min)</label>
-                      <input
-                        className="props-input"
-                        type="number"
-                        min="0"
-                        value={fields.ebm_runtime_full}
-                        onChange={(e) => setField('ebm_runtime_full', e.target.value === '' ? null : Number(e.target.value))}
-                        placeholder="e.g. 8"
-                      />
-                    </div>
-                    <div className="props-field">
-                      <label className="props-field-label">Added Runtime at 50% Load (min)</label>
-                      <input
-                        className="props-input"
-                        type="number"
-                        min="0"
-                        value={fields.ebm_runtime_half}
-                        onChange={(e) => setField('ebm_runtime_half', e.target.value === '' ? null : Number(e.target.value))}
-                        placeholder="e.g. 20"
+                    <div className="props-field props-field-full">
+                      <label className="props-field-label">Added Runtime Curve</label>
+                      <RuntimeCurveEditor
+                        curve={fields.ebm_runtime_curve || DEFAULT_EBM_CURVE}
+                        runtimeKey="added_runtime_minutes"
+                        runtimeLabel="Added Runtime (min)"
+                        onChange={(c) => setField('ebm_runtime_curve', c)}
                       />
                     </div>
                   </>

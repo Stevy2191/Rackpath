@@ -21,14 +21,72 @@ function fmtNum(n) {
   return v ? v.toLocaleString() : '—';
 }
 
-// Linear interpolation between the (50%, half) and (100%, full) points.
-// Extrapolates for loads outside that range.
-function interpolate(full, half, loadPct) {
-  const f = full != null && full !== '' ? Number(full) : null;
-  const h = half != null && half !== '' ? Number(half) : null;
-  if (!f || !h) return null;
-  const result = h + (f - h) * (loadPct - 50) / 50;
-  return Math.round(Math.max(0, result));
+function interpolateCurve(curve, targetWatts) {
+  if (!curve || curve.length === 0) return null;
+  const sorted = [...curve].sort((a, b) => a.load_watts - b.load_watts);
+  if (targetWatts <= sorted[0].load_watts) return sorted[0].runtime_minutes;
+  if (targetWatts >= sorted[sorted.length - 1].load_watts) return sorted[sorted.length - 1].runtime_minutes;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (targetWatts >= sorted[i].load_watts && targetWatts <= sorted[i + 1].load_watts) {
+      const t = (targetWatts - sorted[i].load_watts) / (sorted[i + 1].load_watts - sorted[i].load_watts);
+      return Math.round(sorted[i].runtime_minutes + t * (sorted[i + 1].runtime_minutes - sorted[i].runtime_minutes));
+    }
+  }
+  return null;
+}
+
+function interpolateEbmCurve(curve, targetWatts) {
+  if (!curve || curve.length === 0) return 0;
+  const sorted = [...curve].sort((a, b) => a.load_watts - b.load_watts);
+  if (targetWatts <= sorted[0].load_watts) return sorted[0].added_runtime_minutes;
+  if (targetWatts >= sorted[sorted.length - 1].load_watts) return sorted[sorted.length - 1].added_runtime_minutes;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (targetWatts >= sorted[i].load_watts && targetWatts <= sorted[i + 1].load_watts) {
+      const t = (targetWatts - sorted[i].load_watts) / (sorted[i + 1].load_watts - sorted[i].load_watts);
+      return Math.round(sorted[i].added_runtime_minutes + t * (sorted[i + 1].added_runtime_minutes - sorted[i].added_runtime_minutes));
+    }
+  }
+  return 0;
+}
+
+function Sparkline({ curve, ebmCurves, wattRating, currentLoadPct }) {
+  if (!curve || curve.length < 2 || !wattRating) return null;
+  const W = 100;
+  const H = 36;
+  const PAD = 2;
+
+  const points = [];
+  for (let pct = 0; pct <= 100; pct += 5) {
+    const watts = (pct / 100) * wattRating;
+    const base = interpolateCurve(curve, watts) ?? 0;
+    const ebmAdd = (ebmCurves || []).reduce((sum, ec) => sum + interpolateEbmCurve(ec, watts), 0);
+    points.push({ pct, runtime: base + ebmAdd });
+  }
+
+  const maxRuntime = Math.max(...points.map((p) => p.runtime), 1);
+  const toX = (pct) => PAD + (pct / 100) * (W - PAD * 2);
+  const toY = (rt) => H - PAD - (rt / maxRuntime) * (H - PAD * 2);
+
+  const polyPoints = points.map((p) => `${toX(p.pct)},${toY(p.runtime)}`).join(' ');
+
+  const cx = toX(currentLoadPct);
+  const currentWatts = (currentLoadPct / 100) * wattRating;
+  const currentBase = interpolateCurve(curve, currentWatts) ?? 0;
+  const currentEbm = (ebmCurves || []).reduce((sum, ec) => sum + interpolateEbmCurve(ec, currentWatts), 0);
+  const cy = toY(currentBase + currentEbm);
+
+  return (
+    <svg width={W} height={H} className="ups-sparkline">
+      <polyline
+        points={polyPoints}
+        fill="none"
+        stroke="var(--color-accent, #6366f1)"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx={cx} cy={cy} r="3" fill="var(--color-accent, #6366f1)" />
+    </svg>
+  );
 }
 
 function deviceLabel(s) {
@@ -36,58 +94,54 @@ function deviceLabel(s) {
 }
 
 export default function UPSPowerSummary({ rack, racks, allSlots, onClose }) {
-  const [loadPct, setLoadPct] = useState(100);
+  const [loadPct, setLoadPct] = useState(50);
 
   const rackSlots = allSlots.filter((s) => s.rack_id === rack.id);
   const upsDevices = rackSlots.filter((s) => s.device_type === 'ups');
   const ebmDevices = rackSlots.filter((s) => s.device_type === 'ebm');
 
-  // Every vertical PDU mounted in THIS rack, regardless of which rack its
-  // own UPS connection lives in — a PDU here can be wired to a UPS in any
-  // rack in the project (see DevicePropertiesPanel's "Connected To"), and
-  // that's exactly the case this list calls out with a Cross-Rack badge.
   const verticalPdus = rackSlots.filter((s) => s.item_type === 'vertical-pdu');
   const pduSides = computeVerticalPduPositions(verticalPdus);
   const pduConnections = verticalPdus.map((pdu) => {
     const ups = pdu.power_source_slot_id ? allSlots.find((s) => s.id === pdu.power_source_slot_id) : null;
     const upsRack = ups ? (racks || []).find((r) => r.id === ups.rack_id) : null;
     const crossRack = Boolean(ups) && ups.rack_id !== rack.id;
-    return {
-      pdu,
-      side: pduSides.get(pdu.id)?.side || 'left',
-      ups,
-      upsRackName: upsRack?.name || null,
-      crossRack,
-    };
+    return { pdu, side: pduSides.get(pdu.id)?.side || 'left', ups, upsRackName: upsRack?.name || null, crossRack };
   });
 
   const upsRows = upsDevices.map((ups) => {
+    const wattRating = Number(ups.ups_watt_rating) || null;
+    const targetWatts = wattRating ? (loadPct / 100) * wattRating : null;
     const connectedEbms = ebmDevices.filter((e) => e.ebm_connected_ups_id === ups.id);
-    const ebmFull = connectedEbms.reduce((s, e) => s + (Number(e.ebm_runtime_full) || 0), 0);
-    const ebmHalf = connectedEbms.reduce((s, e) => s + (Number(e.ebm_runtime_half) || 0), 0);
-    const baseFull = ups.ups_runtime_full != null ? Number(ups.ups_runtime_full) : null;
-    const baseHalf = ups.ups_runtime_half != null ? Number(ups.ups_runtime_half) : null;
-    const totalFull = baseFull != null ? baseFull + ebmFull : null;
-    const totalHalf = baseHalf != null ? baseHalf + ebmHalf : null;
-    return { ups, connectedEbms, ebmFull, ebmHalf, baseFull, baseHalf, totalFull, totalHalf };
+
+    const baseRuntime = (ups.runtime_curve && targetWatts != null)
+      ? interpolateCurve(ups.runtime_curve, targetWatts)
+      : null;
+
+    const ebmAdded = connectedEbms.reduce((sum, e) => {
+      if (!e.ebm_runtime_curve || targetWatts == null) return sum;
+      return sum + interpolateEbmCurve(e.ebm_runtime_curve, targetWatts);
+    }, 0);
+
+    const totalRuntime = baseRuntime != null ? baseRuntime + ebmAdded : null;
+    const ebmCurves = connectedEbms.map((e) => e.ebm_runtime_curve).filter(Boolean);
+
+    return { ups, connectedEbms, wattRating, targetWatts, baseRuntime, ebmAdded, totalRuntime, ebmCurves };
   });
 
   const totalVA = upsDevices.reduce((s, u) => s + (Number(u.ups_va_rating) || 0), 0) || null;
   const totalW  = upsDevices.reduce((s, u) => s + (Number(u.ups_watt_rating) || 0), 0) || null;
 
-  const estRuntimes = upsRows
-    .map((r) => interpolate(r.totalFull, r.totalHalf, loadPct))
-    .filter((v) => v != null);
+  const estRuntimes = upsRows.map((r) => r.totalRuntime).filter((v) => v != null);
   const minRuntime = estRuntimes.length > 0 ? Math.min(...estRuntimes) : null;
 
-  // N+1: capacity with the largest UPS removed (worst-case failure)
-  const sortedByVA = [...upsDevices].sort(
-    (a, b) => (Number(b.ups_va_rating) || 0) - (Number(a.ups_va_rating) || 0)
-  );
+  const sortedByVA = [...upsDevices].sort((a, b) => (Number(b.ups_va_rating) || 0) - (Number(a.ups_va_rating) || 0));
   const largestVA = Number(sortedByVA[0]?.ups_va_rating) || 0;
   const largestW  = Number(sortedByVA[0]?.ups_watt_rating) || 0;
   const redundantVA = totalVA != null ? totalVA - largestVA : null;
   const redundantW  = totalW  != null ? totalW  - largestW  : null;
+
+  const currentTotalW = totalW ? Math.round((loadPct / 100) * totalW) : null;
 
   return (
     <div className="ups-summary-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -110,13 +164,10 @@ export default function UPSPowerSummary({ rack, racks, allSlots, onClose }) {
           ) : (
             <>
               {upsDevices.length === 0 && (
-                <div className="ups-summary-empty">
-                  No UPS devices found in this rack.
-                </div>
+                <div className="ups-summary-empty">No UPS devices found in this rack.</div>
               )}
 
-              {upsRows.map(({ ups, connectedEbms, ebmFull, ebmHalf, baseFull, baseHalf, totalFull, totalHalf }) => {
-                const estRuntime = interpolate(totalFull, totalHalf, loadPct);
+              {upsRows.map(({ ups, connectedEbms, wattRating, targetWatts, baseRuntime, ebmAdded, totalRuntime, ebmCurves }) => {
                 const hasEbms = connectedEbms.length > 0;
                 return (
                   <div key={ups.id} className="ups-summary-block">
@@ -145,51 +196,25 @@ export default function UPSPowerSummary({ rack, racks, allSlots, onClose }) {
                       </div>
                     )}
 
-                    <div className="ups-summary-runtime-grid">
-                      <div className="ups-summary-runtime-col">
-                        <div className="ups-summary-runtime-header">Base Runtime</div>
-                        <div className="ups-summary-runtime-row">
-                          <span>{fmtRuntime(baseFull)}</span>
-                          <span className="ups-summary-muted">@ 100%</span>
-                        </div>
-                        <div className="ups-summary-runtime-row">
-                          <span>{fmtRuntime(baseHalf)}</span>
-                          <span className="ups-summary-muted">@ 50%</span>
-                        </div>
-                      </div>
-                      {hasEbms && (
-                        <div className="ups-summary-runtime-col">
-                          <div className="ups-summary-runtime-header">+ EBMs</div>
-                          <div className="ups-summary-runtime-row">
-                            <span>+{fmtRuntime(ebmFull)}</span>
-                            <span className="ups-summary-muted">@ 100%</span>
-                          </div>
-                          <div className="ups-summary-runtime-row">
-                            <span>+{fmtRuntime(ebmHalf)}</span>
-                            <span className="ups-summary-muted">@ 50%</span>
-                          </div>
+                    <div className="ups-summary-curve-row">
+                      <Sparkline
+                        curve={ups.runtime_curve}
+                        ebmCurves={ebmCurves}
+                        wattRating={wattRating}
+                        currentLoadPct={loadPct}
+                      />
+                      {totalRuntime != null && (
+                        <div className="ups-summary-est">
+                          <span className="ups-summary-muted">
+                            {targetWatts != null ? `${Math.round(targetWatts).toLocaleString()} W` : `${loadPct}%`}
+                          </span>
+                          <strong>{fmtRuntime(totalRuntime)}</strong>
+                          {hasEbms && baseRuntime != null && (
+                            <span className="ups-summary-muted">(+{fmtRuntime(ebmAdded)} EBM)</span>
+                          )}
                         </div>
                       )}
-                      <div className="ups-summary-runtime-col ups-summary-runtime-total">
-                        <div className="ups-summary-runtime-header">
-                          {hasEbms ? 'Total Runtime' : 'Runtime'}
-                        </div>
-                        <div className="ups-summary-runtime-row">
-                          <span>{fmtRuntime(totalFull)}</span>
-                          <span className="ups-summary-muted">@ 100%</span>
-                        </div>
-                        <div className="ups-summary-runtime-row">
-                          <span>{fmtRuntime(totalHalf)}</span>
-                          <span className="ups-summary-muted">@ 50%</span>
-                        </div>
-                      </div>
                     </div>
-
-                    {estRuntime != null && (
-                      <div className="ups-summary-est">
-                        Est. runtime at {loadPct}% load:&nbsp;<strong>{fmtRuntime(estRuntime)}</strong>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -224,60 +249,64 @@ export default function UPSPowerSummary({ rack, racks, allSlots, onClose }) {
               )}
 
               {upsDevices.length > 0 && (
-              <div className="ups-summary-totals-section">
-                <div className="ups-summary-totals-label">Totals</div>
-                <div className="ups-summary-totals-grid">
-                  <div>
-                    <div className="ups-summary-tl">Total VA</div>
-                    <div className="ups-summary-tv">{totalVA ? totalVA.toLocaleString() : '—'}</div>
+                <div className="ups-summary-totals-section">
+                  <div className="ups-summary-totals-label">Totals</div>
+                  <div className="ups-summary-totals-grid">
+                    <div>
+                      <div className="ups-summary-tl">Total VA</div>
+                      <div className="ups-summary-tv">{totalVA ? totalVA.toLocaleString() : '—'}</div>
+                    </div>
+                    <div>
+                      <div className="ups-summary-tl">Total W</div>
+                      <div className="ups-summary-tv">{totalW ? totalW.toLocaleString() : '—'}</div>
+                    </div>
+                    <div>
+                      <div className="ups-summary-tl">UPS Units</div>
+                      <div className="ups-summary-tv">{upsDevices.length}</div>
+                    </div>
+                    <div>
+                      <div className="ups-summary-tl">EBMs</div>
+                      <div className="ups-summary-tv">{ebmDevices.length}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="ups-summary-tl">Total W</div>
-                    <div className="ups-summary-tv">{totalW ? totalW.toLocaleString() : '—'}</div>
-                  </div>
-                  <div>
-                    <div className="ups-summary-tl">UPS Units</div>
-                    <div className="ups-summary-tv">{upsDevices.length}</div>
-                  </div>
-                  <div>
-                    <div className="ups-summary-tl">EBMs</div>
-                    <div className="ups-summary-tv">{ebmDevices.length}</div>
-                  </div>
-                </div>
 
-                <div className="ups-summary-slider-wrap">
-                  <div className="ups-summary-slider-row">
-                    <span className="ups-summary-slider-label">Load</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="5"
-                      value={loadPct}
-                      onChange={(e) => setLoadPct(Number(e.target.value))}
-                      className="ups-summary-slider"
-                    />
-                    <span className="ups-summary-slider-pct">{loadPct}%</span>
+                  <div className="ups-summary-slider-wrap">
+                    <div className="ups-summary-slider-row">
+                      <span className="ups-summary-slider-label">Load</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="5"
+                        value={loadPct}
+                        onChange={(e) => setLoadPct(Number(e.target.value))}
+                        className="ups-summary-slider"
+                      />
+                      <span className="ups-summary-slider-pct">
+                        {loadPct}%
+                        {currentTotalW != null && (
+                          <span className="ups-summary-slider-watts"> ({currentTotalW.toLocaleString()} W)</span>
+                        )}
+                      </span>
+                    </div>
+                    {minRuntime != null && (
+                      <div className="ups-summary-est-total">
+                        Shortest runtime:&nbsp;<strong>{fmtRuntime(minRuntime)}</strong>
+                      </div>
+                    )}
                   </div>
-                  {minRuntime != null && (
-                    <div className="ups-summary-est-total">
-                      Est. shortest runtime at {loadPct}% load:&nbsp;
-                      <strong>{fmtRuntime(minRuntime)}</strong>
+
+                  {upsDevices.length >= 2 && (totalVA || totalW) && (
+                    <div className="ups-summary-redundancy">
+                      <strong>N+1 Redundancy</strong> — capacity with one UPS offline:&nbsp;
+                      <span className="ups-summary-redundancy-val">
+                        {redundantVA != null ? `${redundantVA.toLocaleString()} VA` : '—'}
+                        {' / '}
+                        {redundantW != null ? `${redundantW.toLocaleString()} W` : '—'}
+                      </span>
                     </div>
                   )}
                 </div>
-
-                {upsDevices.length >= 2 && (totalVA || totalW) && (
-                  <div className="ups-summary-redundancy">
-                    <strong>N+1 Redundancy</strong> — capacity with one UPS offline:&nbsp;
-                    <span className="ups-summary-redundancy-val">
-                      {redundantVA != null ? `${redundantVA.toLocaleString()} VA` : '—'}
-                      {' / '}
-                      {redundantW != null ? `${redundantW.toLocaleString()} W` : '—'}
-                    </span>
-                  </div>
-                )}
-              </div>
               )}
             </>
           )}

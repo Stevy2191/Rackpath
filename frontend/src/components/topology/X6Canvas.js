@@ -426,7 +426,7 @@ const X6Canvas = forwardRef(function X6Canvas(props, ref) {
         allowBlank: false,
         allowLoop: false,
         allowMulti: true,
-        allowNode: true,
+        allowNode: false,
         allowEdge: false,
         highlight: true,
         anchor: 'center',
@@ -445,9 +445,7 @@ const X6Canvas = forwardRef(function X6Canvas(props, ref) {
             zIndex: 10,
           });
         },
-        validateMagnet() {
-          return modeRef.current === 'link';
-        },
+        validateMagnet() { return true; },
         validateConnection({ sourceCell, targetCell }) {
           return sourceCell !== targetCell;
         },
@@ -489,7 +487,6 @@ const X6Canvas = forwardRef(function X6Canvas(props, ref) {
 
     // ── Port visibility on hover (only in link mode) ──────────────────────────
     graph.on('node:mouseenter', ({ node }) => {
-      if (modeRef.current !== 'link') return;
       node.getPorts().forEach((p) => {
         node.setPortProp(p.id, 'attrs/circle/opacity', 1);
       });

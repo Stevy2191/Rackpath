@@ -4,7 +4,10 @@ const path = require('path');
 const multer = require('multer');
 const pool = require('../db/pool');
 const { logActivity } = require('../services/activityLog');
-const { parseRowOutletGroups, parseRowsOutletGroups, sumOutletGroups } = require('../utils/outletGroups');
+const { parseRowOutletGroups, parseRowsOutletGroups, sumOutletGroups, parseRowRuntimeCurves, parseRowsRuntimeCurves } = require('../utils/outletGroups');
+
+function parseRackSlotRow(row) { return parseRowRuntimeCurves(parseRowOutletGroups(row)); }
+function parseRackSlotRows(rows) { rows.forEach(parseRackSlotRow); return rows; }
 
 const router = express.Router();
 
@@ -220,7 +223,7 @@ router.get('/', async (req, res, next) => {
     }
     query += ' ORDER BY rs.u_position';
     const [rows] = await pool.query(query, params);
-    res.json(parseRowsOutletGroups(rows));
+    res.json(parseRackSlotRows(rows));
   } catch (err) {
     next(err);
   }
@@ -246,7 +249,9 @@ router.post('/', async (req, res, next) => {
       port_count, bay_count, capacity_va, capacity_w,
       device_type,
       ups_va_rating, ups_watt_rating, ups_runtime_full, ups_runtime_half, ups_max_ebm_slots,
+      runtime_curve,
       ebm_connected_ups_id, ebm_runtime_full, ebm_runtime_half,
+      ebm_runtime_curve,
       power_source_slot_id, power_source_outlet, mount_side,
       psu2_source_slot_id, psu2_source_outlet,
     } = req.body;
@@ -330,10 +335,12 @@ router.post('/', async (req, res, next) => {
           port_count, bay_count, capacity_va, capacity_w,
           device_type,
           ups_va_rating, ups_watt_rating, ups_runtime_full, ups_runtime_half, ups_max_ebm_slots,
+          runtime_curve,
           ebm_connected_ups_id, ebm_runtime_full, ebm_runtime_half,
+          ebm_runtime_curve,
           power_source_slot_id, power_source_outlet, mount_side, vertical_pdu_position,
           psu2_source_slot_id, psu2_source_outlet)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId, rack_id, device_id || null,
         item_type || 'device', item_label || null, custom_type || null, color || null,
@@ -349,7 +356,9 @@ router.post('/', async (req, res, next) => {
         device_type || null,
         ups_va_rating || null, ups_watt_rating || null, ups_runtime_full || null,
         ups_runtime_half || null, ups_max_ebm_slots || null,
+        runtime_curve ? JSON.stringify(runtime_curve) : null,
         ebm_connected_ups_id || null, ebm_runtime_full || null, ebm_runtime_half || null,
+        ebm_runtime_curve ? JSON.stringify(ebm_runtime_curve) : null,
         power_source_slot_id || null, power_source_outlet || null,
         verticalPduPlacement ? verticalPduPlacement.mount_side : (mount_side || null),
         verticalPduPlacement ? verticalPduPlacement.vertical_pdu_position : null,
@@ -369,7 +378,7 @@ router.post('/', async (req, res, next) => {
       itemName = deviceRows[0]?.hostname || itemName;
     }
     logActivity(req.projectId, req.user.id, 'rack_slot.assigned', `${itemName} → U${u_position}`);
-    res.status(201).json(parseRowOutletGroups(rows[0]));
+    res.status(201).json(parseRackSlotRow(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -387,7 +396,9 @@ router.put('/:id', async (req, res, next) => {
       port_count, bay_count, capacity_va, capacity_w,
       device_type,
       ups_va_rating, ups_watt_rating, ups_runtime_full, ups_runtime_half, ups_max_ebm_slots,
+      runtime_curve,
       ebm_connected_ups_id, ebm_runtime_full, ebm_runtime_half,
+      ebm_runtime_curve,
       power_source_slot_id, power_source_outlet, mount_side,
       psu2_source_slot_id, psu2_source_outlet,
     } = req.body;
@@ -468,7 +479,9 @@ router.put('/:id', async (req, res, next) => {
            port_count=?, bay_count=?, capacity_va=?, capacity_w=?,
            device_type=?,
            ups_va_rating=?, ups_watt_rating=?, ups_runtime_full=?, ups_runtime_half=?, ups_max_ebm_slots=?,
+           runtime_curve=?,
            ebm_connected_ups_id=?, ebm_runtime_full=?, ebm_runtime_half=?,
+           ebm_runtime_curve=?,
            power_source_slot_id=?, power_source_outlet=?, mount_side=?, vertical_pdu_position=?,
            psu2_source_slot_id=?, psu2_source_outlet=?
        WHERE id=? AND project_id=?`,
@@ -487,7 +500,9 @@ router.put('/:id', async (req, res, next) => {
         device_type || null,
         ups_va_rating || null, ups_watt_rating || null, ups_runtime_full || null,
         ups_runtime_half || null, ups_max_ebm_slots || null,
+        runtime_curve ? JSON.stringify(runtime_curve) : null,
         ebm_connected_ups_id || null, ebm_runtime_full || null, ebm_runtime_half || null,
+        ebm_runtime_curve ? JSON.stringify(ebm_runtime_curve) : null,
         power_source_slot_id || null, power_source_outlet || null,
         verticalPduPlacement ? verticalPduPlacement.mount_side : (mount_side || null),
         verticalPduPlacement ? verticalPduPlacement.vertical_pdu_position : null,
@@ -502,7 +517,7 @@ router.put('/:id', async (req, res, next) => {
        FROM rack_slots rs LEFT JOIN devices d ON d.id = rs.device_id WHERE rs.id = ?`,
       [req.params.id]
     );
-    res.json(parseRowOutletGroups(rows[0]));
+    res.json(parseRackSlotRow(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -521,7 +536,9 @@ router.patch('/:id', async (req, res, next) => {
       'port_count', 'bay_count', 'capacity_va', 'capacity_w',
       'device_type',
       'ups_va_rating', 'ups_watt_rating', 'ups_runtime_full', 'ups_runtime_half', 'ups_max_ebm_slots',
+      'runtime_curve',
       'ebm_connected_ups_id', 'ebm_runtime_full', 'ebm_runtime_half',
+      'ebm_runtime_curve',
       'power_source_slot_id', 'power_source_outlet', 'mount_side',
       'psu2_source_slot_id', 'psu2_source_outlet',
     ];
@@ -534,6 +551,12 @@ router.patch('/:id', async (req, res, next) => {
     }
     if ('outlet_groups' in updates) {
       updates.outlet_groups = updates.outlet_groups ? JSON.stringify(updates.outlet_groups) : null;
+    }
+    if ('runtime_curve' in updates) {
+      updates.runtime_curve = updates.runtime_curve ? JSON.stringify(updates.runtime_curve) : null;
+    }
+    if ('ebm_runtime_curve' in updates) {
+      updates.ebm_runtime_curve = updates.ebm_runtime_curve ? JSON.stringify(updates.ebm_runtime_curve) : null;
     }
 
     if ('mount_side' in updates && updates.mount_side !== null && !MOUNT_SIDES.includes(updates.mount_side)) {
@@ -669,7 +692,7 @@ router.patch('/:id', async (req, res, next) => {
        FROM rack_slots rs LEFT JOIN devices d ON d.id = rs.device_id WHERE rs.id = ?`,
       [req.params.id]
     );
-    res.json(parseRowOutletGroups(rows[0]));
+    res.json(parseRackSlotRow(rows[0]));
   } catch (err) {
     next(err);
   }
