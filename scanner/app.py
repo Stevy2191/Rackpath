@@ -62,6 +62,7 @@ def _resolve_options(options):
         'tcp_ping': flag('tcp_ping', True),
         'udp_ping': flag('udp_ping', False),
         'port_scan': flag('port_scan', True),
+        'udp_port_scan': flag('udp_port_scan', False),
         'port_range': o.get('port_range') or 'top1000',
         'os_detection': flag('os_detection', True),
         'service_detection': flag('service_detection', False),
@@ -203,6 +204,13 @@ def _enrich_host(ip, snmp_community, local_arp, mdns_map, opts):
     else:
         nmap_result = {"ports": [], "hostname": None, "os_guess": None}
 
+    # UDP port scan is a separate nmap pass (see scan_udp_ports). Merge its
+    # results into the same port list so downstream handling is uniform.
+    if opts['udp_port_scan']:
+        udp_ports = nmap_scan.scan_udp_ports(ip)
+        if udp_ports:
+            nmap_result.setdefault("ports", []).extend(udp_ports)
+
     # MAC: prefer the kernel ARP cache, fall back to an active ARP probe.
     mac = local_arp.get(ip)
     if not mac:
@@ -229,11 +237,22 @@ def _enrich_host(ip, snmp_community, local_arp, mdns_map, opts):
         neighbors = []
         snmp_arp = {}
 
-    open_ports = sorted(
+    open_tcp = sorted(
         p["port_number"]
         for p in nmap_result.get("ports", [])
         if p.get("state") == "open" and p.get("protocol") == "tcp"
     ) if opts['port_scan'] else []
+
+    # UDP ports are labelled "N/udp" so they're distinguishable from TCP in the
+    # results table; nmap reports many closed UDP ports as "open|filtered", so
+    # only surface ports it positively marks "open".
+    open_udp = sorted(
+        p["port_number"]
+        for p in nmap_result.get("ports", [])
+        if p.get("state") == "open" and p.get("protocol") == "udp"
+    ) if opts['udp_port_scan'] else []
+
+    open_ports = open_tcp + [f"{n}/udp" for n in open_udp]
 
     hostname = (
         (snmp_info.get("sysName") if snmp_info else None)
@@ -244,7 +263,7 @@ def _enrich_host(ip, snmp_community, local_arp, mdns_map, opts):
 
     inferred = device_type.infer(
         os_guess=nmap_result.get("os_guess"),
-        ports=open_ports,
+        ports=open_tcp,
         snmp_descr=snmp_info.get("sysDescr") if snmp_info else None,
         netbios_name=nb.get("netbios_name"),
         mdns_services=mdns_services,

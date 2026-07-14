@@ -24,44 +24,54 @@ const ACTIVE_STATUSES = ['pending', 'running'];
 
 const DEFAULT_PORT_RANGE = '1-1000';
 
-// Scan profile presets. Each resolves to the concrete flags the scanner reads.
-// port_range may be 'top100', 'all', or an explicit range string.
-const PROFILE_PRESETS = {
-  quick: {
-    icmp_ping: true, tcp_ping: true, port_scan: false, port_range: null,
-    os_detection: false, service_detection: false, snmp: false,
-    netbios: false, mdns: false, mac_vendor: true,
+// Scan types. Each resolves to the concrete flags the scanner reads. The three
+// primary types are single-purpose (discovery, SNMP, ports); "custom" exposes
+// every flag individually. port_range may be 'top100', 'top1000', 'all', or an
+// explicit range string.
+//
+// Enrichment steps that used to be bundled into profiles (OS detection,
+// NetBIOS, mDNS) are now per-scan checkboxes layered on top of the chosen type
+// — see ENRICHMENT_DEFAULTS and the buildOptions() merge below.
+const SCAN_TYPE_PRESETS = {
+  discovery: {
+    icmp_ping: true, tcp_ping: true, udp_ping: false,
+    port_scan: false, udp_port_scan: false, port_range: null,
+    service_detection: false, snmp: false, mac_vendor: true,
   },
-  standard: {
-    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'top1000',
-    os_detection: true, service_detection: false, snmp: true,
-    netbios: true, mdns: false, mac_vendor: true,
-  },
-  deep: {
-    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'all',
-    os_detection: true, service_detection: true, snmp: true,
-    netbios: true, mdns: true, mac_vendor: true,
+  snmp: {
+    icmp_ping: true, tcp_ping: true, udp_ping: false,
+    port_scan: false, udp_port_scan: false, port_range: null,
+    service_detection: false, snmp: true, mac_vendor: true,
   },
   ports: {
-    icmp_ping: true, tcp_ping: true, port_scan: true, port_range: 'top1000',
-    os_detection: false, service_detection: false, snmp: false,
-    netbios: false, mdns: false, mac_vendor: true,
+    icmp_ping: true, tcp_ping: true, udp_ping: false,
+    port_scan: true, udp_port_scan: false, port_range: 'top1000',
+    service_detection: false, snmp: false, mac_vendor: true,
   },
 };
 
-const PROFILE_LABELS = [
-  { value: 'quick', label: 'Quick Scan — ping sweep only' },
-  { value: 'standard', label: 'Standard Scan — ping + top 1000 ports + OS + NetBIOS + SNMP' },
-  { value: 'deep', label: 'Deep Scan — all 65535 ports + OS + version + NetBIOS + SNMP + mDNS' },
-  { value: 'ports', label: 'Port Scan Only — top 1000 ports on up hosts, skip discovery' },
+const SCAN_TYPE_LABELS = [
+  { value: 'discovery', label: 'Discovery — ping sweep, hostname & MAC vendor' },
+  { value: 'snmp', label: 'SNMP Scan — discovery + SNMP system info' },
+  { value: 'ports', label: 'Port Scan — discovery + TCP (UDP optional)' },
   { value: 'custom', label: 'Custom — choose individual options' },
 ];
+
+// Optional enrichment steps offered as per-scan checkboxes on top of the
+// selected scan type. Off by default so each type stays focused.
+const ENRICHMENT_DEFAULTS = {
+  os_detection: false,
+  netbios: false,
+  mdns: false,
+};
 
 const DEFAULT_CUSTOM = {
   icmp_ping: true,
   tcp_ping: true,
+  udp_ping: false,
   port_scan: true,
   port_range: DEFAULT_PORT_RANGE,
+  udp_port_scan: false,
   os_detection: true,
   service_detection: false,
   snmp: true,
@@ -150,15 +160,18 @@ function deviceType(value) {
 }
 
 const PROFILE_NAMES = {
+  discovery: 'Discovery',
+  snmp: 'SNMP Scan',
+  ports: 'Port Scan',
+  custom: 'Custom',
+  // Legacy profile names kept so historical scans still render a label.
   quick: 'Quick',
   standard: 'Standard',
   deep: 'Deep',
-  ports: 'Port Scan Only',
-  custom: 'Custom',
 };
 
 function profileName(value) {
-  return PROFILE_NAMES[value] || (value ? String(value) : 'Standard');
+  return PROFILE_NAMES[value] || (value ? String(value) : 'Discovery');
 }
 
 // Format the elapsed time between two timestamps as e.g. "2m 34s" / "1h 5m 2s".
@@ -213,7 +226,12 @@ export default function ScanPage() {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [targetType, setTargetType] = useState('subnet');
   const [multiTargets, setMultiTargets] = useState('');
-  const [profile, setProfile] = useState('standard');
+  const [profile, setProfile] = useState('discovery');
+  const [enrichment, setEnrichment] = useState(ENRICHMENT_DEFAULTS);
+  const [udpPorts, setUdpPorts] = useState(false);
+  // Community string for the SNMP scan type. Blank falls back to the server
+  // default (SNMP_COMMUNITY) on the scanner side.
+  const [snmpTypeCommunity, setSnmpTypeCommunity] = useState('');
   const [custom, setCustom] = useState(DEFAULT_CUSTOM);
   const [clearing, setClearing] = useState(false);
   const [rescanningIds, setRescanningIds] = useState(new Set());
@@ -251,7 +269,10 @@ export default function ScanPage() {
   const setCustomField = (field, value) =>
     setCustom((prev) => ({ ...prev, [field]: value }));
 
-  // Resolve the current profile + target type into the options payload the
+  const setEnrichmentField = (field, value) =>
+    setEnrichment((prev) => ({ ...prev, [field]: value }));
+
+  // Resolve the current scan type + target type into the options payload the
   // scanner consumes.
   const buildOptions = () => {
     const snmp_enrichment = snmpEnrichment && snmpMacros.length > 0;
@@ -262,7 +283,9 @@ export default function ScanPage() {
         snmp_enrichment,
         icmp_ping: custom.icmp_ping,
         tcp_ping: custom.tcp_ping,
+        udp_ping: custom.udp_ping,
         port_scan: custom.port_scan,
+        udp_port_scan: custom.udp_port_scan,
         port_range: custom.port_scan ? custom.port_range || DEFAULT_PORT_RANGE : null,
         os_detection: custom.os_detection,
         service_detection: custom.service_detection,
@@ -272,7 +295,20 @@ export default function ScanPage() {
         mac_vendor: custom.mac_vendor,
       };
     }
-    return { profile, target_type: targetType, snmp_enrichment, ...PROFILE_PRESETS[profile] };
+    // Primary scan types: the preset defines the core behaviour, then the
+    // per-scan enrichment checkboxes (and the UDP toggle on Port Scan) layer on
+    // top of it.
+    const preset = SCAN_TYPE_PRESETS[profile];
+    return {
+      profile,
+      target_type: targetType,
+      snmp_enrichment,
+      ...preset,
+      os_detection: enrichment.os_detection,
+      netbios: enrichment.netbios,
+      mdns: enrichment.mdns,
+      udp_port_scan: profile === 'ports' ? udpPorts : false,
+    };
   };
 
   // Normalize the chosen target into the string the API/scanner parse. For
@@ -412,11 +448,14 @@ export default function ScanPage() {
         return;
       }
       const options = buildOptions();
-      // Custom profile with SNMP enabled may carry a community string override.
-      const snmpCommunity =
-        profile === 'custom' && custom.snmp && custom.snmp_community.trim()
-          ? custom.snmp_community.trim()
-          : undefined;
+      // Both the SNMP scan type and Custom (with SNMP enabled) may carry a
+      // community string override; blank falls back to the server default.
+      let snmpCommunity;
+      if (profile === 'snmp' && snmpTypeCommunity.trim()) {
+        snmpCommunity = snmpTypeCommunity.trim();
+      } else if (profile === 'custom' && custom.snmp && custom.snmp_community.trim()) {
+        snmpCommunity = custom.snmp_community.trim();
+      }
 
       const res = await client.post('/scans', {
         target_subnet: target,
@@ -826,9 +865,9 @@ export default function ScanPage() {
 
                 <div className="scan-options-row">
                   <label className="scan-options-field">
-                    <span className="scan-options-heading">Scan profile</span>
+                    <span className="scan-options-heading">Scan type</span>
                     <select value={profile} onChange={(e) => setProfile(e.target.value)}>
-                      {PROFILE_LABELS.map((p) => (
+                      {SCAN_TYPE_LABELS.map((p) => (
                         <option key={p.value} value={p.value}>
                           {p.label}
                         </option>
@@ -836,6 +875,64 @@ export default function ScanPage() {
                     </select>
                   </label>
                 </div>
+
+                {profile === 'snmp' && (
+                  <div className="scan-options-row">
+                    <label className="scan-options-field">
+                      <span className="scan-options-heading">SNMP community</span>
+                      <input
+                        type="text"
+                        value={snmpTypeCommunity}
+                        onChange={(e) => setSnmpTypeCommunity(e.target.value)}
+                        placeholder="community (server default)"
+                        aria-label="SNMP community string"
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {profile === 'ports' && (
+                  <div className="scan-options-row">
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={udpPorts}
+                        onChange={(e) => setUdpPorts(e.target.checked)}
+                      />
+                      Also scan common UDP ports (slower)
+                    </label>
+                  </div>
+                )}
+
+                {profile !== 'custom' && (
+                  <div className="scan-options-row">
+                    <span className="scan-options-heading">Extra enrichment</span>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={enrichment.os_detection}
+                        onChange={(e) => setEnrichmentField('os_detection', e.target.checked)}
+                      />
+                      OS Detection
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={enrichment.netbios}
+                        onChange={(e) => setEnrichmentField('netbios', e.target.checked)}
+                      />
+                      NetBIOS/SMB
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={enrichment.mdns}
+                        onChange={(e) => setEnrichmentField('mdns', e.target.checked)}
+                      />
+                      mDNS/Bonjour
+                    </label>
+                  </div>
+                )}
 
                 <div className="scan-options-row scan-snmp-enrich">
                   <label className="scan-checkbox">
@@ -879,10 +976,18 @@ export default function ScanPage() {
                     <label className="scan-checkbox">
                       <input
                         type="checkbox"
+                        checked={custom.udp_ping}
+                        onChange={(e) => setCustomField('udp_ping', e.target.checked)}
+                      />
+                      UDP Ping (NetBIOS 137)
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
                         checked={custom.port_scan}
                         onChange={(e) => setCustomField('port_scan', e.target.checked)}
                       />
-                      Port Scan
+                      TCP Port Scan
                       <input
                         type="text"
                         className="scan-inline-input"
@@ -892,6 +997,14 @@ export default function ScanPage() {
                         placeholder={DEFAULT_PORT_RANGE}
                         aria-label="Port range"
                       />
+                    </label>
+                    <label className="scan-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={custom.udp_port_scan}
+                        onChange={(e) => setCustomField('udp_port_scan', e.target.checked)}
+                      />
+                      UDP Port Scan (common ports, slower)
                     </label>
                     <label className="scan-checkbox">
                       <input

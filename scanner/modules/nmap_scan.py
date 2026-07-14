@@ -4,6 +4,13 @@ import re
 
 import nmap
 
+# Ports probed when a UDP port scan is requested. UDP scanning is slow (each
+# closed port waits out a timeout plus retransmits), so we stick to a short
+# list of high-value service ports instead of a top-N sweep.
+COMMON_UDP_PORTS = (
+    '53,67,69,111,123,137,138,161,162,500,514,520,623,631,1194,1434,1900,4500,5060,5353'
+)
+
 
 def _sanitize_port_range(port_range):
     """Strip everything but digits, commas and hyphens so a user-supplied port
@@ -96,3 +103,37 @@ def scan_host(ip, arguments=None, port_scan=True, port_range='top1000',
         "os_guess": os_guess,
         "ports": ports,
     }
+
+
+def scan_udp_ports(ip, ports=COMMON_UDP_PORTS):
+    """Run a UDP-only nmap pass against the common UDP service ports.
+
+    Returns port entries in the same shape as scan_host(). Kept as a separate
+    pass (rather than -sS -sU combined) so the TCP port-range options never
+    change UDP behaviour and vice versa. Requires NET_RAW/root like -sS.
+    """
+    scanner = nmap.PortScanner()
+
+    try:
+        scanner.scan(hosts=ip, arguments=f'-sU -T4 -p {ports}')
+    except nmap.PortScannerError:
+        return []
+
+    if ip not in scanner.all_hosts():
+        return []
+
+    host_data = scanner[ip]
+    results = []
+    for proto in host_data.all_protocols():
+        if proto != 'udp':
+            continue
+        for port_number, port_info in host_data[proto].items():
+            results.append({
+                "port_name": port_info.get('name'),
+                "port_number": port_number,
+                "protocol": 'udp',
+                "state": port_info.get('state'),
+                "service": port_info.get('product') or None,
+                "speed": None,
+            })
+    return results
