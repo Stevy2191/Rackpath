@@ -226,19 +226,19 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #6b7280;
+  background: var(--color-text-muted);
 }
 
 .cameras-status-dot.cameras-status-online {
-  background: #16a34a;
+  background: var(--color-success);
 }
 
 .cameras-status-dot.cameras-status-offline {
-  background: #dc2626;
+  background: var(--color-danger);
 }
 
 .cameras-status-dot.cameras-status-unknown {
-  background: #6b7280;
+  background: var(--color-text-muted);
 }
 
 .cameras-empty {

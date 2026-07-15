@@ -79,8 +79,8 @@
 }
 
 .integration-status-badge.status-connected {
-  background: #16a34a22;
-  color: #16a34a;
+  background: color-mix(in srgb, var(--color-success) 13%, transparent);
+  color: var(--color-success);
 }
 
 .integration-status-badge.status-error {
@@ -97,8 +97,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  background: #f59e0b22;
-  color: #f59e0b;
+  background: color-mix(in srgb, var(--color-warning) 13%, transparent);
+  color: var(--color-warning);
 }
 
 .integration-card-meta {
@@ -116,7 +116,7 @@
 
 .integration-card-warning {
   font-size: 0.8rem;
-  color: #f59e0b;
+  color: var(--color-warning);
 }
 
 .integration-card-actions {

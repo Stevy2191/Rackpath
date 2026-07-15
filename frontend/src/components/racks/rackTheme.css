@@ -1,0 +1,109 @@
+/* ─── Rack Builder theme tokens ──────────────────────────────────────────
+   The rack workspace has its own visual language (denser chrome, cyan
+   accent, "server room" canvas) but every color derives from these tokens
+   so the whole builder follows the app light/dark theme.
+
+   .rack-capture-light / .rack-capture-dark force one set regardless of the
+   app theme — ExportModal puts them on the off-screen export clone so the
+   user's chosen export theme wins over the on-screen theme. Keep both
+   blocks in sync with the theme blocks above them.
+
+   Deliberately NOT tokenised (same in both themes): device block category
+   colors and their white-on-color labels, power cord amber, vertical PDU
+   bronze hardware, half-depth red crosshatch — those render "physical"
+   hardware, not UI chrome. */
+
+:root,
+.rack-capture-light {
+  --rack-canvas-bg: #f0f2f5;
+  --rack-panel-bg: #ffffff;
+  --rack-inset-bg: #eef1f5;
+  --rack-card-bg: #f7f9fc;
+  --rack-card-hover-bg: #edf1f7;
+  --rack-border: #d0d7e2;
+  --rack-border-strong: #b4bfce;
+  --rack-border-faint: #e2e7ef;
+  --rack-text-bright: #1b2430;
+  --rack-text: #263040;
+  --rack-text-muted: #5a6878;
+  --rack-text-faint: #8a96a8;
+  --rack-text-disabled: #c0c8d4;
+  --rack-accent: #0e7490;
+  --rack-accent-contrast: #ffffff;
+  --rack-danger: #b3261e;
+  --rack-warning: #b45309;
+  --rack-info: #2563eb;
+  --rack-hover: rgba(16, 24, 40, 0.06);
+
+  /* Physical rack frame (light values match the old .rack-capture-light
+     export overrides) */
+  --rack-frame-bg: linear-gradient(135deg, #dde1ea 0%, #e8ecf4 50%, #edf0f7 100%);
+  --rack-frame-border: #b8c0cc;
+  --rack-frame-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.08), inset 0 -2px 6px rgba(0, 0, 0, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.12);
+  --rack-blank-bg: linear-gradient(180deg, #b8c0cc 0%, #c8d0dc 100%);
+  --rack-blank-bg-flip: linear-gradient(180deg, #c8d0dc 0%, #b8c0cc 100%);
+  --rack-blank-border: #a0acba;
+  --rack-blank-highlight: none;
+  --rack-rail-bg: linear-gradient(180deg, #ccd4de 0%, #d8dfe8 100%);
+  --rack-rail-border: #b0bac8;
+  --rack-rail-number: #5a6878;
+  --rack-rail-number-border: rgba(0, 0, 0, 0.08);
+  --rack-rail-5th: #303c4a;
+  --rack-rail-5th-border: rgba(0, 0, 0, 0.15);
+  --rack-units-border: #b0bac8;
+  --rack-unit-band-0: rgba(0, 0, 0, 0.01);
+  --rack-unit-band-1: rgba(0, 0, 0, 0.04);
+  --rack-unit-border: rgba(0, 0, 0, 0.07);
+  --rack-unit-5th-border: rgba(0, 0, 0, 0.15);
+  --rack-unit-number: #a8b0bc;
+  --rack-frame-label: #5a6575;
+  --rack-frame-divider: rgba(0, 0, 0, 0.18);
+}
+
+[data-theme='dark'],
+.rack-capture-dark {
+  --rack-canvas-bg: #0a0a0f;
+  --rack-panel-bg: #12141a;
+  --rack-inset-bg: #0e0f13;
+  --rack-card-bg: #161820;
+  --rack-card-hover-bg: #1a1d26;
+  --rack-border: #2a2e38;
+  --rack-border-strong: #3a3f4a;
+  --rack-border-faint: #1e2128;
+  --rack-text-bright: #e6e9f0;
+  --rack-text: #d4d8e0;
+  --rack-text-muted: #8b91a1;
+  --rack-text-faint: #6b7280;
+  --rack-text-disabled: #3a4050;
+  --rack-accent: #4adede;
+  --rack-accent-contrast: #0a0a0f;
+  --rack-danger: #ef4444;
+  --rack-warning: #f59e0b;
+  --rack-info: #3b82f6;
+  --rack-hover: rgba(255, 255, 255, 0.07);
+
+  --rack-frame-bg: linear-gradient(135deg, #2c2f36 0%, #1a1c22 50%, #15161b 100%);
+  --rack-frame-border: #060708;
+  --rack-frame-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 -2px 6px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 30px rgba(74, 222, 222, 0.04);
+  --rack-blank-bg: linear-gradient(180deg, #3a3f48 0%, #20232a 100%);
+  --rack-blank-bg-flip: linear-gradient(180deg, #20232a 0%, #3a3f48 100%);
+  --rack-blank-border: #060708;
+  --rack-blank-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --rack-rail-bg: linear-gradient(180deg, #24262c 0%, #1a1c21 100%);
+  --rack-rail-border: #060708;
+  --rack-rail-number: #7a8499;
+  --rack-rail-number-border: rgba(0, 0, 0, 0.3);
+  --rack-rail-5th: #a8b8cc;
+  --rack-rail-5th-border: rgba(255, 255, 255, 0.08);
+  --rack-units-border: #060708;
+  --rack-unit-band-0: rgba(255, 255, 255, 0.012);
+  --rack-unit-band-1: rgba(0, 0, 0, 0.1);
+  --rack-unit-border: rgba(255, 255, 255, 0.06);
+  --rack-unit-5th-border: rgba(255, 255, 255, 0.11);
+  --rack-unit-number: #3a414f;
+  --rack-frame-label: #8a96aa;
+  --rack-frame-divider: rgba(0, 0, 0, 0.35);
+}

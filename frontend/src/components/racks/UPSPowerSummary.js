@@ -80,11 +80,11 @@ function Sparkline({ curve, ebmCurves, wattRating, currentLoadPct }) {
       <polyline
         points={polyPoints}
         fill="none"
-        stroke="var(--color-accent, #6366f1)"
+        stroke="var(--rack-accent)"
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
-      <circle cx={cx} cy={cy} r="3" fill="var(--color-accent, #6366f1)" />
+      <circle cx={cx} cy={cy} r="3" fill="var(--rack-accent)" />
     </svg>
   );
 }

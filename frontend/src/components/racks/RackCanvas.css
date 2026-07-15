@@ -5,7 +5,7 @@
   position: relative;
   overflow: hidden;
   cursor: default;
-  background: #0a0a0f;
+  background: var(--rack-canvas-bg);
 }
 
 /* Grabbing cursor + no text-selection while panning */
@@ -27,7 +27,7 @@
 .rack-column-separator {
   width: 1px;
   align-self: stretch;
-  background: #2a2e38;
+  background: var(--rack-border);
   margin: 0 80px;
   flex-shrink: 0;
 }
@@ -40,19 +40,19 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  background: #1a1d24;
-  border: 1px solid #2a2e38;
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border);
   border-radius: 6px;
   padding: 3px;
   z-index: 20;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 10px var(--color-shadow);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
 }
 
 .rack-zoom-btn {
   border: none;
   background: transparent;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   width: 24px;
   height: 24px;
   display: flex;
@@ -66,14 +66,14 @@
 }
 
 .rack-zoom-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e6e9f0;
+  background: var(--rack-hover);
+  color: var(--rack-text-bright);
 }
 
 .rack-zoom-pct {
   font-size: 0.66rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   min-width: 34px;
   text-align: center;
   padding: 0 2px;
@@ -83,7 +83,7 @@
 .rack-zoom-sep {
   width: 1px;
   height: 16px;
-  background: #2a2e38;
+  background: var(--rack-border);
   margin: 0 2px;
   flex-shrink: 0;
 }
@@ -97,28 +97,28 @@
   align-items: center;
   gap: 5px;
   padding: 5px 10px;
-  background: #1a1d24;
-  border: 1px solid #2a2e38;
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border);
   border-radius: 6px;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
   z-index: 20;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 10px var(--color-shadow);
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
 .rack-edit-rack-btn:hover {
-  border-color: #3a3f4a;
-  color: #e6e9f0;
+  border-color: var(--rack-border-strong);
+  color: var(--rack-text-bright);
 }
 
 .rack-edit-rack-btn.active {
-  background: rgba(74, 222, 222, 0.1);
-  border-color: #4adede;
-  color: #4adede;
+  background: color-mix(in srgb, var(--rack-accent) 10%, transparent);
+  border-color: var(--rack-accent);
+  color: var(--rack-accent);
 }
 
 /* ─── Cross-rack power connection overlay ────────────────── */

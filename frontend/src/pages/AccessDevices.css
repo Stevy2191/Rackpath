@@ -133,19 +133,19 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #6b7280;
+  background: var(--color-text-muted);
 }
 
 .access-devices-status-dot.access-devices-status-online {
-  background: #16a34a;
+  background: var(--color-success);
 }
 
 .access-devices-status-dot.access-devices-status-offline {
-  background: #dc2626;
+  background: var(--color-danger);
 }
 
 .access-devices-status-dot.access-devices-status-unknown {
-  background: #6b7280;
+  background: var(--color-text-muted);
 }
 
 .access-devices-badge {
@@ -160,13 +160,13 @@
 }
 
 .access-devices-badge-green {
-  background: #16a34a22;
-  color: #16a34a;
+  background: color-mix(in srgb, var(--color-success) 13%, transparent);
+  color: var(--color-success);
 }
 
 .access-devices-badge-red {
-  background: #dc262622;
-  color: #dc2626;
+  background: color-mix(in srgb, var(--color-danger) 13%, transparent);
+  color: var(--color-danger);
 }
 
 .access-devices-badge-grey {

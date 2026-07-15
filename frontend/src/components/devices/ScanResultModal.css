@@ -56,17 +56,17 @@
 }
 
 .scan-status-up {
-  background: rgba(22, 163, 74, 0.2);
-  color: #16a34a;
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
 }
 
 .scan-status-down {
-  background: rgba(220, 38, 38, 0.2);
-  color: #dc2626;
+  background: color-mix(in srgb, var(--color-danger) 20%, transparent);
+  color: var(--color-danger);
 }
 
 .scan-status-testing,
 .scan-status-unknown {
-  background: rgba(107, 114, 128, 0.2);
-  color: #6b7280;
+  background: color-mix(in srgb, var(--color-text-muted) 20%, transparent);
+  color: var(--color-text-muted);
 }

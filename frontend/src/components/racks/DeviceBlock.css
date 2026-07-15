@@ -20,7 +20,7 @@
 .device-block:hover { filter: brightness(1.18); }
 
 .device-block-selected {
-  box-shadow: inset 0 0 0 2px #4adede, inset 0 0 14px rgba(74, 222, 222, 0.18);
+  box-shadow: inset 0 0 0 2px var(--rack-accent), inset 0 0 14px color-mix(in srgb, var(--rack-accent) 18%, transparent);
   z-index: 1;
 }
 
@@ -191,20 +191,20 @@
   max-width: 240px;
   padding: 7px 10px;
   border-radius: 5px;
-  background: #1e2230;
-  border: 1px solid #3a3f4a;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border-strong);
+  box-shadow: 0 4px 14px var(--color-shadow);
   z-index: 50;
   display: flex;
   flex-direction: column;
   gap: 3px;
   pointer-events: none;
   font-size: 0.72rem;
-  color: #e6e9f0;
+  color: var(--rack-text-bright);
   white-space: normal;
   word-break: break-word;
 }
 
-.device-block-tooltip strong { font-weight: 700; color: #fff; }
-.device-block-tooltip span   { color: #9ca3af; }
-.device-block-tooltip-notes  { color: #6b7280 !important; font-style: italic; }
+.device-block-tooltip strong { font-weight: 700; color: var(--rack-text-bright); }
+.device-block-tooltip span   { color: var(--rack-text-muted); }
+.device-block-tooltip-notes  { color: var(--rack-text-faint) !important; font-style: italic; }

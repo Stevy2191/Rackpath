@@ -265,19 +265,19 @@
 }
 
 .node-properties-iface-status-up {
-  background: rgba(22, 163, 74, 0.2);
-  color: #16a34a;
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
 }
 
 .node-properties-iface-status-down {
-  background: rgba(220, 38, 38, 0.2);
-  color: #dc2626;
+  background: color-mix(in srgb, var(--color-danger) 20%, transparent);
+  color: var(--color-danger);
 }
 
 .node-properties-iface-status-testing,
 .node-properties-iface-status-unknown {
-  background: rgba(107, 114, 128, 0.2);
-  color: #6b7280;
+  background: color-mix(in srgb, var(--color-text-muted) 20%, transparent);
+  color: var(--color-text-muted);
 }
 
 .node-properties-vlan-prefix {
@@ -305,8 +305,8 @@
   padding: 0.15rem 0.5rem;
   border: none;
   border-radius: 999px;
-  background: var(--color-success, #16a34a);
-  color: #fff;
+  background: var(--color-success);
+  color: var(--color-bg-elevated);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.03em;

@@ -2,12 +2,12 @@
   position: fixed;
   z-index: 200;
   min-width: 200px;
-  background: #181b22;
-  border: 1px solid #2a2e38;
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px var(--color-shadow);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
-  color: #d4d8e0;
+  color: var(--rack-text);
   overflow: hidden;
 }
 
@@ -30,7 +30,7 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #d4d8e0;
+  color: var(--rack-text);
   font-family: inherit;
   font-size: 0.78rem;
   text-align: left;
@@ -39,13 +39,13 @@
 }
 
 .rack-context-menu ul li button:hover {
-  background: rgba(74, 222, 222, 0.1);
-  color: #4adede;
+  background: color-mix(in srgb, var(--rack-accent) 10%, transparent);
+  color: var(--rack-accent);
 }
 
 .rack-context-menu ul li button.danger:hover {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--rack-danger) 12%, transparent);
+  color: var(--rack-danger);
 }
 
 .rack-context-menu-form {
@@ -63,16 +63,16 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
 }
 
 .rack-context-menu-form input,
 .rack-context-menu-form select {
   padding: 5px 7px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
-  background: #0e1015;
-  color: #e6e9f0;
+  background: var(--rack-inset-bg);
+  color: var(--rack-text-bright);
   font-family: inherit;
   font-size: 0.78rem;
   text-transform: none;
@@ -81,7 +81,7 @@
 .rack-context-menu-form input:focus,
 .rack-context-menu-form select:focus {
   outline: none;
-  border-color: #4adede;
+  border-color: var(--rack-accent);
 }
 
 .rack-context-menu-form-actions {
@@ -93,10 +93,10 @@
 
 .rack-context-menu-form-actions button {
   padding: 5px 10px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
   background: transparent;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   font-family: inherit;
   font-size: 0.72rem;
   font-weight: 600;
@@ -105,15 +105,15 @@
 }
 
 .rack-context-menu-form-actions button:hover {
-  border-color: #3a3f4a;
-  color: #d4d8e0;
+  border-color: var(--rack-border-strong);
+  color: var(--rack-text);
 }
 
 .rack-context-menu-form-actions button.primary {
-  border-color: #4adede;
-  color: #4adede;
+  border-color: var(--rack-accent);
+  color: var(--rack-accent);
 }
 
 .rack-context-menu-form-actions button.primary:hover {
-  background: rgba(74, 222, 222, 0.1);
+  background: color-mix(in srgb, var(--rack-accent) 10%, transparent);
 }

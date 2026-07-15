@@ -14,7 +14,7 @@
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.82rem;
   font-weight: 600;
-  color: #b0b8c6;
+  color: var(--rack-text-muted);
   padding: 0 4px 8px;
   white-space: nowrap;
   overflow: hidden;
@@ -27,7 +27,7 @@
   text-align: center;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.64rem;
-  color: #4b5563;
+  color: var(--rack-text-faint);
   padding: 0 4px 6px;
   white-space: nowrap;
   overflow: hidden;
@@ -42,12 +42,12 @@
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   padding: 0 4px 8px;
   white-space: nowrap;
 }
 
-.rack-u-counter-full { color: #f59e0b; }
+.rack-u-counter-full { color: var(--rack-warning); }
 
 /* ─── Dual-panel layout ──────────────────────────────────────
    Just a flex row + gap now — each panel below carries its own full
@@ -70,25 +70,19 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: linear-gradient(135deg, #2c2f36 0%, #1a1c22 50%, #15161b 100%);
-  border: 2px solid #060708;
+  background: var(--rack-frame-bg);
+  border: 2px solid var(--rack-frame-border);
   border-radius: 8px;
   padding: 6px;
-  box-shadow:
-    inset 0 2px 6px rgba(0,0,0,0.6),
-    inset 0 -2px 6px rgba(0,0,0,0.6),
-    0 0 0 1px rgba(255,255,255,0.03),
-    0 8px 24px rgba(0,0,0,0.5),
-    0 0 30px rgba(74,222,222,0.04);
+  box-shadow: var(--rack-frame-shadow);
   transition: box-shadow 0.2s ease;
 }
 
 .rack-enclosure-focused .rack-panel-frame {
   box-shadow:
-    inset 0 2px 6px rgba(0,0,0,0.6),
-    inset 0 -2px 6px rgba(0,0,0,0.6),
-    0 0 0 2px #4adede,
-    0 0 30px rgba(74,222,222,0.35);
+    var(--rack-frame-shadow),
+    0 0 0 2px var(--rack-accent),
+    0 0 30px color-mix(in srgb, var(--rack-accent) 35%, transparent);
 }
 
 .rack-panel-label {
@@ -97,21 +91,21 @@
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.15em;
-  color: #8a96aa;
+  color: var(--rack-frame-label);
   padding: 2px 0;
 }
 
 .rack-top-blank,
 .rack-bottom-blank {
   height: 12px;
-  background: linear-gradient(180deg, #3a3f48 0%, #20232a 100%);
-  border: 1px solid #060708;
+  background: var(--rack-blank-bg);
+  border: 1px solid var(--rack-blank-border);
   border-radius: 4px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  box-shadow: var(--rack-blank-highlight);
 }
 
 .rack-bottom-blank {
-  background: linear-gradient(180deg, #20232a 0%, #3a3f48 100%);
+  background: var(--rack-blank-bg-flip);
   margin-top: 4px;
 }
 
@@ -127,8 +121,8 @@
   flex-direction: column;
   width: 24px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, #24262c 0%, #1a1c21 100%);
-  border: 1px solid #060708;
+  background: var(--rack-rail-bg);
+  border: 1px solid var(--rack-rail-border);
 }
 
 .rack-rail-left  { border-radius: 3px 0 0 3px; border-right: none; }
@@ -142,14 +136,14 @@
   justify-content: center;
   font-size: 9px;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
-  color: #7a8499;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+  color: var(--rack-rail-number);
+  border-bottom: 1px solid var(--rack-rail-number-border);
 }
 
 .rack-rail-5th {
-  color: #a8b8cc;
+  color: var(--rack-rail-5th);
   font-weight: 700;
-  border-bottom-color: rgba(255, 255, 255, 0.08);
+  border-bottom-color: var(--rack-rail-5th-border);
 }
 
 .rack-units {
@@ -157,8 +151,8 @@
   flex-direction: column;
   flex: 0 0 220px;
   width: 220px;
-  border-top: 1px solid #060708;
-  border-bottom: 1px solid #060708;
+  border-top: 1px solid var(--rack-units-border);
+  border-bottom: 1px solid var(--rack-units-border);
 }
 
 /* Wider units column in single-column (rear-hidden) mode */
@@ -171,7 +165,7 @@
 .rack-unit-slot {
   height: var(--u-height, 40px);
   box-sizing: border-box;
-  border-bottom: 1px dotted rgba(255,255,255,0.06);
+  border-bottom: 1px dotted var(--rack-unit-border);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -180,12 +174,12 @@
   transition: background 0.1s;
 }
 
-.rack-unit-band-0 { background: rgba(255,255,255,0.012); }
-.rack-unit-band-1 { background: rgba(0,0,0,0.1); }
+.rack-unit-band-0 { background: var(--rack-unit-band-0); }
+.rack-unit-band-1 { background: var(--rack-unit-band-1); }
 
 .rack-unit-slot-number {
   font-size: 8px;
-  color: #3a414f;
+  color: var(--rack-unit-number);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
 }
 
@@ -213,12 +207,12 @@
     );
 }
 
-.rack-unit-slot.drop-ok        { background: rgba(74,158,255,0.2);  box-shadow: inset 0 0 0 1px rgba(74,158,255,0.7); }
-.rack-unit-slot.drop-collision { background: rgba(255,87,87,0.2);   box-shadow: inset 0 0 0 1px rgba(255,87,87,0.7); }
+.rack-unit-slot.drop-ok        { background: color-mix(in srgb, var(--rack-info) 20%, transparent);  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rack-info) 70%, transparent); }
+.rack-unit-slot.drop-collision { background: color-mix(in srgb, var(--rack-danger) 20%, transparent);   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rack-danger) 70%, transparent); }
 
 /* Subtle landmark line at every 5th U for easy position counting */
 .rack-unit-slot.rack-unit-5th {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+  border-bottom: 1px solid var(--rack-unit-5th-border);
 }
 
 .rack-units .device-block:not(.device-block-halfdepth-stripe) {
@@ -233,9 +227,9 @@
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.82rem;
   font-weight: 600;
-  color: #e6e9f0;
-  background: rgba(74, 222, 222, 0.08);
-  border: 1px solid #4adede;
+  color: var(--rack-text-bright);
+  background: color-mix(in srgb, var(--rack-accent) 8%, transparent);
+  border: 1px solid var(--rack-accent);
   border-radius: 4px;
   padding: 0 6px;
   margin-bottom: 8px;
@@ -273,7 +267,7 @@
    empty drop-target columns gets no dividers at all, so it reads as one
    clean block instead of a permanently-gridded row. */
 .rack-frac-row-divided > .rack-frac-col + .rack-frac-col {
-  border-left: 1px solid rgba(0, 0, 0, 0.35);
+  border-left: 1px solid var(--rack-frame-divider);
 }
 
 /* ─── Annotation column ──────────────────────────────────── */
@@ -283,7 +277,7 @@
   flex-shrink: 0;
   width: 150px;
   margin-left: 14px;
-  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 1px solid var(--rack-border);
 }
 
 .rack-annotation-header {
@@ -292,7 +286,7 @@
   font-weight: 700;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #8a96aa;
+  color: var(--rack-text-muted);
   padding: 2px 6px;
   text-align: center;
   white-space: nowrap;
@@ -326,14 +320,14 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-bottom: 1px dotted rgba(255, 255, 255, 0.05);
+  border-bottom: 1px dotted var(--rack-border-faint);
   padding: 0 4px;
 }
 
 .rack-annotation-text {
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.60rem;
-  color: #9ca3af;
+  color: var(--rack-text-muted);
   white-space: normal;
   word-break: break-word;
   overflow: hidden;
@@ -413,8 +407,8 @@
 }
 
 .rack-vertical-pdu-selected {
-  border-color: #4adede;
-  box-shadow: 0 0 0 2px rgba(74,222,222,0.4);
+  border-color: var(--rack-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rack-accent) 40%, transparent);
 }
 
 .rack-vertical-pdu-highlighted {
@@ -515,34 +509,6 @@
   fill: #fbbf24;
 }
 
-/* ─── Export capture: light theme ────────────────────────── */
-.rack-capture-light .rack-panel-frame {
-  background: linear-gradient(135deg, #dde1ea 0%, #e8ecf4 50%, #edf0f7 100%);
-  border-color: #b8c0cc;
-  box-shadow: inset 0 2px 6px rgba(0,0,0,0.08), inset 0 -2px 6px rgba(0,0,0,0.08),
-              0 8px 24px rgba(0,0,0,0.12);
-}
-.rack-capture-light .rack-panel-label { color: #5a6575; }
-.rack-capture-light .rack-name-label  { color: #4a5565; }
-.rack-capture-light .rack-u-counter   { color: #5a6575; }
-.rack-capture-light .rack-u-counter-full { color: #b45309; }
-.rack-capture-light .rack-top-blank,
-.rack-capture-light .rack-bottom-blank {
-  background: linear-gradient(180deg, #b8c0cc 0%, #c8d0dc 100%);
-  border-color: #a0acba;
-  box-shadow: none;
-}
-.rack-capture-light .rack-bottom-blank {
-  background: linear-gradient(180deg, #c8d0dc 0%, #b8c0cc 100%);
-}
-.rack-capture-light .rack-rail {
-  background: linear-gradient(180deg, #ccd4de 0%, #d8dfe8 100%);
-  border-color: #b0bac8;
-}
-.rack-capture-light .rack-rail-number { color: #5a6878; border-bottom-color: rgba(0,0,0,0.08); }
-.rack-capture-light .rack-rail-5th   { color: #303c4a; font-weight: 700; border-bottom-color: rgba(0,0,0,0.15); }
-.rack-capture-light .rack-units      { border-color: #b0bac8; }
-.rack-capture-light .rack-unit-band-0 { background: rgba(0,0,0,0.01); }
-.rack-capture-light .rack-unit-band-1 { background: rgba(0,0,0,0.04); }
-.rack-capture-light .rack-unit-slot  { border-bottom-color: rgba(0,0,0,0.07); }
-.rack-capture-light .rack-unit-slot-number { color: #a8b0bc; }
+/* ─── Export capture themes ─────────────────────────────────
+   Handled by the --rack-* token overrides that .rack-capture-light /
+   .rack-capture-dark apply in rackTheme.css. */

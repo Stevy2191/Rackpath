@@ -16,7 +16,16 @@ export function ThemeProvider({ children }) {
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
-  const toggleTheme = () => setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+  // Apply the attribute synchronously so components that resolve CSS variables
+  // in their own effects (e.g. the X6 canvas) read the new theme's values —
+  // this provider's effect would otherwise run after child effects.
+  const toggleTheme = () => {
+    setTheme((current) => {
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      return next;
+    });
+  };
 
   return <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>;
 }

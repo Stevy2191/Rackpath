@@ -22,7 +22,7 @@
 .x6-selection-box {
   border: 2px solid var(--color-accent) !important;
   border-radius: 4px !important;
-  background: rgba(99, 102, 241, 0.05) !important;
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent) !important;
 }
 
 /* ── Edge flow animation ─────────────────────────────────────────────────── */
@@ -71,7 +71,7 @@
 
 .x6-device-cell.x6-link-mode {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px rgba(99,102,241,0.3);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 .x6-device-cell-icon {

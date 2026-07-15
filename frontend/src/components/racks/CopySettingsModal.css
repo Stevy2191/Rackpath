@@ -1,7 +1,7 @@
 .copy-settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--color-overlay);
   z-index: 1100;
   display: flex;
   align-items: center;
@@ -9,18 +9,18 @@
 }
 
 .copy-settings-modal {
-  background: #12141a;
-  border: 1px solid #2a2e38;
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border);
   border-radius: 10px;
   width: 320px;
   max-width: calc(100vw - 48px);
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 12px 48px var(--color-shadow);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.75rem;
-  color: #d4d8e0;
+  color: var(--rack-text);
   overflow: hidden;
 }
 
@@ -29,21 +29,21 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #2a2e38;
+  border-bottom: 1px solid var(--rack-border);
   flex-shrink: 0;
 }
 
 .copy-settings-title {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #4adede;
+  color: var(--rack-accent);
   letter-spacing: 0.04em;
 }
 
 .copy-settings-close {
   background: none;
   border: none;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   cursor: pointer;
   padding: 2px;
   line-height: 1;
@@ -51,23 +51,23 @@
   align-items: center;
 }
 
-.copy-settings-close:hover { color: #d4d8e0; }
+.copy-settings-close:hover { color: var(--rack-text); }
 
 .copy-settings-source {
   padding: 10px 14px 4px;
   font-size: 0.73rem;
-  color: #9ca3af;
+  color: var(--rack-text-muted);
   flex-shrink: 0;
 }
 
-.copy-settings-source strong { color: #d4d8e0; }
+.copy-settings-source strong { color: var(--rack-text); }
 
 .copy-settings-desc {
   padding: 0 14px 10px;
   font-size: 0.68rem;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   line-height: 1.45;
-  border-bottom: 1px solid #1e2128;
+  border-bottom: 1px solid var(--rack-border-faint);
   flex-shrink: 0;
 }
 
@@ -75,9 +75,9 @@
   padding: 4px 14px 8px;
   font-size: 0.65rem;
   font-weight: 600;
-  color: #d4913a;
+  color: var(--rack-warning);
   letter-spacing: 0.03em;
-  border-bottom: 1px solid #1e2128;
+  border-bottom: 1px solid var(--rack-border-faint);
   flex-shrink: 0;
 }
 
@@ -87,14 +87,14 @@
   justify-content: space-between;
   padding: 8px 14px 6px;
   font-size: 0.68rem;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   flex-shrink: 0;
 }
 
 .copy-settings-toggle-all {
   background: none;
   border: none;
-  color: #4adede;
+  color: var(--rack-accent);
   cursor: pointer;
   font-family: inherit;
   font-size: 0.68rem;
@@ -117,14 +117,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 4px 0 3px;
-  border-bottom: 1px solid #1e2128;
+  border-bottom: 1px solid var(--rack-border-faint);
   margin-bottom: 2px;
 }
 
 .copy-settings-group-name {
   font-size: 0.68rem;
   font-weight: 700;
-  color: #9ca3af;
+  color: var(--rack-text-muted);
   letter-spacing: 0.03em;
   display: flex;
   align-items: center;
@@ -134,9 +134,9 @@
 .copy-settings-group-badge {
   font-size: 0.6rem;
   font-weight: 600;
-  color: #4adede;
-  background: rgba(74, 222, 222, 0.1);
-  border: 1px solid rgba(74, 222, 222, 0.25);
+  color: var(--rack-accent);
+  background: color-mix(in srgb, var(--rack-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rack-accent) 25%, transparent);
   border-radius: 3px;
   padding: 0 4px;
   line-height: 1.5;
@@ -158,17 +158,17 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  background: #0e0f13;
+  background: var(--rack-inset-bg);
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.1s;
   user-select: none;
 }
 
-.copy-settings-item:hover { background: #181b22; }
+.copy-settings-item:hover { background: var(--rack-panel-bg); }
 
 .copy-settings-item input[type="checkbox"] {
-  accent-color: #4adede;
+  accent-color: var(--rack-accent);
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -182,7 +182,7 @@
 }
 
 .copy-settings-item-pos {
-  color: #6b7280;
+  color: var(--rack-text-faint);
   font-size: 0.68rem;
   flex-shrink: 0;
 }
@@ -190,10 +190,10 @@
 .copy-settings-error {
   margin: 0 14px 4px;
   padding: 6px 8px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: color-mix(in srgb, var(--rack-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rack-danger) 30%, transparent);
   border-radius: 4px;
-  color: #ef4444;
+  color: var(--rack-danger);
   font-size: 0.68rem;
   flex-shrink: 0;
 }
@@ -202,15 +202,15 @@
   display: flex;
   gap: 8px;
   padding: 10px 14px;
-  border-top: 1px solid #2a2e38;
+  border-top: 1px solid var(--rack-border);
   flex-shrink: 0;
 }
 
 .copy-settings-cancel {
   background: transparent;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   font-family: inherit;
   font-size: 0.72rem;
   padding: 5px 10px;
@@ -219,8 +219,8 @@
 }
 
 .copy-settings-cancel:hover {
-  border-color: #4a5568;
-  color: #9ca3af;
+  border-color: var(--rack-border-strong);
+  color: var(--rack-text-muted);
 }
 
 .copy-settings-confirm {
@@ -229,10 +229,10 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  background: rgba(74, 222, 222, 0.08);
-  border: 1px solid rgba(74, 222, 222, 0.4);
+  background: color-mix(in srgb, var(--rack-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rack-accent) 40%, transparent);
   border-radius: 4px;
-  color: #4adede;
+  color: var(--rack-accent);
   font-family: inherit;
   font-size: 0.72rem;
   font-weight: 600;
@@ -242,8 +242,8 @@
 }
 
 .copy-settings-confirm:hover:not(:disabled) {
-  background: rgba(74, 222, 222, 0.16);
-  border-color: #4adede;
+  background: color-mix(in srgb, var(--rack-accent) 16%, transparent);
+  border-color: var(--rack-accent);
 }
 
 .copy-settings-confirm:disabled {
@@ -257,7 +257,7 @@
   justify-content: center;
   gap: 10px;
   padding: 36px 20px;
-  color: #4adede;
+  color: var(--rack-accent);
   font-size: 0.8rem;
   font-weight: 600;
 }

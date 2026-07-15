@@ -270,7 +270,9 @@ function buildOffscreenRack(rackId, rack, allSlots, view, theme) {
   // Keep the rack name label so it appears in the export; remove only the
   // editable input (not relevant outside edit mode) and the U counter.
   clone.querySelectorAll('.rack-name-input, .rack-u-counter').forEach((el) => el.remove());
-  if (theme === 'light') clone.classList.add('rack-capture-light');
+  // Force the chosen export theme's rack tokens on the clone regardless
+  // of the app theme (rackTheme.css defines both override classes).
+  clone.classList.add(theme === 'light' ? 'rack-capture-light' : 'rack-capture-dark');
 
   const frame = clone.querySelector('.rack-dual-frame');
   if (!frame) return null;

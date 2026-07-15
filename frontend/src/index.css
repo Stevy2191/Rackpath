@@ -3,6 +3,8 @@
 }
 
 :root {
+  /* Native UI (scrollbars, form controls, popups) follows the theme */
+  color-scheme: light;
   --color-bg: #f4f5f7;
   --color-bg-elevated: #ffffff;
   --color-bg-subtle: #f9f9fb;
@@ -22,9 +24,27 @@
   --color-shadow: rgba(0, 0, 0, 0.08);
   --color-code-bg: #1e1e2f;
   --color-code-text: #d6d6e0;
+  --color-success: #16a34a;
+  --color-success-bg: #e6f6ec;
+  --color-warning: #b45309;
+  --color-warning-bg: #fdf3e1;
+  --color-info: #2563eb;
+  --color-info-bg: #e7f0ff;
+  --color-overlay: rgba(0, 0, 0, 0.5);
+  --color-canvas-grid: rgba(30, 30, 47, 0.18);
+  --color-tooltip-bg: rgba(30, 30, 47, 0.92);
+  --color-tooltip-text: #f4f5f7;
+  --color-tooltip-border: rgba(30, 30, 47, 0.25);
+  /* Navbar: deliberately the same dark brand bar in both themes */
+  --color-nav-bg: #1e1e2f;
+  --color-nav-text: #ffffff;
+  --color-nav-text-muted: #c9c9d8;
+  --color-nav-active-bg: #383852;
+  --color-nav-border: #4a4a68;
 }
 
 [data-theme='dark'] {
+  color-scheme: dark;
   --color-bg: #16161f;
   --color-bg-elevated: #22222e;
   --color-bg-subtle: #2a2a38;
@@ -44,6 +64,17 @@
   --color-shadow: rgba(0, 0, 0, 0.4);
   --color-code-bg: #0d0d14;
   --color-code-text: #c9c9d8;
+  --color-success: #4ade80;
+  --color-success-bg: #14331f;
+  --color-warning: #fbbf24;
+  --color-warning-bg: #3a2e14;
+  --color-info: #7aa9f0;
+  --color-info-bg: #1f3050;
+  --color-overlay: rgba(0, 0, 0, 0.65);
+  --color-canvas-grid: rgba(228, 228, 236, 0.16);
+  --color-tooltip-bg: rgba(13, 13, 20, 0.92);
+  --color-tooltip-text: #e4e4ec;
+  --color-tooltip-border: rgba(228, 228, 236, 0.2);
 }
 
 html, body, #root {

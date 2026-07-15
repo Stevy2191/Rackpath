@@ -1,10 +1,10 @@
 .rack-ctx-menu {
   position: fixed;
   min-width: 182px;
-  background: #1a1c22;
-  border: 1px solid #2a2e38;
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 8px 24px var(--color-shadow);
   z-index: 500;
   overflow: hidden;
   padding: 4px 0;
@@ -17,7 +17,7 @@
   padding: 8px 14px;
   border: none;
   background: transparent;
-  color: #c4cad6;
+  color: var(--rack-text);
   font-family: inherit;
   font-size: 0.79rem;
   font-weight: 500;
@@ -27,17 +27,17 @@
 }
 
 .rack-ctx-item:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #e6e9f0;
+  background: var(--rack-hover);
+  color: var(--rack-text-bright);
 }
 
-.rack-ctx-danger  { color: #ef4444; }
-.rack-ctx-danger:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.rack-ctx-danger  { color: var(--rack-danger); }
+.rack-ctx-danger:hover { background: color-mix(in srgb, var(--rack-danger) 10%, transparent); color: var(--rack-danger); }
 .rack-ctx-disabled { opacity: 0.38; cursor: not-allowed; }
 .rack-ctx-disabled:hover { background: transparent; }
 
 .rack-ctx-divider {
   height: 1px;
-  background: #2a2e38;
+  background: var(--rack-border);
   margin: 4px 0;
 }

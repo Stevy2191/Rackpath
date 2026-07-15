@@ -163,7 +163,7 @@
 }
 
 .nt-result-value.nt-success {
-  color: #2a8a4a;
+  color: var(--color-success);
 }
 
 .nt-result-value.nt-fail {
@@ -306,7 +306,7 @@
 }
 
 .nt-iface-up {
-  color: #2a8a4a;
+  color: var(--color-success);
   font-weight: 600;
 }
 

@@ -19,6 +19,7 @@ import UPSPowerSummary from '../components/racks/UPSPowerSummary';
 import ConfirmModal from '../components/racks/ConfirmModal';
 import { getDeviceLabel } from '../components/racks/DeviceBlock';
 import BulkMoveToolbar from '../components/racks/BulkMoveToolbar';
+import '../components/racks/rackTheme.css';
 import './Racks.css';
 
 function scrollRackIntoView(rackId) {

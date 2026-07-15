@@ -1,7 +1,7 @@
 .confirm-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--color-overlay);
   z-index: 900;
   display: flex;
   align-items: center;
@@ -10,10 +10,10 @@
 
 .confirm-modal {
   width: 320px;
-  background: #1a1c24;
-  border: 1px solid #2a2e38;
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border);
   border-radius: 8px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 16px 48px var(--color-shadow);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   padding: 20px 22px 18px;
   display: flex;
@@ -24,13 +24,13 @@
 .confirm-modal-title {
   font-size: 0.92rem;
   font-weight: 700;
-  color: #e6e9f0;
+  color: var(--rack-text-bright);
 }
 
 .confirm-modal-body {
   margin: 0;
   font-size: 0.78rem;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   line-height: 1.5;
 }
 
@@ -43,10 +43,10 @@
 
 .confirm-modal-cancel {
   padding: 6px 14px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
   background: transparent;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   font-family: inherit;
   font-size: 0.78rem;
   font-weight: 600;
@@ -55,16 +55,16 @@
 }
 
 .confirm-modal-cancel:hover {
-  border-color: #3a3f4a;
-  color: #d4d8e0;
+  border-color: var(--rack-border-strong);
+  color: var(--rack-text);
 }
 
 .confirm-modal-confirm {
   padding: 6px 14px;
-  border: 1px solid rgba(239, 68, 68, 0.5);
+  border: 1px solid color-mix(in srgb, var(--rack-danger) 50%, transparent);
   border-radius: 4px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--rack-danger) 10%, transparent);
+  color: var(--rack-danger);
   font-family: inherit;
   font-size: 0.78rem;
   font-weight: 600;
@@ -73,6 +73,6 @@
 }
 
 .confirm-modal-confirm:hover {
-  background: rgba(239, 68, 68, 0.18);
-  border-color: rgba(239, 68, 68, 0.7);
+  background: color-mix(in srgb, var(--rack-danger) 18%, transparent);
+  border-color: color-mix(in srgb, var(--rack-danger) 70%, transparent);
 }

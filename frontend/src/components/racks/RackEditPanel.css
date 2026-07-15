@@ -4,9 +4,9 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #12141a;
-  border-left: 1px solid #2a2e38;
-  color: #d4d8e0;
+  background: var(--rack-panel-bg);
+  border-left: 1px solid var(--rack-border);
+  color: var(--rack-text);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   overflow: hidden;
 }
@@ -16,7 +16,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #2a2e38;
+  border-bottom: 1px solid var(--rack-border);
   gap: 8px;
 }
 
@@ -24,7 +24,7 @@
   flex: 1;
   font-size: 0.83rem;
   font-weight: 600;
-  color: #e6e9f0;
+  color: var(--rack-text-bright);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -39,13 +39,13 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   cursor: pointer;
 }
 
 .rack-edit-panel-close:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e6e9f0;
+  background: var(--rack-hover);
+  color: var(--rack-text-bright);
 }
 
 .rack-edit-panel-body {
@@ -69,22 +69,22 @@
 .rep-field-section-start {
   margin-top: 8px;
   padding-top: 14px;
-  border-top: 1px solid #2a2e38;
+  border-top: 1px solid var(--rack-border);
 }
 
 .rep-label {
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #6b7280;
+  color: var(--rack-text-faint);
 }
 
 .rep-input {
   padding: 6px 8px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
-  background: #0e0f13;
-  color: #e6e9f0;
+  background: var(--rack-inset-bg);
+  color: var(--rack-text-bright);
   font-family: inherit;
   font-size: 0.8rem;
   width: 100%;
@@ -93,7 +93,7 @@
 
 .rep-input:focus {
   outline: none;
-  border-color: #4adede;
+  border-color: var(--rack-accent);
 }
 
 .rep-textarea {
@@ -110,10 +110,10 @@
 .rep-width-card {
   flex: 1;
   padding: 7px 4px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 5px;
-  background: #0e0f13;
-  color: #8b91a1;
+  background: var(--rack-inset-bg);
+  color: var(--rack-text-muted);
   font-family: inherit;
   font-size: 0.72rem;
   cursor: pointer;
@@ -124,11 +124,11 @@
   transition: border-color 0.15s, background 0.15s;
 }
 
-.rep-width-label { font-size: 0.88rem; font-weight: 700; color: #d4d8e0; }
-.rep-width-sub   { font-size: 0.60rem; color: #6b7280; }
-.rep-width-card.selected { border-color: #4adede; background: rgba(74, 222, 222, 0.08); }
-.rep-width-card.selected .rep-width-label { color: #4adede; }
-.rep-width-card:hover:not(.selected) { border-color: #3a3f4a; }
+.rep-width-label { font-size: 0.88rem; font-weight: 700; color: var(--rack-text); }
+.rep-width-sub   { font-size: 0.60rem; color: var(--rack-text-faint); }
+.rep-width-card.selected { border-color: var(--rack-accent); background: color-mix(in srgb, var(--rack-accent) 8%, transparent); }
+.rep-width-card.selected .rep-width-label { color: var(--rack-accent); }
+.rep-width-card:hover:not(.selected) { border-color: var(--rack-border-strong); }
 
 /* ─── Height presets + slider ────────────────────────────── */
 .rep-height-presets {
@@ -139,10 +139,10 @@
 
 .rep-preset-btn {
   padding: 4px 9px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
-  background: #0e0f13;
-  color: #8b91a1;
+  background: var(--rack-inset-bg);
+  color: var(--rack-text-muted);
   font-family: inherit;
   font-size: 0.73rem;
   font-weight: 600;
@@ -150,8 +150,8 @@
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.rep-preset-btn.selected { border-color: #4adede; color: #4adede; background: rgba(74, 222, 222, 0.08); }
-.rep-preset-btn:hover:not(.selected) { border-color: #3a3f4a; color: #d4d8e0; }
+.rep-preset-btn.selected { border-color: var(--rack-accent); color: var(--rack-accent); background: color-mix(in srgb, var(--rack-accent) 8%, transparent); }
+.rep-preset-btn:hover:not(.selected) { border-color: var(--rack-border-strong); color: var(--rack-text); }
 
 .rep-slider-row {
   display: flex;
@@ -162,7 +162,7 @@
 
 .rep-slider-row input[type='range'] {
   flex: 1;
-  accent-color: #4adede;
+  accent-color: var(--rack-accent);
   cursor: pointer;
 }
 
@@ -171,22 +171,22 @@
   text-align: right;
   font-size: 0.83rem;
   font-weight: 600;
-  color: #d4d8e0;
+  color: var(--rack-text);
 }
 
 .rep-u-usage {
   margin-bottom: 6px;
   font-size: 0.72rem;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
 }
 
 .rep-warning {
   margin-top: 8px;
   padding: 6px 8px;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid color-mix(in srgb, var(--rack-danger) 30%, transparent);
   border-radius: 4px;
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--rack-danger) 8%, transparent);
+  color: var(--rack-danger);
   font-size: 0.72rem;
   line-height: 1.5;
 }
@@ -195,10 +195,10 @@
 .rep-save-btn {
   width: 100%;
   padding: 7px 12px;
-  border: 1px solid #4adede;
+  border: 1px solid var(--rack-accent);
   border-radius: 4px;
-  background: rgba(74, 222, 222, 0.1);
-  color: #4adede;
+  background: color-mix(in srgb, var(--rack-accent) 10%, transparent);
+  color: var(--rack-accent);
   font-family: inherit;
   font-size: 0.8rem;
   font-weight: 600;
@@ -207,7 +207,7 @@
 }
 
 .rep-save-btn:hover:not(:disabled) {
-  background: rgba(74, 222, 222, 0.18);
+  background: color-mix(in srgb, var(--rack-accent) 18%, transparent);
 }
 
 .rep-save-btn:disabled {
@@ -221,7 +221,7 @@
   flex-direction: column;
   gap: 6px;
   padding-top: 14px;
-  border-top: 1px solid #2a2e38;
+  border-top: 1px solid var(--rack-border);
 }
 
 .rep-action-btn {
@@ -229,10 +229,10 @@
   align-items: center;
   gap: 6px;
   padding: 7px 10px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
   background: transparent;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   font-family: inherit;
   font-size: 0.78rem;
   font-weight: 600;
@@ -241,14 +241,14 @@
 }
 
 .rep-action-btn:hover {
-  border-color: #3a3f4a;
-  color: #d4d8e0;
+  border-color: var(--rack-border-strong);
+  color: var(--rack-text);
 }
 
 .rep-action-danger:hover {
-  border-color: rgba(239, 68, 68, 0.5);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  border-color: color-mix(in srgb, var(--rack-danger) 50%, transparent);
+  background: color-mix(in srgb, var(--rack-danger) 8%, transparent);
+  color: var(--rack-danger);
 }
 
 /* ─── Export dropdown in actions section ────────────────── */
@@ -266,10 +266,10 @@
   bottom: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: #12141a;
-  border: 1px solid #2a2e38;
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
-  box-shadow: 0 -6px 20px rgba(0,0,0,0.55);
+  box-shadow: 0 -6px 20px var(--color-shadow);
   z-index: 100;
   overflow: hidden;
 }
@@ -282,7 +282,7 @@
   border: none;
   border-radius: 0;
   background: transparent;
-  color: #9ca3af;
+  color: var(--rack-text-muted);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.76rem;
   font-weight: 600;
@@ -292,8 +292,8 @@
 }
 
 .rep-export-menu button:hover {
-  background: rgba(255,255,255,0.07);
-  color: #d4d8e0;
+  background: var(--rack-hover);
+  color: var(--rack-text);
 }
 
 /* ─── Rear view toggle ───────────────────────────────────── */
@@ -302,7 +302,7 @@
   align-items: center;
   gap: 7px;
   font-size: 0.78rem;
-  color: #d4d8e0;
+  color: var(--rack-text);
   cursor: pointer;
   user-select: none;
 }
@@ -310,7 +310,7 @@
 .rep-toggle input[type='checkbox'] {
   width: 14px;
   height: 14px;
-  accent-color: #4adede;
+  accent-color: var(--rack-accent);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -319,7 +319,7 @@
   display: block;
   margin-top: 4px;
   font-size: 0.65rem;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   font-style: italic;
 }
 

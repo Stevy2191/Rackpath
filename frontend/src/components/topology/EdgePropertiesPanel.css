@@ -113,7 +113,7 @@
 .edge-properties-toggle.active {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-text);
 }
 
 .edge-properties-segmented {
@@ -145,7 +145,7 @@
 
 .edge-properties-segment.active {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-text);
 }
 
 .edge-properties-swatch-row {

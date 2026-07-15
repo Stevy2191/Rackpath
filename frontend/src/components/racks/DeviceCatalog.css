@@ -4,9 +4,9 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #12141a;
-  border-right: 1px solid #2a2e38;
-  color: #d4d8e0;
+  background: var(--rack-panel-bg);
+  border-right: 1px solid var(--rack-border);
+  color: var(--rack-text);
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   overflow: hidden;
 }
@@ -16,13 +16,13 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #2a2e38;
+  border-bottom: 1px solid var(--rack-border);
 }
 
 .dc-title {
   font-size: 0.88rem;
   font-weight: 600;
-  color: #e6e9f0;
+  color: var(--rack-text-bright);
   letter-spacing: 0.02em;
 }
 
@@ -35,14 +35,14 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .dc-close:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e6e9f0;
+  background: var(--rack-hover);
+  color: var(--rack-text-bright);
 }
 
 .dc-hint {
@@ -50,13 +50,13 @@
   padding: 8px 14px;
   font-size: 0.7rem;
   line-height: 1.5;
-  color: #6b7280;
-  border-bottom: 1px solid #2a2e38;
+  color: var(--rack-text-faint);
+  border-bottom: 1px solid var(--rack-border);
 }
 
 .dc-tabs {
   display: flex;
-  border-bottom: 1px solid #2a2e38;
+  border-bottom: 1px solid var(--rack-border);
 }
 
 .dc-tabs button {
@@ -65,7 +65,7 @@
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   font-family: inherit;
   font-size: 0.72rem;
   font-weight: 600;
@@ -75,33 +75,33 @@
   transition: color 0.15s, border-color 0.15s;
 }
 
-.dc-tabs button:hover { color: #d4d8e0; }
+.dc-tabs button:hover { color: var(--rack-text); }
 
 .dc-tabs button.active {
-  color: #4adede;
-  border-bottom-color: #4adede;
+  color: var(--rack-accent);
+  border-bottom-color: var(--rack-accent);
 }
 
 .dc-search-row {
   padding: 8px 10px;
-  border-bottom: 1px solid #2a2e38;
+  border-bottom: 1px solid var(--rack-border);
 }
 
 .dc-search {
   width: 100%;
   box-sizing: border-box;
   padding: 6px 8px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
-  background: #0e0f13;
-  color: #d4d8e0;
+  background: var(--rack-inset-bg);
+  color: var(--rack-text);
   font-family: inherit;
   font-size: 0.78rem;
 }
 
 .dc-search:focus {
   outline: none;
-  border-color: #4adede;
+  border-color: var(--rack-accent);
 }
 
 .dc-list {
@@ -121,7 +121,7 @@
   padding: 5px 2px;
   border: none;
   background: transparent;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   font-family: inherit;
   font-size: 0.68rem;
   font-weight: 700;
@@ -131,7 +131,7 @@
   transition: color 0.15s;
 }
 
-.dc-group-header:hover { color: #d4d8e0; }
+.dc-group-header:hover { color: var(--rack-text); }
 
 .dc-group-header span:first-of-type {
   flex: 1;
@@ -141,8 +141,8 @@
 .dc-group-count {
   padding: 1px 5px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #6b7280;
+  background: var(--rack-hover);
+  color: var(--rack-text-faint);
   font-size: 0.64rem;
   letter-spacing: 0.02em;
   text-transform: none;
@@ -169,7 +169,7 @@
 .dc-group-brand-name {
   font-size: 0.72rem;
   font-weight: 700;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
   letter-spacing: 0.03em;
 }
 
@@ -180,17 +180,17 @@
   gap: 7px;
   padding: 5px 8px 5px 6px;
   margin-bottom: 2px;
-  border: 1px solid #1e2128;
+  border: 1px solid var(--rack-border-faint);
   border-radius: 5px;
-  background: #161820;
+  background: var(--rack-card-bg);
   cursor: grab;
   position: relative;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .dc-card:hover {
-  border-color: #3a3f4c;
-  background: #1a1d26;
+  border-color: var(--rack-border-strong);
+  background: var(--rack-card-hover-bg);
 }
 
 .dc-card:active { cursor: grabbing; }
@@ -198,7 +198,7 @@
 /* Grip handle */
 .dc-card-grip {
   flex-shrink: 0;
-  color: #3a4050;
+  color: var(--rack-text-disabled);
 }
 
 /* Colored icon swatch */
@@ -219,7 +219,7 @@
   flex: 1;
   font-size: 0.73rem;
   font-weight: 600;
-  color: #e6e9f0;
+  color: var(--rack-text-bright);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -231,10 +231,10 @@
   flex: 1;
   min-width: 0;
   padding: 2px 5px;
-  border: 1px solid #4adede;
+  border: 1px solid var(--rack-accent);
   border-radius: 3px;
-  background: #0e0f13;
-  color: #e6e9f0;
+  background: var(--rack-inset-bg);
+  color: var(--rack-text-bright);
   font-family: inherit;
   font-size: 0.73rem;
   font-weight: 600;
@@ -255,22 +255,22 @@
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 8px;
-  background: rgba(30, 33, 40, 0.9);
-  color: #6b7280;
-  border: 1px solid #2a2e38;
+  background: color-mix(in srgb, var(--rack-panel-bg) 90%, transparent);
+  color: var(--rack-text-faint);
+  border: 1px solid var(--rack-border);
   letter-spacing: 0.02em;
 }
 
 .dc-card-badge-accent {
-  color: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.3);
-  background: rgba(245, 158, 11, 0.08);
+  color: var(--rack-warning);
+  border-color: color-mix(in srgb, var(--rack-warning) 30%, transparent);
+  background: color-mix(in srgb, var(--rack-warning) 8%, transparent);
 }
 
 .dc-card-badge-rear {
-  color: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.25);
-  background: rgba(245, 158, 11, 0.08);
+  color: var(--rack-warning);
+  border-color: color-mix(in srgb, var(--rack-warning) 25%, transparent);
+  background: color-mix(in srgb, var(--rack-warning) 8%, transparent);
 }
 
 /* Delete button (custom devices only) */
@@ -284,14 +284,14 @@
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .dc-card-delete:hover {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--rack-danger) 12%, transparent);
+  color: var(--rack-danger);
 }
 
 /* ─── A-Z list ───────────────────────────────────────────── */
@@ -303,14 +303,14 @@
 .dc-empty {
   margin: 6px 0;
   font-size: 0.72rem;
-  color: #6b7280;
+  color: var(--rack-text-faint);
   line-height: 1.5;
 }
 
 .dc-group-unracked {
   margin-bottom: 10px;
   padding-bottom: 10px;
-  border-bottom: 1px solid #2a2e38;
+  border-bottom: 1px solid var(--rack-border);
 }
 
 /* ─── Custom-card right-click context menu ────────────────── */
@@ -326,10 +326,10 @@
   flex-direction: column;
   min-width: 120px;
   padding: 4px;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 6px;
-  background: #1a1d26;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  background: var(--rack-card-hover-bg);
+  box-shadow: 0 8px 24px var(--color-shadow);
   z-index: 1001;
 }
 
@@ -338,14 +338,14 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #d4d8e0;
+  color: var(--rack-text);
   font-family: inherit;
   font-size: 0.75rem;
   text-align: left;
   cursor: pointer;
 }
 
-.dc-ctx-menu button:hover { background: rgba(255, 255, 255, 0.06); }
+.dc-ctx-menu button:hover { background: var(--rack-hover); }
 
-.dc-ctx-menu button.dc-ctx-menu-danger { color: #ef4444; }
-.dc-ctx-menu button.dc-ctx-menu-danger:hover { background: rgba(239, 68, 68, 0.12); }
+.dc-ctx-menu button.dc-ctx-menu-danger { color: var(--rack-danger); }
+.dc-ctx-menu button.dc-ctx-menu-danger:hover { background: color-mix(in srgb, var(--rack-danger) 12%, transparent); }

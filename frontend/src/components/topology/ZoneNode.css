@@ -10,7 +10,7 @@
   width: 10px !important;
   height: 10px !important;
   background: var(--color-accent) !important;
-  border: 2px solid #fff !important;
+  border: 2px solid var(--color-bg-elevated) !important;
   border-radius: 50% !important;
   opacity: 0;
   transition: opacity 0.15s;

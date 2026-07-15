@@ -10,7 +10,7 @@
   width: 10px !important;
   height: 10px !important;
   background: var(--color-accent) !important;
-  border: 2px solid #fff !important;
+  border: 2px solid var(--color-bg-elevated) !important;
   border-radius: 50% !important;
   opacity: 0;
   transition: opacity 0.15s;
@@ -31,7 +31,7 @@
   font-weight: 600;
   pointer-events: none;
   user-select: none;
-  text-shadow: 0 1px 2px rgba(0,0,0,.5);
+  text-shadow: 0 1px 2px var(--color-shadow);
   padding: 4px;
   text-align: center;
   word-break: break-word;
@@ -42,8 +42,8 @@
   bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
-  background: #1e1e2e;
-  border: 1px solid #3b4263;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
   padding: 10px 12px;
   display: flex;
@@ -51,14 +51,14 @@
   gap: 8px;
   z-index: 100;
   min-width: 200px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  box-shadow: 0 4px 20px var(--color-shadow);
 }
 
 .shape-node-editor-input {
-  background: #0f1117;
-  border: 1px solid #3b4263;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
-  color: #e2e8f0;
+  color: var(--color-text);
   padding: 5px 8px;
   font-size: 13px;
   width: 100%;
@@ -67,7 +67,7 @@
 
 .shape-node-editor-input:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--color-link);
 }
 
 .shape-node-editor-colors {
@@ -91,13 +91,13 @@
 }
 
 .shape-node-swatch.selected {
-  border-color: #fff;
+  border-color: var(--color-text);
 }
 
 .shape-node-editor-done {
   align-self: flex-end;
-  background: #3b82f6;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-text);
   border: none;
   border-radius: 4px;
   padding: 4px 12px;
@@ -106,7 +106,7 @@
 }
 
 .shape-node-editor-done:hover {
-  background: #2563eb;
+  background: var(--color-accent-hover);
 }
 
 .shape-node-delete {
@@ -116,9 +116,9 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #ef4444;
+  background: var(--color-danger);
   border: none;
-  color: #fff;
+  color: var(--color-accent-text);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
@@ -130,5 +130,6 @@
 }
 
 .shape-node-delete:hover {
-  background: #dc2626;
+  background: var(--color-danger);
+  filter: brightness(0.9);
 }

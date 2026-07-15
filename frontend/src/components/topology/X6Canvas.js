@@ -15,6 +15,7 @@ import { History } from '@antv/x6-plugin-history';
 import { MiniMap } from '@antv/x6-plugin-minimap';
 import { Scroller } from '@antv/x6-plugin-scroller';
 import { TopologyGraphContext } from './TopologyGraphContext';
+import { useTheme } from '../../theme/ThemeContext';
 import DeviceCell from './x6cells/DeviceCell';
 import ZoneCell from './x6cells/ZoneCell';
 import ShapeCell from './x6cells/ShapeCell';
@@ -24,11 +25,21 @@ import './X6Canvas.css';
 
 // ── Port group shared by all node shapes ──────────────────────────────────────
 const PORT_GROUPS = {
-  top:    { position: 'top',    attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', opacity: 0 } } },
-  bottom: { position: 'bottom', attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', opacity: 0 } } },
-  left:   { position: 'left',   attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', opacity: 0 } } },
-  right:  { position: 'right',  attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: '#fff', opacity: 0 } } },
+  top:    { position: 'top',    attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: 'var(--color-bg-elevated)', opacity: 0 } } },
+  bottom: { position: 'bottom', attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: 'var(--color-bg-elevated)', opacity: 0 } } },
+  left:   { position: 'left',   attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: 'var(--color-bg-elevated)', opacity: 0 } } },
+  right:  { position: 'right',  attrs: { circle: { r: 5, magnet: true, stroke: 'var(--color-accent)', strokeWidth: 2, fill: 'var(--color-bg-elevated)', opacity: 0 } } },
 };
+
+// Resolve theme CSS variables to concrete values for X6 APIs that rasterise
+// colors (canvas background, grid pattern) and can't consume var() references.
+function themeCanvasColors() {
+  const styles = getComputedStyle(document.documentElement);
+  return {
+    background: styles.getPropertyValue('--color-bg').trim() || '#f4f5f7',
+    grid: styles.getPropertyValue('--color-canvas-grid').trim() || 'rgba(128,128,128,0.25)',
+  };
+}
 
 const PORT_ITEMS = [
   { id: 'top',    group: 'top'    },
@@ -176,12 +187,15 @@ const X6Canvas = forwardRef(function X6Canvas(props, ref) {
     onDrop,
   } = props;
 
+  const { theme } = useTheme();
   const containerRef = useRef(null);
   const minimapRef = useRef(null);
   const graphRef = useRef(null);
   const showLabelsRef = useRef(true);
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const showGridRef = useRef(showGrid);
+  showGridRef.current = showGrid;
 
   // ── Imperative API exposed to parent ────────────────────────────────────────
   useImperativeHandle(ref, () => ({
@@ -406,17 +420,16 @@ const X6Canvas = forwardRef(function X6Canvas(props, ref) {
   useEffect(() => {
     ensureShapes();
 
-    const bgColor = getComputedStyle(document.documentElement)
-      .getPropertyValue('--color-bg').trim() || '#1a1a2e';
+    const colors = themeCanvasColors();
 
     const graph = new Graph({
       container: containerRef.current,
       autoResize: true,
-      background: { color: bgColor },
+      background: { color: colors.background },
       grid: {
         visible: true,
         type: 'dot',
-        args: { color: 'rgba(128,128,128,0.25)', thickness: 1 },
+        args: { color: colors.grid, thickness: 1 },
       },
       mousewheel: { enabled: true, zoomAtMousePosition: true, modifiers: null, minScale: 0.1, maxScale: 5 },
       panning: { enabled: true, modifiers: 'space' },
@@ -607,14 +620,18 @@ const X6Canvas = forwardRef(function X6Canvas(props, ref) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Sync background ────────────────────────────────────────────────────────
+  // ── Sync background + grid with the active theme ──────────────────────────
+  // The background and grid pattern are rasterised by X6 with concrete color
+  // values, so they must be redrawn whenever the theme toggles. Node/edge
+  // colors use CSS var() references and restyle themselves via the cascade.
   useEffect(() => {
     const g = graphRef.current;
     if (!g) return;
-    const bgColor = getComputedStyle(document.documentElement)
-      .getPropertyValue('--color-bg').trim() || '#1a1a2e';
-    g.drawBackground({ color: bgColor });
-  }, [background]);
+    const colors = themeCanvasColors();
+    g.drawBackground({ color: colors.background });
+    g.drawGrid({ type: 'dot', args: { color: colors.grid, thickness: 1 } });
+    if (!showGridRef.current) g.hideGrid();
+  }, [background, theme]);
 
   // ── Sync grid visibility ───────────────────────────────────────────────────
   useEffect(() => {

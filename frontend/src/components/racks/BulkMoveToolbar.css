@@ -7,10 +7,10 @@
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  background: #1a1d24;
-  border: 1px solid #3a3f4a;
+  background: var(--rack-panel-bg);
+  border: 1px solid var(--rack-border-strong);
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 20px var(--color-shadow);
   z-index: 100;
   font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
   font-size: 0.72rem;
@@ -18,7 +18,7 @@
 }
 
 .bulk-move-count {
-  color: #4adede;
+  color: var(--rack-accent);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -26,7 +26,7 @@
 .bulk-move-sep {
   width: 1px;
   height: 20px;
-  background: #2a2e38;
+  background: var(--rack-border);
   flex-shrink: 0;
 }
 
@@ -36,9 +36,9 @@
   gap: 3px;
   padding: 3px 8px;
   background: transparent;
-  border: 1px solid #2a2e38;
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
-  color: #c0c6d4;
+  color: var(--rack-text);
   font-family: inherit;
   font-size: inherit;
   cursor: pointer;
@@ -46,36 +46,36 @@
 }
 
 .bulk-move-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: #4a4f5a;
-  color: #e6e9f0;
+  background: var(--rack-hover);
+  border-color: var(--rack-border-strong);
+  color: var(--rack-text-bright);
 }
 
 .bulk-move-delete {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.25);
+  color: var(--rack-danger);
+  border-color: color-mix(in srgb, var(--rack-danger) 25%, transparent);
 }
 
 .bulk-move-delete:hover {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: #f87171;
-  color: #fca5a5;
+  background: color-mix(in srgb, var(--rack-danger) 12%, transparent);
+  border-color: var(--rack-danger);
+  color: var(--rack-danger);
 }
 
 .bulk-move-n-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #8b91a1;
+  color: var(--rack-text-muted);
 }
 
 .bulk-move-n-input {
   width: 42px;
   padding: 2px 5px;
-  background: #0f1117;
-  border: 1px solid #2a2e38;
+  background: var(--rack-inset-bg);
+  border: 1px solid var(--rack-border);
   border-radius: 4px;
-  color: #e6e9f0;
+  color: var(--rack-text-bright);
   font-family: inherit;
   font-size: inherit;
   text-align: center;
@@ -83,5 +83,5 @@
 
 .bulk-move-n-input:focus {
   outline: none;
-  border-color: #4adede;
+  border-color: var(--rack-accent);
 }
