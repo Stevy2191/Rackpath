@@ -67,10 +67,11 @@ leaves your infrastructure.
 curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/deploy.sh | bash
 ```
 
-This downloads the compose config, prompts for a JWT secret, starts the
-stack, applies the database schema, and creates the default admin user.
+This downloads the compose config, asks which ports to use and for a JWT
+secret, starts the stack, applies the database schema, and creates the
+default admin user.
 
-Once it finishes, open:
+Once it finishes, open the URL it prints — by default:
 
 ```
 http://your-server-ip:8080
@@ -133,10 +134,30 @@ directory containing `docker-compose.yml`, `.env`, and `db/init.sql`. Set
 
 During setup you'll be prompted for:
 
+- **Ports** for the web UI, API, scanner, and database - press Enter to take
+  the default shown for each. If a port is already in use the script says so
+  and asks again, so you can route around a conflict during the install
+  rather than afterwards.
 - **JWT signing secret** - leave blank to auto-generate a secure random value (recommended)
 
-When it finishes, it prints the URL, login credentials, and the path to
-your `.env` file.
+Re-running the script is safe: it offers your current ports as the defaults
+and keeps the existing JWT secret and database password rather than
+resetting them.
+
+To install without a terminal — a `curl ... | bash` pipe has none, and
+neither does a provisioning script — set any of these first and the matching
+question is skipped:
+
+```bash
+RACKPATH_FRONTEND_PORT=9090 \
+RACKPATH_API_PORT=4010 \
+RACKPATH_SCANNER_PORT=6001 \
+RACKPATH_DB_PORT=3307 \
+  bash deploy.sh
+```
+
+When it finishes, it prints the URL, login credentials, the ports in use,
+and the path to your `.env` file.
 
 ### Setting things up by hand
 
@@ -207,11 +228,33 @@ docker compose up -d
 | `rackpath-scanner`   | Python discovery service (host networking)  | 5001          | `SCANNER_PORT`    |
 | `rackpath-db`        | MariaDB with persistent named volume        | 3306          | `DB_PORT`         |
 
+`deploy.sh` asks for all four during install. To change one later, edit
+`.env` and run `docker compose up -d` — no rebuild is needed, because the
+frontend reaches the API through a relative `/api` path that nginx proxies
+inside the compose network.
+
+Two of these values are addresses rather than mappings, so they have to be
+kept in step by hand if you edit `.env` directly:
+
+- `API_PUBLIC_URL` must carry `API_PORT` — the scanner runs on the host
+  network and calls back into the API through the published host port.
+- `SCANNER_URL` must carry `SCANNER_PORT`.
+
+Every port in the table is a **host** port. The ports used inside the
+compose network are fixed: the API always listens on 3010 there, because
+the frontend image bakes in an nginx config that proxies to
+`rackpath-api:3010`.
+
+`DB_PORT` only matters if you want to reach MariaDB from outside Docker (a
+GUI client, a backup job); the API talks to it over the compose network
+either way. To stop publishing it at all, delete the `ports:` block from
+`rackpath-db` in `docker-compose.yml`.
+
 `rackpath-scanner` runs with `network_mode: host` so it can perform ping
-sweeps, ARP probes, and SNMP/LLDP discovery directly on your LAN. The API
-reaches it via `SCANNER_URL` (default `http://host.docker.internal:5001`),
-and `SCAN_INTERFACE` should be set to the host network interface you want
-scans to run on (default `eth0`).
+sweeps, ARP probes, and SNMP/LLDP discovery directly on your LAN. Because of
+that, `SCANNER_PORT` is a real port on the host rather than a published
+mapping. `SCAN_INTERFACE` should be set to the host network interface you
+want scans to run on (default `eth0`).
 
 ## 📖 Usage
 
