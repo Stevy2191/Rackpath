@@ -158,7 +158,7 @@
 }
 
 .topo-switcher-item-actions .topo-switcher-delete:hover:not(:disabled) {
-  color: var(--color-danger, #ef4444);
+  color: var(--color-danger);
 }
 
 .topo-switcher-item-actions button:disabled {

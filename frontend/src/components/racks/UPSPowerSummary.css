@@ -18,7 +18,7 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 8px 40px var(--color-shadow);
-  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-family: var(--rack-font-mono);
   color: var(--rack-text);
 }
 

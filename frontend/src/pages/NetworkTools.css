@@ -157,7 +157,7 @@
 
 .nt-result-value {
   color: var(--color-text);
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
   text-align: right;
   word-break: break-all;
 }
@@ -181,7 +181,7 @@
   text-align: left;
   padding: 4px 8px;
   border-bottom: 1px solid var(--color-border);
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .nt-hop-table th {
@@ -222,7 +222,7 @@
 }
 
 .nt-result-list-item {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   color: var(--color-text);
   background: var(--color-bg-subtle);
@@ -296,7 +296,7 @@
   text-align: left;
   padding: 4px 8px;
   border-bottom: 1px solid var(--color-border);
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .nt-iface-table th {

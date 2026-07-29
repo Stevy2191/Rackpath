@@ -5,11 +5,10 @@
   min-height: 0;
   background: var(--rack-canvas-bg);
   color: var(--rack-text);
-  --rack-font-mono: 'Roboto Mono', 'Courier New', monospace;
-  --rack-accent: var(--rack-accent);
+  /* --rack-font-mono, --rack-accent, --rack-panel-bg and --rack-border used
+     to be redeclared here; the last three referenced themselves, which is a
+     cyclic var() the spec throws away. They all come from rackTheme.css. */
   --rack-bg: var(--rack-canvas-bg);
-  --rack-panel-bg: var(--rack-panel-bg);
-  --rack-border: var(--rack-border);
 }
 
 .racks-toolbar {

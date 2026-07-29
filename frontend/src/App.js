@@ -1,7 +1,7 @@
 import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { BrowserRouter } from 'react-router-dom';
-import Navbar from './components/Navbar';
+import Rail from './components/Rail';
 import DashboardPage from './pages/Dashboard';
 import TopologyPage from './pages/Topology';
 import VlansPage from './pages/Vlans';
@@ -35,7 +35,7 @@ function AppShell() {
 
   return (
     <div className="app">
-      {user && <Navbar />}
+      {user && <Rail />}
       <main className="app-content">
         {/* Re-mount the routed pages when the project changes so every page
             re-fetches its data for the newly selected project. */}

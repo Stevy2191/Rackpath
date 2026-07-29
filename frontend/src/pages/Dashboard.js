@@ -1,12 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  Server,
-  Link2,
-  Network,
-  Warehouse,
-  Percent,
-  Camera,
   Download,
   FileText,
   Building2,
@@ -15,6 +9,7 @@ import {
   X,
   Check,
   Plus,
+  Zap,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -22,41 +17,46 @@ import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
 import { formatPhoneNumber, onlyDigits } from '../utils/phone';
 import PhoneInput from '../components/PhoneInput';
+import SiteElevation from '../components/dashboard/SiteElevation';
 import './Dashboard.css';
 
-const SUMMARY_CARDS = [
-  { key: 'totalDevices', label: 'Total Devices', icon: Server, color: 'blue' },
-  { key: 'totalLinks', label: 'Total Links', icon: Link2, color: 'purple' },
-  { key: 'vlanCount', label: 'VLAN Count', icon: Network, color: 'green' },
-  { key: 'rackCount', label: 'Rack Count', icon: Warehouse, color: 'orange' },
-  { key: 'rackUtilization', label: 'Rack Utilization', icon: Percent, color: 'teal', suffix: '%' },
-  { key: 'cameraCount', label: 'Camera Count', icon: Camera, color: 'pink' },
-];
-
+// severity ranks the list on screen and picks the dot color; `to` is where
+// the row sends you to fix it. Both are ignored by the Markdown/PDF export,
+// which only reads label and render.
 const WARNING_DEFS = [
   {
     key: 'devicesNoIp',
     label: 'Devices with no IP assigned',
-    render: (item) => item.hostname || `Device ${item.id}`,
-  },
-  {
-    key: 'devicesNoRack',
-    label: 'Devices with no rack assignment',
+    severity: 'load',
+    to: '/devices',
     render: (item) => item.hostname || `Device ${item.id}`,
   },
   {
     key: 'devicesNoCredential',
     label: 'Devices with no credential macro assigned',
+    severity: 'load',
+    to: '/macros',
+    render: (item) => item.hostname || `Device ${item.id}`,
+  },
+  {
+    key: 'devicesNoRack',
+    label: 'Devices with no rack assignment',
+    severity: 'info',
+    to: '/racks',
     render: (item) => item.hostname || `Device ${item.id}`,
   },
   {
     key: 'vlansNoSubnet',
     label: 'VLANs with no subnet defined',
+    severity: 'info',
+    to: '/vlans',
     render: (item) => `VLAN ${item.vlan_id} (${item.name})`,
   },
   {
     key: 'nodesNoDevice',
     label: 'Topology nodes with no linked device',
+    severity: 'info',
+    to: '/topology',
     render: (item) => item.label || `Node ${item.id}`,
   },
 ];
@@ -90,6 +90,64 @@ function formatTimestamp(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+// The activity feed is scanned, not read: show clock time for today's
+// entries and a short date for anything older.
+function formatActivityTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  return sameDay
+    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+// Installed UPS capacity, per rack and for the site. Rackpath stores
+// nameplate ratings — there is no measured draw anywhere in the schema — so
+// this reports capacity and N+1 headroom and never implies a live load.
+function buildPowerSummary(racks, slots) {
+  const upsSlots = slots.filter((slot) => slot.device_type === 'ups');
+  if (upsSlots.length === 0) return null;
+
+  const rackNames = new Map((racks || []).map((rack) => [rack.id, rack.name]));
+  const byRack = new Map();
+  upsSlots.forEach((slot) => {
+    const entry = byRack.get(slot.rack_id) || {
+      rackId: slot.rack_id,
+      rackName: rackNames.get(slot.rack_id) || 'Unassigned',
+      count: 0,
+      va: 0,
+      watts: 0,
+    };
+    entry.count += 1;
+    entry.va += Number(slot.ups_va_rating) || 0;
+    entry.watts += Number(slot.ups_watt_rating) || 0;
+    byRack.set(slot.rack_id, entry);
+  });
+
+  const totalW = upsSlots.reduce((sum, slot) => sum + (Number(slot.ups_watt_rating) || 0), 0);
+  const largestW = upsSlots.reduce(
+    (max, slot) => Math.max(max, Number(slot.ups_watt_rating) || 0),
+    0
+  );
+
+  return {
+    rows: [...byRack.values()].sort((a, b) => a.rackName.localeCompare(b.rackName)),
+    totalVa: upsSlots.reduce((sum, slot) => sum + (Number(slot.ups_va_rating) || 0), 0),
+    totalW,
+    // What's still covered if the largest UPS is the one that fails.
+    headroomW: totalW - largestW,
+    upsCount: upsSlots.length,
+    pduCount: slots.filter(
+      (slot) => slot.item_type === 'vertical-pdu' || slot.device_type === 'pdu'
+    ).length,
+  };
 }
 
 function fileBaseName(project) {
@@ -372,6 +430,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [activity, setActivity] = useState([]);
+  const [slots, setSlots] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editingSiteInfo, setEditingSiteInfo] = useState(false);
@@ -395,11 +454,17 @@ export default function DashboardPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([client.get(`/projects/${projectId}/overview`), client.get(`/projects/${projectId}/activity`)])
-      .then(([overviewRes, activityRes]) => {
+    Promise.all([
+      client.get(`/projects/${projectId}/overview`),
+      client.get(`/projects/${projectId}/activity`),
+      // Slot occupancy for the site elevation and the power summary.
+      client.get('/rack-slots'),
+    ])
+      .then(([overviewRes, activityRes, slotsRes]) => {
         if (cancelled) return;
         setOverview(overviewRes.data);
         setActivity(activityRes.data || []);
+        setSlots(slotsRes.data || []);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -490,11 +555,51 @@ export default function DashboardPage() {
   if (!overview) return null;
 
   const { summary } = overview;
+  const racks = overview.details.racks || [];
+  const power = buildPowerSummary(racks, slots);
+  const devicesDown = (overview.details.devices || []).filter(
+    (device) => device.status === 'down' || device.status === 'offline'
+  );
+
+  // Fault first, then the configuration gaps in severity order. Anything
+  // with a count of zero is already fixed and doesn't need a row.
+  const attention = [
+    devicesDown.length > 0 && {
+      key: 'devicesDown',
+      label: devicesDown.length === 1 ? 'Device is unreachable' : 'Devices are unreachable',
+      severity: 'fault',
+      to: '/devices',
+      count: devicesDown.length,
+    },
+    ...WARNING_DEFS.map((def) => {
+      const count = (overview.warnings[def.key] || []).length;
+      return count > 0 ? { ...def, count } : null;
+    }),
+  ].filter(Boolean);
 
   return (
     <div className="dashboard-page">
       <div className="dashboard-header">
-        <h2>{currentProject?.name || 'Project'} Overview</h2>
+        <div>
+          <h2>{currentProject?.name || 'Project'}</h2>
+          <div className="dashboard-meta">
+            <span>
+              <b>{summary.totalDevices}</b> devices
+            </span>
+            <span>
+              <b>{summary.rackCount}</b> racks
+            </span>
+            <span>
+              <b>{summary.rackUtilization}%</b> of rack space used
+            </span>
+            <span>
+              <b>{summary.vlanCount}</b> VLANs
+            </span>
+            <span>
+              <b>{summary.totalLinks}</b> links
+            </span>
+          </div>
+        </div>
         <div className="dashboard-export-actions">
           <button className="dashboard-export-btn" onClick={exportMarkdown}>
             <FileText size={16} />
@@ -507,22 +612,104 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="dashboard-cards">
-        {SUMMARY_CARDS.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div key={card.key} className={`dashboard-card dashboard-card-${card.color}`}>
-              <Icon size={28} className="dashboard-card-icon" />
-              <div className="dashboard-card-body">
-                <div className="dashboard-card-value">
-                  {summary[card.key]}
-                  {card.suffix || ''}
+      <div className="dashboard-columns">
+        <div className="dashboard-panel">
+          <div className="dashboard-panel-head">
+            <span className="u-label">Site elevation — front</span>
+            {racks.length > 0 && <span className="dashboard-panel-note">Open a device to edit it</span>}
+          </div>
+          <SiteElevation racks={racks} slots={slots} />
+        </div>
+
+        <div className="dashboard-side">
+          <div className="dashboard-panel">
+            <div className="dashboard-panel-head">
+              <span className="u-label">Needs attention</span>
+            </div>
+            {attention.length === 0 ? (
+              <p className="dashboard-panel-empty">
+                Nothing outstanding. Every device has an IP, a rack and a credential macro.
+              </p>
+            ) : (
+              <div className="dashboard-attention">
+                {attention.map((item) => (
+                  <Link key={item.key} to={item.to} className="dashboard-attention-row">
+                    <span className={`dashboard-dot dashboard-dot-${item.severity}`} />
+                    <span className="dashboard-attention-label">{item.label}</span>
+                    <span className={`dashboard-chip dashboard-chip-${item.severity}`}>
+                      {item.count}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {power && (
+            <div className="dashboard-panel">
+              <div className="dashboard-panel-head">
+                <span className="u-label">Power</span>
+                <span className="dashboard-panel-note">
+                  {power.upsCount} UPS
+                  {power.pduCount > 0 ? ` · ${power.pduCount} PDU` : ''}
+                </span>
+              </div>
+              <div className="dashboard-power">
+                {power.rows.map((row) => (
+                  <div key={row.rackId} className="dashboard-power-row">
+                    <span className="dashboard-power-rack">
+                      <Zap size={12} />
+                      {row.rackName}
+                    </span>
+                    <span className="dashboard-power-rating">
+                      {row.va ? `${row.va.toLocaleString()} VA` : '—'}
+                      {row.watts ? ` · ${row.watts.toLocaleString()} W` : ''}
+                    </span>
+                  </div>
+                ))}
+                <div className="dashboard-power-total">
+                  <span>Installed</span>
+                  <span>
+                    {power.totalVa.toLocaleString()} VA · {power.totalW.toLocaleString()} W
+                  </span>
                 </div>
-                <div className="dashboard-card-label">{card.label}</div>
+                {power.upsCount > 1 && (
+                  <div className="dashboard-power-total">
+                    <span>If the largest UPS fails</span>
+                    <span>{power.headroomW.toLocaleString()} W still covered</span>
+                  </div>
+                )}
               </div>
             </div>
-          );
-        })}
+          )}
+
+          <div className="dashboard-panel">
+            <div className="dashboard-panel-head">
+              <span className="u-label">Recent activity</span>
+            </div>
+            {activity.length === 0 ? (
+              <p className="dashboard-panel-empty">No activity recorded yet.</p>
+            ) : (
+              <div className="dashboard-feed">
+                {activity.slice(0, 8).map((entry) => (
+                  <div key={entry.id} className="dashboard-feed-row">
+                    <time
+                      className="dashboard-feed-time"
+                      dateTime={entry.created_at}
+                      title={formatTimestamp(entry.created_at)}
+                    >
+                      {formatActivityTime(entry.created_at)}
+                    </time>
+                    <span className="dashboard-feed-action">{describeAction(entry.action)}</span>
+                    {entry.details && (
+                      <span className="dashboard-feed-detail">{entry.details}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="dashboard-section">

@@ -18,7 +18,7 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 12px 48px var(--color-shadow);
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.75rem;
   color: var(--rack-text);
   overflow: hidden;

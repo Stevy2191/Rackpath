@@ -6,13 +6,34 @@
 
 .dashboard-header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
 }
 
 .dashboard-header h2 {
   margin: 0;
+  font-size: 1.7rem;
+}
+
+/* The counts that used to be six cards. As a single line under the site
+   name they stay readable and give the elevation the room instead. */
+.dashboard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+}
+
+.dashboard-meta b {
+  font-weight: 400;
+  color: var(--color-text);
 }
 
 .dashboard-export-actions {
@@ -38,81 +59,206 @@
   background-color: var(--color-bg-subtle);
 }
 
-.dashboard-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+/* ─── Overview grid ──────────────────────────────────────────────────────
+   The elevation gets the width; the three read-only panels stack beside it
+   and drop underneath once there isn't room for both. */
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1.1rem;
+  align-items: start;
   margin-bottom: 1.5rem;
 }
 
-.dashboard-card {
+@media (max-width: 1000px) {
+  .dashboard-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dashboard-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.dashboard-panel {
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dashboard-panel-head {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
-  flex: 1 1 180px;
-  min-width: 160px;
-  padding: 1rem 1.25rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.dashboard-card-icon {
+.dashboard-panel-note {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--color-text-faint);
+}
+
+.dashboard-panel-empty {
+  margin: 0;
+  padding: 0.9rem;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+/* ─── Needs attention ───────────────────────────────────────────────── */
+.dashboard-attention {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-attention-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8rem;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.dashboard-attention-row:last-child {
+  border-bottom: 0;
+}
+
+.dashboard-attention-row:hover {
+  background-color: var(--color-bg-subtle);
+}
+
+.dashboard-attention-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* State reads as shape and color before you get to the number */
+.dashboard-dot {
   flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
 }
 
-.dashboard-card-value {
-  font-size: 1.6rem;
-  font-weight: 700;
-  line-height: 1.1;
+.dashboard-chip {
+  flex-shrink: 0;
+  padding: 0 0.35rem;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.66rem;
+}
+
+.dashboard-dot-fault,
+.dashboard-chip-fault {
+  color: var(--color-danger);
+}
+
+.dashboard-dot-load,
+.dashboard-chip-load {
+  color: var(--color-warning);
+}
+
+.dashboard-dot-info,
+.dashboard-chip-info {
+  color: var(--color-text-muted);
+}
+
+/* ─── Power ─────────────────────────────────────────────────────────── */
+.dashboard-power {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.78rem;
+}
+
+.dashboard-power-row,
+.dashboard-power-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.dashboard-power-rack {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   color: var(--color-text);
 }
 
-.dashboard-card-label {
-  font-size: 0.8rem;
+.dashboard-power-rack svg {
+  color: var(--color-text-faint);
+}
+
+.dashboard-power-rating {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
   color: var(--color-text-muted);
-  margin-top: 0.15rem;
 }
 
-.dashboard-card-blue {
-  background-color: rgba(74, 144, 226, 0.12);
-}
-.dashboard-card-blue .dashboard-card-icon {
-  color: #4a90e2;
-}
-
-.dashboard-card-purple {
-  background-color: rgba(155, 89, 182, 0.12);
-}
-.dashboard-card-purple .dashboard-card-icon {
-  color: #9b59b6;
+.dashboard-power-total {
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
 }
 
-.dashboard-card-green {
-  background-color: rgba(46, 204, 113, 0.12);
-}
-.dashboard-card-green .dashboard-card-icon {
-  color: #2ecc71;
-}
-
-.dashboard-card-orange {
-  background-color: rgba(230, 126, 34, 0.12);
-}
-.dashboard-card-orange .dashboard-card-icon {
-  color: #e67e22;
+.dashboard-power-total span:last-child {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
 }
 
-.dashboard-card-teal {
-  background-color: rgba(26, 188, 156, 0.12);
-}
-.dashboard-card-teal .dashboard-card-icon {
-  color: #1abc9c;
+/* ─── Activity feed ─────────────────────────────────────────────────── */
+.dashboard-feed {
+  display: flex;
+  flex-direction: column;
+  padding: 0.4rem 0;
 }
 
-.dashboard-card-pink {
-  background-color: rgba(231, 76, 60, 0.12);
+.dashboard-feed-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.28rem 0.9rem;
+  font-size: 0.78rem;
 }
-.dashboard-card-pink .dashboard-card-icon {
-  color: #e74c3c;
+
+.dashboard-feed-time {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.68rem;
+  color: var(--color-text-faint);
+}
+
+.dashboard-feed-action {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.dashboard-feed-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-text);
 }
 
 .dashboard-section {
@@ -347,14 +493,14 @@
 }
 
 .dashboard-site-info-save {
-  background: var(--color-accent-bg, rgba(74,222,222,0.08));
+  background: var(--color-accent-bg);
   border-color: var(--color-accent);
   color: var(--color-accent);
   font-weight: 600;
 }
 
 .dashboard-site-info-save:hover:not(:disabled) {
-  background: var(--color-accent-bg-hover, rgba(74,222,222,0.18));
+  background: var(--color-accent-bg-hover);
 }
 
 .dashboard-site-info-save:disabled {

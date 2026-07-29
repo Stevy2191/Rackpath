@@ -100,7 +100,7 @@
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: var(--color-bg-subtle, transparent);
+  background: var(--color-bg-subtle);
 }
 
 .cameras-table-wrap {

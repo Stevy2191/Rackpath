@@ -232,6 +232,30 @@ router.post('/:id/apply-template', async (req, res, next) => {
   }
 });
 
+// GET /api/projects/:id/counts - just the badge counts the nav rail shows.
+// Deliberately separate from /overview, which runs ~17 queries to build the
+// dashboard: the rail refetches on navigation and must stay cheap.
+router.get('/:id/counts', async (req, res, next) => {
+  try {
+    const projectId = req.params.id;
+    const [rows] = await pool.query(
+      `SELECT
+         (SELECT COUNT(*) FROM devices WHERE project_id = ?)            AS devices,
+         (SELECT COUNT(*) FROM racks WHERE project_id = ?)              AS racks,
+         (SELECT COUNT(*) FROM project_vlans WHERE project_id = ?)      AS vlans,
+         (SELECT COUNT(*) FROM project_cameras WHERE project_id = ?)    AS cameras,
+         (SELECT COUNT(*) FROM project_access_devices WHERE project_id = ?) AS accessDevices,
+         (SELECT COUNT(*) FROM locations WHERE project_id = ?)          AS locations,
+         (SELECT COUNT(*) FROM project_integrations WHERE project_id = ?) AS integrations,
+         (SELECT COUNT(*) FROM project_credential_macros WHERE project_id = ?) AS macros`,
+      Array(8).fill(projectId)
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/projects/:id/overview - Site Overview Dashboard data: summary
 // cards, configuration warnings, and detail lists used for the documentation export.
 router.get('/:id/overview', async (req, res, next) => {
@@ -287,7 +311,8 @@ router.get('/:id/overview', async (req, res, next) => {
       pool.query('SELECT id, hostname FROM devices WHERE project_id = ? AND credential_macro_id IS NULL', [projectId]),
       pool.query("SELECT id, vlan_id, name FROM project_vlans WHERE project_id = ? AND (subnet IS NULL OR subnet = '')", [projectId]),
       pool.query("SELECT id, label, type FROM topology_nodes WHERE project_id = ? AND device_id IS NULL", [projectId]),
-      pool.query('SELECT id, hostname, ip, type, location, make, model FROM devices WHERE project_id = ? ORDER BY hostname', [projectId]),
+      // status feeds the dashboard's "unreachable" count as well as the export
+      pool.query('SELECT id, hostname, ip, type, status, location, make, model FROM devices WHERE project_id = ? ORDER BY hostname', [projectId]),
       pool.query(
         `SELECT r.id, r.name, r.u_height, r.location_id, r.room_id,
                 COALESCE(SUM(rs.u_size), 0) AS used_u

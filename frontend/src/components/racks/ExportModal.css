@@ -18,7 +18,7 @@
   border: 1px solid var(--rack-border);
   border-radius: 8px;
   box-shadow: 0 16px 48px var(--color-shadow);
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   color: var(--rack-text);
   overflow: hidden;
 }

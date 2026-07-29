@@ -59,9 +59,9 @@
 .topo-modal-error {
   padding: 8px 10px;
   border-radius: 5px;
-  background: color-mix(in srgb, var(--color-danger, #ef4444) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-danger, #ef4444) 30%, transparent);
-  color: var(--color-danger, #ef4444);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+  color: var(--color-danger);
   font-size: 0.82rem;
 }
 

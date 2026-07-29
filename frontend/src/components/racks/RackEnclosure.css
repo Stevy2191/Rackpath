@@ -11,7 +11,7 @@
 /* ─── Rack name label (above the frame, moves with canvas) ── */
 .rack-name-label {
   text-align: center;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--rack-text-muted);
@@ -25,7 +25,7 @@
 /* ─── Location/room breadcrumb (below the rack name) ─────── */
 .rack-location-label {
   text-align: center;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.64rem;
   color: var(--rack-text-faint);
   padding: 0 4px 6px;
@@ -38,7 +38,7 @@
 /* ─── Used/free U counter (below the rack name) ────────────── */
 .rack-u-counter {
   text-align: center;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -87,7 +87,7 @@
 
 .rack-panel-label {
   text-align: center;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -135,7 +135,7 @@
   align-items: center;
   justify-content: center;
   font-size: 9px;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   color: var(--rack-rail-number);
   border-bottom: 1px solid var(--rack-rail-number-border);
 }
@@ -180,7 +180,7 @@
 .rack-unit-slot-number {
   font-size: 8px;
   color: var(--rack-unit-number);
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
 }
 
 /* Opposite face of a half-depth device: still a real, droppable empty
@@ -224,7 +224,7 @@
 .rack-name-input {
   display: block;
   text-align: center;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--rack-text-bright);
@@ -281,7 +281,7 @@
 }
 
 .rack-annotation-header {
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -325,7 +325,7 @@
 }
 
 .rack-annotation-text {
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.60rem;
   color: var(--rack-text-muted);
   white-space: normal;
@@ -367,7 +367,7 @@
   left: 50%;
   transform: translate(-50%, -50%) rotate(-90deg);
   white-space: nowrap;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 6px;
   font-weight: 500;
   letter-spacing: 0.05em;
@@ -454,7 +454,7 @@
   left: 50%;
   transform: translate(-50%, -50%) rotate(-90deg);
   white-space: nowrap;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 6.5px;
   font-weight: 500;
   letter-spacing: 0.04em;

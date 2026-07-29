@@ -12,7 +12,7 @@
   border-radius: 8px;
   box-shadow: 0 4px 20px var(--color-shadow);
   z-index: 100;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.72rem;
   white-space: nowrap;
 }

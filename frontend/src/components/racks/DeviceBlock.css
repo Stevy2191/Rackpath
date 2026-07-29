@@ -9,7 +9,7 @@
   border-radius: 7px;
   cursor: grab;
   position: relative;
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   width: 100%;
   box-sizing: border-box;
   transition: filter 0.12s;

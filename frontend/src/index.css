@@ -2,79 +2,123 @@
   box-sizing: border-box;
 }
 
+/* ─── Design tokens ───────────────────────────────────────────────────────
+   Single source of truth for the whole app. Every stylesheet reads these —
+   changing a value here changes it everywhere.
+
+   The palette is the rack builder's: a cyan signal color on a server-room
+   ground. Cyan means interactive (links, focus, primary actions, active
+   nav) and nothing else. Status colors are separate and belong to the
+   equipment, not the brand: green is up, amber is load, red is a fault.
+
+   Neutrals are biased slightly toward blue-cyan rather than being pure
+   greys, so they sit with the accent instead of fighting it.
+
+   components/racks/rackTheme.css derives the rack builder's tokens from
+   these; see the note at the top of that file for why it keeps its own
+   names. */
+
 :root {
   /* Native UI (scrollbars, form controls, popups) follows the theme */
   color-scheme: light;
-  --color-bg: #f4f5f7;
+
+  --font-display: 'Archivo', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+
+  --color-bg: #e9edf2;
   --color-bg-elevated: #ffffff;
-  --color-bg-subtle: #f9f9fb;
-  --color-text: #1e1e2f;
-  --color-text-muted: #6b6b80;
-  --color-text-faint: #9090a0;
-  --color-border: #e0e0e8;
-  --color-border-strong: #d0d0da;
-  --color-accent: #1e1e2f;
-  --color-accent-hover: #383852;
+  --color-bg-subtle: #f2f5f9;
+  --color-text: #161d27;
+  --color-text-muted: #5d6a7b;
+  --color-text-faint: #727f90;
+  --color-border: #d7dee7;
+  --color-border-strong: #bcc7d4;
+  --color-accent: #0e7490;
+  --color-accent-hover: #0b5c73;
   --color-accent-text: #ffffff;
-  --color-link: #2557a7;
-  --color-danger: #b3261e;
-  --color-danger-bg: #fdecea;
-  --color-danger-border: #f5c2c0;
-  --color-occupied-bg: #e7f0ff;
-  --color-shadow: rgba(0, 0, 0, 0.08);
-  --color-code-bg: #1e1e2f;
-  --color-code-text: #d6d6e0;
-  --color-success: #16a34a;
-  --color-success-bg: #e6f6ec;
-  --color-warning: #b45309;
-  --color-warning-bg: #fdf3e1;
-  --color-info: #2563eb;
-  --color-info-bg: #e7f0ff;
-  --color-overlay: rgba(0, 0, 0, 0.5);
-  --color-canvas-grid: rgba(30, 30, 47, 0.18);
-  --color-tooltip-bg: rgba(30, 30, 47, 0.92);
-  --color-tooltip-text: #f4f5f7;
-  --color-tooltip-border: rgba(30, 30, 47, 0.25);
-  /* Navbar: deliberately the same dark brand bar in both themes */
-  --color-nav-bg: #1e1e2f;
-  --color-nav-text: #ffffff;
-  --color-nav-text-muted: #c9c9d8;
-  --color-nav-active-bg: #383852;
-  --color-nav-border: #4a4a68;
+  /* Accent washes — for tinted button fills and selected rows. Previously
+     referenced by Dashboard.css with a hardcoded fallback; now real. */
+  --color-accent-bg: rgba(14, 116, 144, 0.09);
+  --color-accent-bg-hover: rgba(14, 116, 144, 0.17);
+  --color-link: #0e7490;
+  --color-danger: #c2382e;
+  --color-danger-bg: #fdeceb;
+  --color-danger-border: #f2c4c0;
+  --color-occupied-bg: #ddeff3;
+  --color-shadow: rgba(22, 29, 39, 0.09);
+  --color-code-bg: #0e1015;
+  --color-code-text: #cdd3dd;
+  --color-success: #0f7c45;
+  --color-success-bg: #e4f4ea;
+  --color-warning: #a35c07;
+  --color-warning-bg: #fbf0de;
+  --color-info: #2557a7;
+  --color-info-bg: #e6edf9;
+  --color-overlay: rgba(10, 11, 14, 0.5);
+  --color-canvas-grid: rgba(22, 29, 39, 0.18);
+  --color-tooltip-bg: rgba(22, 29, 39, 0.94);
+  --color-tooltip-text: #eef1f5;
+  --color-tooltip-border: rgba(22, 29, 39, 0.25);
+
+  /* Rail navigation. Unlike the old navbar — which stayed dark in both
+     themes — the rail is a full-height surface, so it follows the theme;
+     a permanently dark column would dominate the light theme. */
+  --color-nav-bg: #e4e9f0;
+  --color-nav-frame: linear-gradient(135deg, #dde2ea 0%, #e9edf4 50%, #eff2f7 100%);
+  --color-nav-text: #161d27;
+  --color-nav-text-muted: #5d6a7b;
+  --color-nav-active-bg: rgba(14, 116, 144, 0.10);
+  --color-nav-border: #cbd4df;
+  /* Square mounting holes punched down the rail's edge (EIA-310 spacing) */
+  --color-nav-hole: rgba(22, 29, 39, 0.16);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --color-bg: #16161f;
-  --color-bg-elevated: #22222e;
-  --color-bg-subtle: #2a2a38;
-  --color-text: #e4e4ec;
-  --color-text-muted: #a0a0b8;
-  --color-text-faint: #80809a;
-  --color-border: #3a3a4a;
-  --color-border-strong: #4a4a5e;
-  --color-accent: #383852;
-  --color-accent-hover: #4a4a68;
-  --color-accent-text: #ffffff;
-  --color-link: #7aa9f0;
-  --color-danger: #ff8a80;
-  --color-danger-bg: #3a2020;
-  --color-danger-border: #5a2c2c;
-  --color-occupied-bg: #1f3050;
-  --color-shadow: rgba(0, 0, 0, 0.4);
-  --color-code-bg: #0d0d14;
-  --color-code-text: #c9c9d8;
-  --color-success: #4ade80;
-  --color-success-bg: #14331f;
-  --color-warning: #fbbf24;
-  --color-warning-bg: #3a2e14;
+  --color-bg: #0a0b0e;
+  --color-bg-elevated: #13161c;
+  --color-bg-subtle: #1a1e26;
+  --color-text: #e6e9f0;
+  --color-text-muted: #8b91a1;
+  --color-text-faint: #7b8393;
+  --color-border: #262b36;
+  --color-border-strong: #39404e;
+  --color-accent: #4adede;
+  --color-accent-hover: #7fe9e9;
+  /* Dark ink on the bright cyan — white would be unreadable on it */
+  --color-accent-text: #06181c;
+  --color-accent-bg: rgba(74, 222, 222, 0.10);
+  --color-accent-bg-hover: rgba(74, 222, 222, 0.18);
+  --color-link: #4adede;
+  --color-danger: #ff5f56;
+  --color-danger-bg: #2a1414;
+  --color-danger-border: #4d2320;
+  --color-occupied-bg: #10323a;
+  --color-shadow: rgba(0, 0, 0, 0.5);
+  --color-code-bg: #06070a;
+  --color-code-text: #c3c9d4;
+  --color-success: #45d97f;
+  --color-success-bg: #0f2d1c;
+  --color-warning: #f0a930;
+  --color-warning-bg: #33260d;
   --color-info: #7aa9f0;
-  --color-info-bg: #1f3050;
-  --color-overlay: rgba(0, 0, 0, 0.65);
-  --color-canvas-grid: rgba(228, 228, 236, 0.16);
-  --color-tooltip-bg: rgba(13, 13, 20, 0.92);
-  --color-tooltip-text: #e4e4ec;
-  --color-tooltip-border: rgba(228, 228, 236, 0.2);
+  --color-info-bg: #16233a;
+  --color-overlay: rgba(0, 0, 0, 0.66);
+  --color-canvas-grid: rgba(230, 233, 240, 0.15);
+  --color-tooltip-bg: rgba(6, 7, 10, 0.94);
+  --color-tooltip-text: #e6e9f0;
+  --color-tooltip-border: rgba(230, 233, 240, 0.2);
+
+  --color-nav-bg: #101319;
+  --color-nav-frame: linear-gradient(135deg, #2c2f36 0%, #1a1c22 50%, #15161b 100%);
+  --color-nav-text: #e6e9f0;
+  --color-nav-text-muted: #8b91a1;
+  --color-nav-active-bg: rgba(74, 222, 222, 0.12);
+  --color-nav-border: #262b36;
+  --color-nav-hole: rgba(0, 0, 0, 0.55);
 }
 
 html, body, #root {
@@ -83,12 +127,56 @@ html, body, #root {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 15px;
   background-color: var(--color-bg);
   color: var(--color-text);
   transition: background-color 0.15s ease, color 0.15s ease;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
   color: inherit;
+}
+
+/* Page titles carry the display face at its wide cut — the silkscreen on a
+   faceplate. Deliberately limited to h1/h2: at panel-heading sizes the wide
+   letterforms read as shouting, so h3 and below stay on the sans. */
+h1, h2 {
+  font-family: var(--font-display);
+  font-stretch: 118%;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+/* Anything numeric that lines up in a column */
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Uppercase micro-label used for panel headings and field groups */
+.u-label {
+  font-family: var(--font-display);
+  font-stretch: 112%;
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -46,7 +46,7 @@
   padding: 3px;
   z-index: 20;
   box-shadow: 0 2px 10px var(--color-shadow);
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
 }
 
 .rack-zoom-btn {
@@ -101,7 +101,7 @@
   border: 1px solid var(--rack-border);
   border-radius: 6px;
   color: var(--rack-text-muted);
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;

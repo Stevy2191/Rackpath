@@ -82,7 +82,7 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  color: var(--color-success, #16a34a);
+  color: var(--color-success);
   font-size: 0.85rem;
 }
 

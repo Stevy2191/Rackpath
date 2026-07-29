@@ -7,7 +7,7 @@
   background: var(--rack-panel-bg);
   border-left: 1px solid var(--rack-border);
   color: var(--rack-text);
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   overflow: hidden;
 }
 
@@ -283,7 +283,7 @@
   border-radius: 0;
   background: transparent;
   color: var(--rack-text-muted);
-  font-family: var(--rack-font-mono, 'Roboto Mono', monospace);
+  font-family: var(--rack-font-mono);
   font-size: 0.76rem;
   font-weight: 600;
   cursor: pointer;
