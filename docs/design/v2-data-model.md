@@ -1,6 +1,6 @@
 # Rackpath v2: data model and API design
 
-Status: **draft for review**. Nothing here is built yet.
+Status: **approved direction; decisions D1–D5 resolved (section 19)**. Nothing here is built yet.
 
 This document designs the data model for Rackpath v2. That release:
 
@@ -9,9 +9,11 @@ This document designs the data model for Rackpath v2. That release:
 
 Features and ideas were taken from reviewing Patchdocs. None of its text, design or code is reused, and features tied to its own hardware (patchbox.one cassettes) are left out.
 
-Everything Rackpath already does well stays: network scanning, integrations, the logical topology diagram, UPS and power planning, credential macros, network tools and self-hosting.
+**Rackpath is documentation software.** It records what exists and how it's connected. It does not probe, poll or monitor the network, and it stores no device logins. Network scanning, network tools, credential macros, SNMP polling and live state from integrations were removed from v1 in the same spirit (migration 0067), and none of them come back in v2.
 
-Sections marked **Decision needed** are calls for the project owner. Each one gives a recommendation.
+What stays from v1: inventory-only integrations, the logical topology diagram, UPS and power planning, VLANs, tags and self-hosting.
+
+Decisions taken by the project owner are recorded in section 19.
 
 ---
 
@@ -29,7 +31,9 @@ Sections marked **Decision needed** are calls for the project owner. Each one gi
 
 - Fibre breakout cables (MPO to LC fan-outs) with per-strand tracing. They are recorded as single ports, with a note. See Open questions.
 - Electrical circuits upstream of the rack (panels, breakers).
-- Live monitoring or alerting. Port status from SNMP is stored, but Rackpath is not a monitoring system.
+- **Anything that touches the network or watches it:** scanning, SNMP or SSH polling, ping/traceroute tools, up/down status, port link state, live door or camera state. Rackpath is not a monitoring system and has no component that sends traffic to devices.
+- **Storing device credentials** (SNMP communities, SSH/HTTP logins, camera stream passwords, Wi-Fi passphrases). A note on a device can point to the entry in your password manager. The only secrets Rackpath stores are the logins and API keys for its own integrations.
+- **Outside services by default:** no map tiles, geocoding, or MAC-vendor lookups.
 - Hosted multi-company billing. "Pay per rack" has no meaning for self-hosted software.
 
 ---
@@ -50,17 +54,17 @@ Account (the installation)
     │               └── Device of kind "tray" (a shelf)
     │                   └── Device  (sitting on the shelf)
     │                       └── Port ── Connection
-    ├── Unplaced devices (found by scans or integrations, not yet given a place)
-    ├── VLANs, WLANs, device types, device templates, credential macros
+    ├── Unplaced devices (imported by integrations or CSV, not yet given a place)
+    ├── VLANs, WLANs, device types, device templates
     ├── Topology diagrams (the logical view; unchanged in concept)
-    └── Scans, integrations
+    └── Integrations (inventory import only)
 ```
 
 **A project is the isolation boundary, like a "tenant".** The UI keeps the word "Project". Nothing crosses a project boundary: networks, templates and permissions are all project-scoped, except account-wide grants.
 
 **Every floor gets a DEFAULT room automatically.** Devices placed where no room is drawn belong to it, so drawing rooms is optional.
 
-**Unplaced devices** are new compared with Patchdocs, and they're needed because Rackpath discovers equipment. Scan imports and integration syncs land devices here. Someone then places them, by dragging onto a floor plan, into a rack, or choosing a room. Until then their path is `<PROJECT>/UNPLACED/<ID>`.
+**Unplaced devices** are new compared with Patchdocs, and they're needed because Rackpath imports equipment. Integration syncs and CSV imports land devices here. Someone then places them, by dragging onto a floor plan, into a rack, or choosing a room. Until then their path is `<PROJECT>/UNPLACED/<ID>`.
 
 ---
 
@@ -94,7 +98,7 @@ Built-in device types:
 | Rack | Switch (SW), Router (RT), Firewall (FW), Server (SRV), NAS (NAS), Patch panel (PP), Fibre panel (FP), Cable manager (CM), Blanking panel (BLK), PDU (PDU), UPS (UPS), Battery module (EBM), Shelf/tray (TR), KVM (KVM), Miscellaneous (MISC) |
 | Either | Media converter (MC), Modem (MDM), Misc (MISC) |
 
-The scanner's `device_type` vocabulary (Router, Switch, …) maps onto these when devices are imported.
+Each integration's device kinds (UniFi `usw`/`uap`/`ugw`, NetBox roles, LibreNMS and Zabbix groups) map onto these when devices are imported.
 
 **Network identity stays separate.** `hostname`, `ip`, `mac` and similar fields are device attributes, not the code. A switch can be `SW02` in the documentation and `core-sw-2.acme.lan` on the network.
 
@@ -109,7 +113,6 @@ The scanner's `device_type` vocabulary (Router, Switch, …) maps onto these whe
 | project_id | FK projects | |
 | code, name | | Unique `(project_id, code)` |
 | address_street, address_city, address_state, address_postcode, address_country | text | |
-| latitude, longitude | decimal(9,6) null | Typed in by hand, or filled by the optional geocoder (section 15) |
 | contact_name, contact_phone, contact_email | text | |
 | responsible_user_id | FK users null | |
 | isp_primary_name, isp_primary_circuit, isp_primary_contact, isp_secondary_… | text | **Moved here from projects:** they describe a site |
@@ -163,20 +166,18 @@ When a device is dropped where rooms overlap, the UI asks and suggests the small
 | manufacturer, model, serial_number, asset_tag | text | |
 | purchase_date, warranty_expiry, in_service_date | date | |
 | responsible_user_id | FK users null | |
-| status | enum planned, active, spare, faulty, retired | |
+| status | enum planned, active, spare, faulty, retired | Lifecycle, set by people. Never online/offline |
 | **Network identity** | | |
-| hostname, mgmt_ip, mac, os, firmware | text | |
-| credential_macro_id | FK null | Used for SNMP polling |
-| last_seen_at, last_scanned_at | timestamp | |
+| hostname, mgmt_ip, mac, os, firmware | text | Recorded facts, not polled |
 | **Origin** | | |
-| source | enum manual, scan, integration, import | |
+| source | enum manual, integration, csv_import, v1_import | |
 | source_integration_id, external_id | null | Lets integration syncs match records on later syncs |
 | **Display** | | |
 | icon_color, text_color, front_image_id, rear_image_id | | |
 | notes | text | |
 | created_at, updated_at, created_by, updated_by | | |
 
-**Parent key.** MariaDB unique indexes ignore NULLs, so sibling uniqueness can't be a plain `UNIQUE(room_id, code)`. A generated column fixes this:
+**Parent key.** SQL unique indexes treat NULLs as distinct (in SQLite and MariaDB alike), so sibling uniqueness can't be a plain `UNIQUE(room_id, code)`. A generated column fixes this (SQLite syntax shown in section 18; prototyped on MariaDB):
 
 ```sql
 parent_key VARCHAR(40) AS (CASE
@@ -202,8 +203,8 @@ The same technique is used anywhere else that needs uniqueness on a nullable par
 
 | Table | For | Columns (from today's tables) |
 |---|---|---|
-| `device_camera` | Cameras | rtsp_url, rtsps_url_high/medium/low, stream_username, stream_password (encrypted), resolution |
-| `device_access` | Access-control hardware | door_name, door_lock_state, door_open_state, connected_readers, access_groups, unlock_schedules (JSON) |
+| `device_camera` | Cameras | resolution, lens/field-of-view notes. No stream URLs or stream credentials |
+| `device_access` | Access-control hardware | door_name, connected_readers (JSON). No lock/open state, access groups or schedules |
 | `device_power` | PDUs, UPSes, battery modules, anything with a power supply | input_voltage, input_plug_type, capacity_va, capacity_w, capacity_value, capacity_unit, runtime_curve (JSON), ebm_runtime_curve (JSON), max_ebm_slots, psu_count |
 
 `project_cameras` and `project_access_devices` disappear. Integration syncs upsert `devices` rows plus these extension rows, matched on `(source_integration_id, external_id)`, falling back to MAC address.
@@ -243,7 +244,6 @@ This is the core of the redesign.
 | sort_order | int | Generated numbering order |
 | **Network** | | |
 | speed, poe, description, mac | | |
-| oper_status, admin_status, last_status_at | | From SNMP (today's `topology_node_interfaces.status` and port scans) |
 | wlan_id | FK wlans null | Wireless ports only: which WLAN it broadcasts or joins |
 | **Power** | | |
 | outlet_group | int null | PDU and UPS outlets: which group or breaker bank |
@@ -355,7 +355,7 @@ From a rack, the UI can list the VLANs in use there and highlight their ports.
 | power columns | Same shape as `device_power`; copied to devices built from the template |
 | version | Increments on every save |
 
-`rack_custom_devices` and `user_catalog_entries` become project templates. User-level catalog entries become project templates owned by the project the user last worked in. **Decision needed** if per-user templates must stay.
+`rack_custom_devices` and `user_catalog_entries` become project templates. User-level catalog entries become project templates owned by the project the user last worked in (decision D2: templates are project-level).
 
 ### template_port_groups
 A rectangle of ports on a device face, laid out on a grid with **two port rows per U** and a fixed number of columns per face (48 across a 19" face).
@@ -412,11 +412,11 @@ Today's power maths (outlet counts, load in VA and W, UPS runtime curves, cross-
 ## 9. Networks
 
 - **project_vlans**: unchanged, plus `notes`. Assigned to ports through `port_vlans`.
-- **wlans** (new): `id, project_id, ssid, description, security (open|wpa2|wpa3|enterprise), passphrase (encrypted, optional), hidden, vlan_id FK null, notes`. Wireless ports point to one through `ports.wlan_id`.
+- **wlans** (new): `id, project_id, ssid, description, security (open|wpa2|wpa3|enterprise), hidden, vlan_id FK null, notes`. No passphrase is stored. Wireless ports point to one through `ports.wlan_id`.
 - **Logical topology** (`topologies`, `topology_nodes`, `topology_edges`, zones, labels, shapes): kept as the logical or diagram view. It is ported as-is, with two changes:
   - topology nodes reference `devices.id` (unchanged);
   - `topology_edges` may optionally reference `connection_id` or the two `port_id`s, so a diagram link can be "backed by" a real traced cable.
-- `topology_node_interfaces` becomes physical `ports` where it describes one. Logical sub-interfaces (SVIs, VLAN sub-ports) move to a small `logical_interfaces(device_id, parent_port_id null, name, vlan_id, ip, description)` table.
+- `topology_node_interfaces` becomes physical `ports`. Logical sub-interfaces (SVIs, VLAN sub-ports) are configuration, not physical documentation, and are not modelled; record them in a device's notes if needed.
 
 ---
 
@@ -439,13 +439,12 @@ UNIQUE (user_id, role, scope_type, scope_id)
 |---|---|
 | **reader** | Read everything in the projects inside its scope. Granted at account or project level only (reading is project-wide by design) |
 | **editor** | Reader rights on the containing project, plus create, edit, delete and move within its scope. The scope can be as narrow as one device. Editor on a rack covers its devices, ports and connections |
-| **admin** | Editor plus: manage users and grants in its scope, integrations, credential macros, scans, device library, and project settings. Account-level admins also manage projects, sessions, and system settings |
+| **admin** | Editor plus: manage users and grants in its scope, integrations, device library, and project settings. Account-level admins also manage projects, sessions, and system settings |
 
 Rules:
 - **Grants cascade downward** (location → floor → room → rack → device). The widest grant wins.
 - **A connection can be edited** if the user can edit **either** end's device. This matches how a technician patches their own switch into a shared panel.
-- **Credential secrets** are write-only for everyone. Only project admins can create or update them.
-- **Scans and network tools** need editor or admin at project level. They send traffic on the network.
+- **Integration credentials** are write-only for everyone. Only project admins can create or update them.
 
 **Every endpoint declares the permission it needs.** An Axum extractor resolves the user's effective grants once per request, with the hierarchy walk done in one SQL query using the stored parent IDs. It then rejects the request before the handler runs.
 
@@ -475,9 +474,8 @@ invitations
   id, email, role grants (JSON), token_hash, invited_by, expires_at (7 days), accepted_at
 ```
 
-- If SMTP is configured (`SMTP_URL`), Rackpath emails the link.
-- Otherwise the admin copies the link and sends it. Self-hosted installs often have no mail server.
-- Resending invalidates the old link.
+- The admin copies the invitation link and sends it however they like. Rackpath sends no email, so it needs no mail server or SMTP credentials.
+- Re-issuing a link invalidates the old one.
 
 ### Login protection
 The rate limits from v1 carry over: per username and per IP. Failed logins and lockouts are written to the audit log.
@@ -489,7 +487,7 @@ The rate limits from v1 carry over: per username and per IP. Failed logins and l
 ```
 audit_log
   id bigint, at timestamp(3),
-  user_id null (null = system: scan, integration sync)
+  user_id null (null = system: integration sync)
   project_id null (null = account-level)
   action enum create, update, delete, move, connect, disconnect,
               login, login_failed, logout, grant, revoke, export, import, sync
@@ -517,11 +515,9 @@ attachments
   kind enum photo, document, floor_plan, faceplate,
   filename (random, stored), original_name, content_type, size_bytes, sha256,
   caption, uploaded_by, uploaded_at
-
-journal_entries     -- the dated "what happened here" log on a rack or device
-  id, project_id, resource_type, resource_id,
-  occurred_on date, text, author_id, created_at
 ```
+
+Every resource also has a free-text `notes` field. Its change history is in the audit log, so a separate dated journal isn't needed.
 
 - Uploads keep v1's hardening:
   - the file type is checked from the file's own content (magic bytes), not the name;
@@ -529,7 +525,7 @@ journal_entries     -- the dated "what happened here" log on a rack or device
   - files are served with a sandboxing CSP and `nosniff`.
 - Limits are configurable (default 10 MB for photos and plans, 2 MB for faceplates).
 - File downloads need **read permission on the resource**. v1's unauthenticated image routes go away: images load with the session cookie, same-origin.
-- Floor plan PDFs are rasterised to PNG at upload time, so the browser only ever shows images.
+- Floor plans are images only: PNG, JPEG or WebP (decision D4). A PDF plan is exported to PNG before uploading.
 
 ---
 
@@ -537,7 +533,7 @@ journal_entries     -- the dated "what happened here" log on a rack or device
 
 **Global search** covers code, name, full path, hostname, IP, MAC, serial number and asset tag. Results are grouped by type, each with its path. It's backed by:
 - the `search_path` column, plus a combined `search_text` column on devices, ports, racks, rooms, floors and locations, kept in sync by the API;
-- a MariaDB `FULLTEXT` index on `search_text`, with prefix matching on `code` and `mgmt_ip`.
+- an SQLite **FTS5** full-text index on `search_text`, with prefix matching on `code` and `mgmt_ip`.
 
 **Resource tables** (the "Resources" page) have tabs for Locations, Floors, Rooms, Racks, Devices, Ports and Connections. Every list endpoint shares one query convention:
 
@@ -582,13 +578,9 @@ The real move runs in one transaction, writes one audit entry group, and needs e
 
 ---
 
-## 15. Locations map (optional)
+## 15. Locations map
 
-Off by default, because Rackpath's promise is that data never leaves your network.
-
-- `MAP_TILE_URL`: tile server template. When unset, the Locations page shows cards only.
-- `GEOCODER_URL`: a Nominatim-compatible endpoint. When unset, coordinates are typed in by hand.
-- Requests go **from the API server**, never from the browser, so the tile and geocoder providers never see users' IP addresses. Tiles are proxied and cached on disk.
+**Not included.** A map needs outside tile and geocoding services, which conflicts with keeping all data inside your network. The Locations page shows cards with each site's address and contact, and a location's address can be copied into any mapping app.
 
 ---
 
@@ -608,7 +600,7 @@ Off by default, because Rackpath's promise is that data never leaves your networ
 
 ## 17. What happens to today's tables
 
-There are no production installs, so **v2 starts with a fresh schema** rather than an in-place migration. A one-off `rackpath import-v1 --from mysql://…` command brings across development or test data on a best-effort basis:
+There are no production installs, so **v2 starts with a fresh schema** rather than an in-place migration. A one-off `rackpath import-v1 --from mysql://…` command (reading the v1 MariaDB, writing the v2 SQLite file) brings across development or test data on a best-effort basis:
 
 | v1 table | v2 |
 |---|---|
@@ -620,11 +612,11 @@ There are no production installs, so **v2 starts with a fresh schema** rather th
 | devices + rack_slots (linked by `device_id`) | devices. A slot linked to an inventory device merges into one device. A slot without a device becomes a device of the matching type |
 | rack_slots power columns | device_power + power ports + power connections |
 | ports (`connected_port_id`) | ports + `patch` connections (de-duplicated per pair) |
-| project_cameras, project_access_devices | devices + device_camera / device_access |
+| project_cameras, project_access_devices | devices + device_camera / device_access (inventory columns only) |
 | rack_custom_devices, user_catalog_entries | device_templates |
-| topology_node_interfaces | ports or logical_interfaces |
+| topology_node_interfaces | ports |
 | topology_* (the rest) | unchanged, renumbered |
-| project_vlans, device_tags, assignments, credential macros, integrations, scan_jobs, scan_results | unchanged (secrets re-encrypted as-is with the same key) |
+| project_vlans, device_tags, assignments, integrations | unchanged (integration secrets copied as-is; same key) |
 | project_activity_log, integration_sync_log | audit_log |
 
 ---
@@ -635,15 +627,17 @@ There are no production installs, so **v2 starts with a fresh schema** rather th
 |---|---|---|
 | HTTP | **axum** + tower middleware | Standard, fast, good extractor model for auth and permissions |
 | Runtime | tokio | |
-| Database | **sqlx** with compile-time checked queries | SQL mistakes become build errors; no ORM layer to fight |
+| Database | **SQLite** (decision D1) in WAL mode, one file in the data volume, via **sqlx** with compile-time checked queries | No database server, one file to back up, lowest memory use; SQL mistakes become build errors |
 | Migrations | `sqlx migrate`, numbered `0001_…` in `api-rs/migrations/` | CLAUDE.md's rules still apply; the folder changes, so CLAUDE.md gets updated when the Rust API lands |
+| Serving the UI | The built frontend is embedded in the binary and served by axum | No nginx container: **one container (or one binary) total** |
+| Backups | `rackpath backup <file>` uses SQLite's online backup API; uploads are a plain folder | Safe while running; no `mysqldump` |
 | Passwords | argon2id (`argon2` crate) | v1's bcrypt hashes are rehashed transparently on the next successful login |
 | Secrets at rest | AES-256-GCM (`aes-gcm` crate), **same `v1:` format and `RACKPATH_ENCRYPTION_KEY`** as today | Existing data stays decryptable |
 | TOTP | `totp-rs` | |
 | PDF | **Typst** (embedded `typst` crate) with templates in the repo | Real layout and table-of-contents support. No headless browser; one binary |
 | QR codes | `qrcode` crate → SVG embedded in Typst | |
-| Images | `image` crate (validation, thumbnails); `pdfium` or `mupdf` for floor plan PDFs, **Decision needed** (licence and binary size) | |
-| Scanner | **Stays Python.** It mostly waits on the network, so Rust gains little. Same token-authenticated HTTP contract | |
+| Images | `image` crate (validation, thumbnails). No PDF rasteriser (decision D4) | |
+| HTTP client | `reqwest` with rustls, used **only** for integrations the user configures | Nothing else makes outbound connections |
 | Errors | One `AppError` type → JSON `{error, code}`. 5xx bodies never include internals | Same rule as v1 |
 | Observability | `tracing` with JSON logs; a request ID in every log line and audit entry | |
 | Config | Environment variables, validated at startup. The process exits with a clear message if a required secret is missing | Same behaviour as v1 now |
@@ -659,24 +653,37 @@ api-rs/
     db/                sqlx queries per aggregate
     routes/            thin handlers: parse → authorise → call domain/db → audit → respond
     export/            typst templates, BOM, CSV
-    integrations/      unifi, protect, access, zabbix, librenms, netbox, snmp, custom
+    integrations/      unifi, protect, access, zabbix, librenms, netbox (inventory import only)
   migrations/
-  tests/               API tests against a real MariaDB (testcontainers or the CI service)
+  tests/               API tests against a temporary SQLite file (no services needed)
 ```
+
+**SQLite specifics.** The model in this document is the same on SQLite; the SQL changes are mechanical:
+- ENUM columns become `TEXT` with a `CHECK (col IN (...))`.
+- The code rule becomes `CHECK (length(code) BETWEEN 1 AND 16 AND code NOT GLOB '*[^A-Z0-9._-]*')`, with the "starts with a letter or digit" rule checked in the API.
+- `parent_key` is a `GENERATED ALWAYS AS (...) STORED` column; `UNIQUE (parent_key, code)` works as on MariaDB.
+- JSON columns use SQLite's built-in JSON functions; search uses FTS5; chain tracing uses `WITH RECURSIVE`, which SQLite supports.
+- Foreign keys are switched on per connection (`PRAGMA foreign_keys = ON`) and checked at startup.
+- Timestamps are stored as UTC ISO-8601 text.
+
+**Deployment** becomes one container with two volumes (`/data` for the database file, `/data/uploads` for files), or the plain binary under systemd. It listens on one port. Required settings: `RACKPATH_ENCRYPTION_KEY`; optional: `COOKIE_SECURE`, `PUBLIC_URL` (for QR links).
 
 **Domain rules live in pure functions** (naming validation, the next free code, rack occupancy, chain tracing, template diffs), so they can be unit-tested without a database. Handlers stay thin.
 
 ---
 
-## 19. Decisions needed
+## 19. Decisions
 
-| # | Question | Recommendation |
+All resolved by the project owner.
+
+| # | Question | Decision |
 |---|---|---|
-| D1 | **Database: stay on MariaDB, or switch to SQLite?** SQLite makes Rackpath a single binary plus one file: no database container, trivial backups, the lowest memory use. MariaDB handles many simultaneous writers better and is what exists today | **SQLite** fits "light" best and is plenty for a documentation tool used by a team. The scanner and integration syncs write in short transactions. Choose MariaDB only if you expect dozens of people editing at the same moment, or need an external database for policy reasons. *This changes some SQL above (generated columns and FULLTEXT become SQLite equivalents); the model is the same either way* |
-| D2 | Keep per-user catalog entries, or make all templates project-level? | Project-level. Shared templates are the point of a device library |
-| D3 | Reading: project-wide (as designed), or narrowable to a location? | Project-wide. Narrowing reads makes path tracing show holes ("cable goes somewhere you can't see") |
-| D4 | Floor plan PDF support: bundle a PDF rasteriser (adds about 10–20 MB and a licence to check), or accept images only? | Images only in the first release. Users can export a PDF page to PNG |
-| D5 | Frontend: keep CRA/React and migrate to Vite as part of v2? | Yes: move to Vite in the same release. It clears the 28 remaining build-tool advisories |
+| D1 | Database: MariaDB or SQLite? | **SQLite.** Single binary plus one file: no database container, simple backups, lowest memory use. Plenty for a documentation tool used by a team |
+| D2 | Per-user catalog entries, or project-level templates? | **Project-level.** Shared templates are the point of a device library |
+| D3 | Reading: project-wide, or narrowable to a location? | **Project-wide.** Narrowing reads would make traced cables disappear into places a user can't see |
+| D4 | Floor plans: bundle a PDF rasteriser, or images only? | **Images only** (PNG, JPEG, WebP) in the first release. A PDF page can be exported to PNG with any PDF viewer. Can be revisited later |
+| D5 | Frontend build: move from Create React App to Vite? | **Yes, in v2.** No user-facing change; clears the 28 remaining build-tool advisories |
+| D6 | Scope | **Documentation only.** No scanning, network tools, polling, live state, stored device credentials, map, or outbound email (section 1) |
 
 ---
 
@@ -685,7 +692,7 @@ api-rs/
 - **MPO/MTP breakout cassettes:** model as one port for now. Per-strand tracing would need "sub-ports".
 - **Rack-to-rack shortcuts:** should a patch cord directly between two racks in the same room (no panel) be a `patch` connection? Yes, as designed; just confirm the UI makes it easy.
 - **Cable length warnings:** compute rack-unit distance for patch cords within a rack and warn when `length_m` is too short. Cheap to add once lengths are recorded.
-- **Import from spreadsheets:** a CSV importer for devices and connections would speed up onboarding real sites. Worth a later phase.
+- **Neighbour import (optional):** UniFi and LibreNMS already know which device is on which switch port (LLDP and MAC tables). An integration could *propose* patch connections from that data for a person to accept. Rackpath itself would still never touch the network.
 
 ---
 
@@ -697,6 +704,6 @@ Each phase ends with something usable and tested. The old Node API keeps serving
 2. **Hierarchy and naming.** Projects, locations, floors, rooms, racks, device types, devices (all placements), unplaced inventory, code generation and validation, global search.
 3. **Ports and cabling.** Ports, connections, the side rules, chain tracing, port states, VLAN and WLAN assignment, colours.
 4. **Library and power.** Templates and port groups, instantiation, safe template edits with dry run, power ports and connections, the power and runtime calculations.
-5. **Port the rest from v1**, behaviour unchanged and checked by contract tests: scans and the scanner contract, integrations, credential macros, topology diagrams, network tools, tags.
-6. **Frontend switch** (Vite): Locations and floor plan editor, rack patching view, template designer, Resources tables, Activity Log, user management, 2FA. Retire the Node API.
-7. **Reports and extras.** PDF reports with QR codes, BOM, moves, the optional map, the v1 importer.
+5. **Port the rest from v1**, behaviour unchanged and checked by contract tests: inventory-only integrations, topology diagrams, VLANs, tags. Add the **CSV importer** for devices, ports and connections, which replaces discovery as the bulk way to bring in a site.
+6. **Frontend switch** (Vite, served from the Rust binary): Locations and floor plan editor, rack patching view, template designer, Resources tables, Activity Log, user management, 2FA. Retire the Node API, nginx and MariaDB containers.
+7. **Reports and extras.** PDF reports with QR codes, BOM, moves, the v1 importer.
