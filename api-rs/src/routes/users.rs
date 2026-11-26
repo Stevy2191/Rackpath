@@ -143,7 +143,7 @@ pub async fn create(
     .bind(&username)
     .bind(&email)
     .bind(clean_optional(body.display_name))
-    .bind(password::hash(&password))
+    .bind(crate::passwords::hash(&password).await?)
     .bind(&now)
     .bind(&now)
     .execute(&mut *tx)
@@ -294,7 +294,7 @@ pub async fn reset_password(
     sqlx::query(
         "UPDATE users SET password_hash = ?, must_change_password = 1, updated_at = ? WHERE id = ?",
     )
-    .bind(password::hash(&temporary))
+    .bind(crate::passwords::hash(&temporary).await?)
     .bind(now_ts())
     .bind(id)
     .execute(&mut *tx)
@@ -416,6 +416,11 @@ pub fn parse_grant(body: &GrantBody) -> AppResult<(Role, ScopeType)> {
         .ok_or_else(|| AppError::bad("role must be reader, editor or admin"))?;
     let scope = ScopeType::parse(&body.scope_type)
         .ok_or_else(|| AppError::bad("scope_type is not valid"))?;
+    if role == Role::Reader && !matches!(scope, ScopeType::Account | ScopeType::Project) {
+        return Err(AppError::bad(
+            "Readers are granted for a whole project (or the account); reading is project-wide",
+        ));
+    }
     Ok((role, scope))
 }
 

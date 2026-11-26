@@ -22,7 +22,9 @@ pub async fn connect(path: &Path) -> Result<SqlitePool, sqlx::Error> {
         .foreign_keys(true)
         .busy_timeout(Duration::from_secs(5));
     let pool = SqlitePoolOptions::new()
-        .max_connections(8)
+        // SQLite allows one writer at a time, so a few connections are enough;
+        // each keeps its own page cache, so fewer also means less memory.
+        .max_connections(4)
         .connect_with(options)
         .await?;
     // Refuse to run without foreign key enforcement: the schema relies on it.

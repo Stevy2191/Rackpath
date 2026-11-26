@@ -187,6 +187,11 @@ impl CurrentUser {
     pub fn actor(&self) -> (i64, String) {
         (self.user.id, self.user.username.clone())
     }
+
+    /// (user id, username) for audit entries.
+    pub fn actor_ref(&self) -> (i64, &str) {
+        (self.user.id, self.user.username.as_str())
+    }
 }
 
 /// Routes still reachable while a sign-in step is outstanding.

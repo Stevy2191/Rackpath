@@ -107,6 +107,7 @@ pub async fn create(
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
+    super::device_types::seed_builtins(&mut tx, id).await?;
     audit::record(
         &mut tx,
         &ctx,
@@ -163,6 +164,10 @@ pub async fn update(
     .bind(id)
     .execute(&mut *tx)
     .await?;
+    if code != old.code {
+        // Every full path in the project starts with its code.
+        crate::hierarchy::reindex(&mut tx, crate::hierarchy::Subtree::Project(id)).await?;
+    }
     let changes = audit::diff(
         &json!({ "code": old.code, "name": old.name, "description": old.description }),
         &json!({ "code": code, "name": name, "description": description }),

@@ -815,6 +815,16 @@ All resolved by the project owner.
 - **The audit log** is append-only at the database level (an update trigger), and keeps the username after a user is deleted.
 - **Measured** (release build): 6.1 MB binary, about 8 MB of memory idle.
 
+### Phase 2 notes (as built)
+
+- **Rack positions** are stored in half-U steps (`rack_pos_half`, `u_height_half`), so there are no floating-point positions in the database. The API speaks in U (`"u": 10.5`, `"u_height": 2`).
+- **Trays** are devices of the built-in `tray` type. Only floor and either types sit on them, and a tray can't sit on a tray. A tray holding devices can't be unplaced; deleting it needs a choice for its devices.
+- **Paths** come from one SQL view (`v_entities`) and are cached in `search_entries`, which each write refreshes inside its own transaction (a whole subtree when a code changes). An FTS5 index mirrors it through triggers. With 1,000 devices, renaming a location re-indexes in about 12 ms, and a search takes about 2 ms.
+- **Deleting a container that holds devices** requires `devices: "unplace" | "delete"` plus the container's code. Unplaced devices are renamed (`SW01-2`) if their code is taken in the Unplaced list, and each move is recorded in the change history.
+- **Readers** can only be granted at project or account level (400 otherwise), matching D3.
+- **Password hashing** moved to a bounded blocking pool (two at a time). Memory measured on a release build: 9 MB idle, about 28 MB after the first sign-in (argon2's working memory, reused afterwards, not growing), about 45 MB after creating 1,000 devices. Binary: 7.0 MB.
+- **Built-in device types** (29) are seeded for each project on creation and at every start, so later releases can add more.
+
 ---
 
 ## 20. Open questions (not blocking)

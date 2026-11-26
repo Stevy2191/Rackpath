@@ -352,7 +352,7 @@ pub async fn accept(
     .bind(&username)
     .bind(&email)
     .bind(body.display_name.map(|d| d.trim().to_string()).filter(|d| !d.is_empty()))
-    .bind(password::hash(&body.password))
+    .bind(crate::passwords::hash(&body.password).await?)
     .bind(&now)
     .bind(&now)
     .execute(&mut *tx)

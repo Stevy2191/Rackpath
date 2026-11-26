@@ -5,10 +5,17 @@ SQLite file. It is being built in phases (see
 [`docs/design/v2-data-model.md`](../docs/design/v2-data-model.md), section 21).
 The v1 Node API in `api/` keeps serving the current frontend until phase 7.
 
-**Status: phase 1 (security core) complete.** Users, roles and scoped
-permissions, server-side sessions, two-factor login, invitations, projects,
-account settings and the change history. Locations, racks, devices and
-everything else follow in later phases.
+**Status: phases 1 and 2 complete.**
+
+- **Phase 1, security core:** users, roles and scoped permissions,
+  server-side sessions, two-factor login, invitations, projects, account
+  settings and the change history.
+- **Phase 2, hierarchy and naming:** locations, floors, rooms, racks,
+  device types and devices; full paths like `ACME/HQ/2/MDF/RK01/SW02`; the
+  Unplaced list; rack fit checks; global search. Grants can be given on a
+  location, floor, room, rack or single device.
+
+Cabling, IPAM, templates and power follow in later phases.
 
 ## Running it
 
@@ -89,6 +96,28 @@ rackpath version
   - 1 MB body limit and strict security headers;
   - error responses never include internal details.
 - **SQL:** only compile-time literal SQL strings are accepted (enforced by sqlx 0.9), with bound parameters.
+- **Password hashing** runs on a separate thread pool, at most two at a time, so it never stalls other requests and a burst of login attempts can't exhaust memory.
+
+## API overview (phase 2)
+
+| Area | Endpoints |
+|---|---|
+| Locations | `GET/POST /api/projects/{id}/locations`, `GET/PATCH/DELETE /api/locations/{id}` |
+| Floors | `POST /api/locations/{id}/floors`, `GET/PATCH/DELETE /api/floors/{id}` |
+| Rooms | `POST /api/floors/{id}/rooms`, `GET/PATCH/DELETE /api/rooms/{id}` |
+| Racks | `POST /api/rooms/{id}/racks`, `GET/PATCH/DELETE /api/racks/{id}` |
+| Device types | `GET/POST /api/projects/{id}/device-types`, `PATCH/DELETE /api/device-types/{id}` |
+| Devices | `GET/POST /api/projects/{id}/devices`, `GET/PATCH/DELETE /api/devices/{id}` |
+| Codes | `GET /api/projects/{id}/next-code?device_type_id=…&room_id=…` (or `rack_id`, `tray_id`; `kind=rack` for racks) |
+| Search | `GET /api/search?q=…&project_id=…&kind=device` |
+
+**How the hierarchy behaves:**
+- **Defaults:** a new location gets floor `0`, and every floor gets a `DEFAULT` room, so devices can be placed before any rooms are drawn.
+- **Codes:** uppercase, 1–16 characters, unique among siblings. Racks and floor devices share a room's namespace. When no code is given, one is generated from the type prefix (`SW01`, `SW02`, …), and a clash suggests a free alternative.
+- **Placement:** a device sits in a room (with optional floor-plan x/y), in a rack (U position in half-U steps, front/rear/full depth, full or half width, or zero-U), on a tray, or in the project's Unplaced list. Types only go where they make sense: a switch can't go on a floor, an access point can't go in a rack.
+- **Moving:** a device can only be moved by someone who can edit both where it is and where it's going.
+- **Deleting a container that still holds devices** needs `"devices": "unplace"` (they move to Unplaced, renamed if their code is taken there) or `"devices": "delete"`, plus `"confirm_code"`.
+- **Updates:** omitted fields are unchanged. For text fields `""` clears; for numbers, dates and the responsible user, `null` clears.
 
 ## Development
 

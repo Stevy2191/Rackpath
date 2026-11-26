@@ -5,12 +5,17 @@
 pub mod account;
 pub mod audit_log;
 pub mod auth;
+pub mod device_types;
+pub mod devices;
 pub mod invitations;
+pub mod places;
 pub mod projects;
+pub mod racks;
+pub mod search;
 pub mod users;
 
 use axum::extract::{FromRequest, Request};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::{middleware as axum_mw, Json, Router};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -112,6 +117,61 @@ pub fn router(state: AppState) -> Router {
             "/api/account/transfer-ownership",
             post(account::transfer_ownership),
         )
+        // Locations, floors, rooms
+        .route(
+            "/api/projects/{id}/locations",
+            get(places::list_locations).post(places::create_location),
+        )
+        .route(
+            "/api/locations/{id}",
+            get(places::get_location)
+                .patch(places::update_location)
+                .delete(places::delete_location),
+        )
+        .route("/api/locations/{id}/floors", post(places::create_floor))
+        .route(
+            "/api/floors/{id}",
+            get(places::get_floor)
+                .patch(places::update_floor)
+                .delete(places::delete_floor),
+        )
+        .route("/api/floors/{id}/rooms", post(places::create_room))
+        .route(
+            "/api/rooms/{id}",
+            get(places::get_room)
+                .patch(places::update_room)
+                .delete(places::delete_room),
+        )
+        // Racks
+        .route("/api/rooms/{id}/racks", post(racks::create_rack))
+        .route(
+            "/api/racks/{id}",
+            get(racks::get_rack)
+                .patch(racks::update_rack)
+                .delete(racks::delete_rack),
+        )
+        // Device types and devices
+        .route(
+            "/api/projects/{id}/device-types",
+            get(device_types::list).post(device_types::create),
+        )
+        .route(
+            "/api/device-types/{id}",
+            patch(device_types::update).delete(device_types::remove),
+        )
+        .route(
+            "/api/projects/{id}/devices",
+            get(devices::list).post(devices::create),
+        )
+        .route("/api/projects/{id}/next-code", get(devices::next_code))
+        .route(
+            "/api/devices/{id}",
+            get(devices::get_one)
+                .patch(devices::update)
+                .delete(devices::remove),
+        )
+        // Search
+        .route("/api/search", get(search::search))
         // Change history
         .route("/api/audit", get(audit_log::list))
         .fallback(|| async { AppError::NotFound });
@@ -169,10 +229,19 @@ pub async fn resolve_scope(
                 path: code,
             })
         }
-        // Locations, floors, rooms, racks and devices arrive in phase 2.
-        _ => Err(AppError::bad(
-            "Grants on locations, rooms, racks and devices become available once those exist",
-        )),
+        kind => {
+            let id = scope_id.ok_or_else(|| AppError::bad("scope_id is required"))?;
+            let placed = crate::hierarchy::find(conn, kind, id)
+                .await?
+                .ok_or_else(|| {
+                    AppError::bad("That location, floor, room, rack or device doesn't exist")
+                })?;
+            Ok(ResolvedScope {
+                chain: placed.chain,
+                project_id: Some(placed.project_id),
+                path: placed.path,
+            })
+        }
     }
 }
 
@@ -227,5 +296,32 @@ pub fn require_account_admin(current: &CurrentUser) -> AppResult<()> {
         Err(AppError::forbidden(
             "Only account administrators can do that",
         ))
+    }
+}
+
+/// Parses an optional JSON body: empty → `T::default()`.
+pub fn optional_body<T: DeserializeOwned + Default>(bytes: &[u8]) -> AppResult<T> {
+    if bytes.iter().all(u8::is_ascii_whitespace) {
+        return Ok(T::default());
+    }
+    serde_json::from_slice(bytes).map_err(|e| AppError::bad(format!("Invalid JSON body: {e}")))
+}
+
+/// For `Option<Option<T>>` fields: absent → None (unchanged), `null` →
+/// Some(None) (cleared), value → Some(Some(v)). Use with
+/// `#[serde(default, deserialize_with = "nullable")]`.
+pub fn nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    <Option<T> as serde::Deserialize>::deserialize(deserializer).map(Some)
+}
+
+/// Applies a nullable update to an old value.
+pub fn apply_nullable<T>(new: Option<Option<T>>, old: Option<T>) -> Option<T> {
+    match new {
+        None => old,
+        Some(v) => v,
     }
 }

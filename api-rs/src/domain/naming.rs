@@ -41,6 +41,24 @@ pub fn next_free_code(prefix: &str, existing: &[String]) -> String {
     }
 }
 
+/// A variant of `code` that isn't in `taken`: `CODE`, then `CODE-2`,
+/// `CODE-3`, … shortening the base so the result stays within 16 characters.
+pub fn unique_variant(code: &str, taken: &[String]) -> String {
+    if !taken.iter().any(|t| t.eq_ignore_ascii_case(code)) {
+        return code.to_string();
+    }
+    let mut n = 2u32;
+    loop {
+        let suffix = format!("-{n}");
+        let keep = MAX_CODE_LEN.saturating_sub(suffix.len()).min(code.len());
+        let candidate = format!("{}{suffix}", &code[..keep]);
+        if !taken.iter().any(|t| t.eq_ignore_ascii_case(&candidate)) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
 /// Joins codes into a full path.
 pub fn path(codes: &[&str]) -> String {
     codes.join("/")
@@ -84,6 +102,20 @@ mod tests {
         assert_eq!(next_free_code("SW", &taken), "SW03");
         let many: Vec<String> = (1..=99).map(|n| format!("PP{n:02}")).collect();
         assert_eq!(next_free_code("PP", &many), "PP100");
+    }
+
+    #[test]
+    fn unique_variants_stay_valid() {
+        assert_eq!(unique_variant("SW01", &[]), "SW01");
+        assert_eq!(unique_variant("SW01", &["sw01".into()]), "SW01-2");
+        assert_eq!(
+            unique_variant("SW01", &["SW01".into(), "SW01-2".into()]),
+            "SW01-3"
+        );
+        let long = "ABCDEFGHIJKLMNOP";
+        let v = unique_variant(long, &[long.into()]);
+        assert_eq!(v, "ABCDEFGHIJKLMN-2");
+        assert!(normalize_code(&v).is_ok());
     }
 
     #[test]

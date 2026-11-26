@@ -9,7 +9,6 @@ use serde_json::{json, Value};
 use super::{require_account_admin, JsonBody};
 use crate::audit::{self, Entry};
 use crate::auth::{account_requires_2fa, load_user, CurrentUser};
-use crate::domain::password;
 use crate::error::{AppError, AppResult};
 use crate::middleware::RequestCtx;
 use crate::state::AppState;
@@ -86,7 +85,10 @@ pub async fn transfer_ownership(
     if !current.user.is_owner {
         return Err(AppError::forbidden("Only the owner can transfer ownership"));
     }
-    if !password::verify(&body.password, &current.user.password_hash).ok {
+    if !crate::passwords::verify(&body.password, &current.user.password_hash)
+        .await
+        .ok
+    {
         return Err(AppError::forbidden("Password is incorrect"));
     }
     if body.user_id == current.user.id {

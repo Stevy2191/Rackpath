@@ -89,6 +89,10 @@ async fn main() -> ExitCode {
 }
 
 async fn serve(config: Config, pool: sqlx::SqlitePool) -> ExitCode {
+    if let Err(e) = rackpath::prepare(&pool).await {
+        eprintln!("Startup data preparation failed: {e}");
+        return ExitCode::FAILURE;
+    }
     match rackpath::ensure_owner(&pool).await {
         Ok(Some(password)) => {
             eprintln!("================================================================");

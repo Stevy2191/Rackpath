@@ -67,9 +67,9 @@ pub async fn login(
     .await?;
 
     let verified = match &user {
-        Some(u) => password::verify(&body.password, &u.password_hash),
+        Some(u) => crate::passwords::verify(&body.password, &u.password_hash).await,
         None => {
-            password::verify_dummy(&body.password);
+            crate::passwords::verify_dummy(&body.password).await;
             password::Verified {
                 ok: false,
                 needs_rehash: false,
@@ -97,7 +97,7 @@ pub async fn login(
 
     if verified.needs_rehash {
         sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
-            .bind(password::hash(&body.password))
+            .bind(crate::passwords::hash(&body.password).await?)
             .bind(user.id)
             .execute(&mut *tx)
             .await?;
@@ -315,14 +315,17 @@ pub async fn change_password(
     {
         return Err(AppError::bad("The password can't be your username"));
     }
-    if !password::verify(&body.current_password, &current.user.password_hash).ok {
+    if !crate::passwords::verify(&body.current_password, &current.user.password_hash)
+        .await
+        .ok
+    {
         return Err(AppError::forbidden("Current password is incorrect"));
     }
     let mut tx = state.pool.begin().await?;
     sqlx::query(
         "UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?",
     )
-    .bind(password::hash(&body.new_password))
+    .bind(crate::passwords::hash(&body.new_password).await?)
     .bind(now_ts())
     .bind(current.user.id)
     .execute(&mut *tx)
@@ -365,7 +368,10 @@ pub async fn totp_setup(
             "Two-factor login is already enabled".into(),
         ));
     }
-    if !password::verify(&body.password, &current.user.password_hash).ok {
+    if !crate::passwords::verify(&body.password, &current.user.password_hash)
+        .await
+        .ok
+    {
         return Err(AppError::forbidden("Password is incorrect"));
     }
     let secret = totp::generate_secret();
@@ -482,7 +488,10 @@ pub async fn totp_disable(
     if !current.user.totp_enabled {
         return Err(AppError::bad("Two-factor login is not enabled"));
     }
-    if !password::verify(&body.password, &current.user.password_hash).ok {
+    if !crate::passwords::verify(&body.password, &current.user.password_hash)
+        .await
+        .ok
+    {
         return Err(AppError::forbidden("Password is incorrect"));
     }
     let mut tx = state.pool.begin().await?;
@@ -529,7 +538,10 @@ pub async fn regenerate_recovery_codes(
     if !current.user.totp_enabled {
         return Err(AppError::bad("Two-factor login is not enabled"));
     }
-    if !password::verify(&body.password, &current.user.password_hash).ok {
+    if !crate::passwords::verify(&body.password, &current.user.password_hash)
+        .await
+        .ok
+    {
         return Err(AppError::forbidden("Password is incorrect"));
     }
     let mut tx = state.pool.begin().await?;

@@ -6,7 +6,9 @@ pub mod config;
 pub mod db;
 pub mod domain;
 pub mod error;
+pub mod hierarchy;
 pub mod middleware;
+pub mod passwords;
 pub mod routes;
 pub mod state;
 pub mod util;
@@ -17,7 +19,6 @@ use sqlx::SqlitePool;
 use tokio::net::TcpListener;
 
 use crate::audit::Entry;
-use crate::domain::password;
 use crate::middleware::RequestCtx;
 use crate::util::{now_ts, random_password};
 
@@ -38,7 +39,7 @@ pub async fn ensure_owner(pool: &SqlitePool) -> Result<Option<String>, error::Ap
         "INSERT INTO users (username, display_name, password_hash, must_change_password, is_owner, created_at, updated_at)
          VALUES ('admin', 'Administrator', ?, 1, 1, ?, ?)",
     )
-    .bind(password::hash(&temporary))
+    .bind(crate::passwords::hash(&temporary).await?)
     .bind(&now)
     .bind(&now)
     .execute(&mut *tx)
@@ -57,6 +58,12 @@ pub async fn ensure_owner(pool: &SqlitePool) -> Result<Option<String>, error::Ap
     Ok(Some(temporary))
 }
 
+/// Startup data work after migrations: built-in device types for every
+/// project (covers projects created before a release added new built-ins).
+pub async fn prepare(pool: &SqlitePool) -> Result<(), error::AppError> {
+    routes::device_types::seed_all(pool).await
+}
+
 /// Sets a new temporary password for `username` and signs out its sessions.
 pub async fn reset_password(pool: &SqlitePool, username: &str) -> Result<String, error::AppError> {
     let mut tx = pool.begin().await?;
@@ -67,7 +74,7 @@ pub async fn reset_password(pool: &SqlitePool, username: &str) -> Result<String,
     let id = id.ok_or(error::AppError::NotFound)?;
     let temporary = random_password();
     sqlx::query("UPDATE users SET password_hash = ?, must_change_password = 1, disabled_at = NULL, updated_at = ? WHERE id = ?")
-        .bind(password::hash(&temporary))
+        .bind(crate::passwords::hash(&temporary).await?)
         .bind(now_ts())
         .bind(id)
         .execute(&mut *tx)
