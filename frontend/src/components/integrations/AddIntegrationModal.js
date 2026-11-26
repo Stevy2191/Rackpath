@@ -6,18 +6,6 @@ import '../topology/Modal.css';
 import './AddIntegrationModal.css';
 
 function initForm(integration) {
-  const config = (() => {
-    if (!integration?.config) return {};
-    if (typeof integration.config === 'string') {
-      try {
-        return JSON.parse(integration.config);
-      } catch {
-        return {};
-      }
-    }
-    return integration.config;
-  })();
-
   return {
     name: integration?.name || '',
     base_url: integration?.base_url || '',
@@ -28,9 +16,6 @@ function initForm(integration) {
     unifi_auth_method: !integration || integration.has_api_key ? 'api_key' : 'password',
     auto_sync: integration ? !!integration.auto_sync : false,
     sync_interval_minutes: integration?.sync_interval_minutes || 60,
-    devices_endpoint: config.devices_endpoint || '',
-    vlans_endpoint: config.vlans_endpoint || '',
-    snmp_version: config.snmp_version || '2c',
   };
 }
 
@@ -60,13 +45,6 @@ function buildPayload(platform, form) {
     }
     if (form.password) payload.password = form.password;
     if (form.api_key) payload.api_key = form.api_key;
-  }
-
-  if (platform === 'snmp') {
-    payload.config = { snmp_version: form.snmp_version };
-  }
-  if (platform === 'custom') {
-    payload.config = { devices_endpoint: form.devices_endpoint || null, vlans_endpoint: form.vlans_endpoint || null };
   }
 
   return payload;
@@ -405,48 +383,6 @@ export default function AddIntegrationModal({ integration, projectId, onClose, o
               <label>
                 API Token
                 <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
-              </label>
-            </>
-          )}
-
-          {platform === 'snmp' && (
-            <>
-              <label>
-                Device IP
-                <input value={form.base_url} onChange={set('base_url')} placeholder="192.168.1.1" required />
-              </label>
-              <label>
-                Community String
-                <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
-              </label>
-              <label>
-                SNMP Version
-                <select value={form.snmp_version} onChange={set('snmp_version')}>
-                  <option value="1">v1</option>
-                  <option value="2c">v2c</option>
-                  <option value="3">v3</option>
-                </select>
-              </label>
-            </>
-          )}
-
-          {platform === 'custom' && (
-            <>
-              <label>
-                Base URL
-                <input value={form.base_url} onChange={set('base_url')} placeholder="https://api.example.com" required />
-              </label>
-              <label>
-                API Key
-                <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
-              </label>
-              <label>
-                Devices Endpoint
-                <input value={form.devices_endpoint} onChange={set('devices_endpoint')} placeholder="/api/devices" />
-              </label>
-              <label>
-                VLANs Endpoint
-                <input value={form.vlans_endpoint} onChange={set('vlans_endpoint')} placeholder="/api/vlans" />
               </label>
             </>
           )}

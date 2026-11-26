@@ -12,11 +12,10 @@ function pillTextColor(hex) {
   return luminance > 0.6 ? '#1a1a1a' : '#ffffff';
 }
 
-export default function BulkEditModal({ count, tags = [], macros = [], showTags = true, showCredentialMacro = true, onSave, onClose }) {
+export default function BulkEditModal({ count, tags = [], showTags = true, onSave, onClose }) {
   const [location, setLocation] = useState('');
   const [tagIds, setTagIds] = useState([]);
   const [tagMode, setTagMode] = useState('add'); // 'add' = append to existing tags, 'replace' = set tags
-  const [credentialMacro, setCredentialMacro] = useState('');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -35,7 +34,6 @@ export default function BulkEditModal({ count, tags = [], macros = [], showTags 
       fields.tag_ids = tagIds;
       fields.tag_mode = tagMode;
     }
-    if (credentialMacro !== '') fields.credential_macro_id = credentialMacro === 'none' ? null : Number(credentialMacro);
     if (status !== '') fields.status = status;
 
     console.log('[BulkEditModal] submitting bulk edit fields:', fields);
@@ -116,21 +114,6 @@ export default function BulkEditModal({ count, tags = [], macros = [], showTags 
                   ))}
                 </div>
               )}
-            </label>
-          )}
-
-          {showCredentialMacro && (
-            <label>
-              Credential Macro
-              <select value={credentialMacro} onChange={(e) => setCredentialMacro(e.target.value)}>
-                <option value="">Leave unchanged</option>
-                <option value="none">— None —</option>
-                {macros.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
             </label>
           )}
 

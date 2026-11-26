@@ -1,14 +1,7 @@
 const pool = require('../db/pool');
 const { verifyToken, passwordFingerprint, COOKIE_NAME } = require('./jwt');
-const { isValidScannerToken, SCANNER_TOKEN_HEADER } = require('../utils/scannerAuth');
 
 const PUBLIC_PATHS = new Set(['/api/health', '/api/auth/login']);
-
-// Callbacks the scanner service posts to. The scanner has no user session, so
-// these are authenticated with the shared SCANNER_TOKEN header instead.
-const SCAN_RESULTS_PATH = /^\/api\/scans\/\d+\/results$/;
-const SCAN_PROGRESS_PATH = /^\/api\/scans\/\d+\/progress$/;
-const SCAN_HOST_PATH = /^\/api\/scans\/\d+\/host$/;
 
 // Custom topology icons are rendered via <img> tags, which can't send an
 // Authorization header, so the raw file route is left unauthenticated.
@@ -17,10 +10,6 @@ const TOPOLOGY_ICON_FILE_PATH = /^\/api\/topology\/icons\/file\/[^/]+$/;
 // Same reasoning as TOPOLOGY_ICON_FILE_PATH, for uploaded rack device faceplates.
 const RACK_DEVICE_IMAGE_FILE_PATH = /^\/api\/rack-custom-devices\/images\/file\/[^/]+$/;
 const RACK_SLOT_IMAGE_FILE_PATH = /^\/api\/rack-slots\/images\/file\/[^/]+$/;
-
-function isScannerCallbackPath(path) {
-  return SCAN_RESULTS_PATH.test(path) || SCAN_PROGRESS_PATH.test(path) || SCAN_HOST_PATH.test(path);
-}
 
 function isPublicPath(path) {
   return (
@@ -42,14 +31,8 @@ const PASSWORD_CHANGE_ALLOWED_PATHS = new Set([
 
 async function requireAuth(req, res, next) {
   if (isPublicPath(req.path)) return next();
-  if (isScannerCallbackPath(req.path)) {
-    if (req.method === 'POST' && isValidScannerToken(req.get(SCANNER_TOKEN_HEADER))) return next();
-    return res.status(401).json({ error: 'Invalid scanner token' });
-  }
 
-  // The session JWT lives in an httpOnly cookie. EventSource (used by the scan
-  // /stream endpoint) sends it automatically on same-origin requests, so the
-  // SSE stream is JWT-protected just like every other route.
+  // The session JWT lives in an httpOnly cookie.
   const token = req.cookies && req.cookies[COOKIE_NAME];
 
   if (!token) {

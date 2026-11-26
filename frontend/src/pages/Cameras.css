@@ -137,61 +137,6 @@
   background: var(--color-bg-subtle);
 }
 
-.cameras-rtsps-cell {
-  white-space: normal;
-}
-
-.cameras-rtsps-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0;
-}
-
-.cameras-rtsps-row:not(:last-child) {
-  border-bottom: 1px solid var(--color-border);
-}
-
-.cameras-rtsps-label {
-  flex: 0 0 70px;
-  width: 70px;
-  box-sizing: border-box;
-  display: inline-block;
-  padding: 0.1rem 0.35rem;
-  border-radius: 3px;
-  background: var(--color-bg-subtle);
-  color: var(--color-text-muted);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  text-align: center;
-}
-
-.cameras-rtsps-value {
-  font-family: monospace;
-  display: inline-block;
-  flex: 0 0 200px;
-  width: 200px;
-  min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: thin;
-}
-
-.cameras-rtsps-value-revealed {
-  overflow-x: visible;
-  white-space: normal;
-  word-break: break-all;
-}
-
-.cameras-icon-btn-spacer {
-  display: inline-block;
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-}
-
 .cameras-icon-btn {
   display: flex;
   align-items: center;
@@ -219,26 +164,6 @@
 .cameras-actions {
   display: flex;
   gap: 0.4rem;
-}
-
-.cameras-status-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-}
-
-.cameras-status-dot.cameras-status-online {
-  background: var(--color-success);
-}
-
-.cameras-status-dot.cameras-status-offline {
-  background: var(--color-danger);
-}
-
-.cameras-status-dot.cameras-status-unknown {
-  background: var(--color-text-muted);
 }
 
 .cameras-empty {

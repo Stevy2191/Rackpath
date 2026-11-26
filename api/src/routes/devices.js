@@ -1,9 +1,5 @@
 const express = require('express');
-const snmp = require('net-snmp');
 const pool = require('../db/pool');
-const { decryptMacro } = require('../utils/credentialMacros');
-const { scanDevice } = require('../services/snmpScan');
-const { translateInterfaceName } = require('../services/interfaceNames');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
@@ -93,7 +89,7 @@ router.get('/', async (req, res, next) => {
     if (includeCameras) {
       let cameraQuery =
         `SELECT pc.id, pc.name AS hostname, pc.ip_address AS ip, pc.mac, 'camera' AS type, pc.model, ` +
-        `pc.status, pc.location_notes AS location, pc.last_seen AS last_scanned_at, ` +
+        `pc.location_notes AS location, ` +
         `pc.integration_id AS source_integration_id, pi.platform AS source_integration_platform, ` +
         `pi.name AS source_integration_name ` +
         'FROM project_cameras pc ' +
@@ -118,7 +114,6 @@ router.get('/', async (req, res, next) => {
       for (const row of cameraRows) {
         row.source = 'camera';
         row.topology_node_id = null;
-        row.credential_macro_id = null;
         row.tags = [];
       }
       rows = rows.concat(cameraRows);
@@ -193,7 +188,7 @@ const BULK_DEVICE_STATUS_MAP = { online: 'up', offline: 'down', unknown: 'unknow
 // left untouched. `items` is an array of { id, source: 'device' | 'camera' }.
 router.post('/bulk-update', async (req, res, next) => {
   try {
-    const { items, location, tag_ids, tag_mode, credential_macro_id, status } = req.body || {};
+    const { items, location, tag_ids, tag_mode, status } = req.body || {};
     console.log('[devices.bulk-update] request body:', JSON.stringify(req.body));
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items is required' });
@@ -209,10 +204,6 @@ router.post('/bulk-update', async (req, res, next) => {
       if (location !== undefined) {
         updates.push('location = ?');
         values.push(location || null);
-      }
-      if (credential_macro_id !== undefined) {
-        updates.push('credential_macro_id = ?');
-        values.push(credential_macro_id || null);
       }
       if (status !== undefined) {
         updates.push('status = ?');
@@ -497,7 +488,6 @@ router.patch('/:id', async (req, res, next) => {
       'serial_number',
       'purchase_date',
       'warranty_expiry',
-      'credential_macro_id',
       'location_id',
       'room_id',
     ];
@@ -616,127 +606,6 @@ router.delete('/:id/tags/:tagId', async (req, res, next) => {
     res.status(204).send();
   } catch (err) {
     console.error('[devices.removeTag] failed:', err);
-    next(err);
-  }
-});
-
-// POST /api/devices/:id/scan - probe a device over SNMP using its assigned
-// credential macro, refresh hostname/location, and sync topology interfaces.
-router.post('/:id/scan', async (req, res, next) => {
-  try {
-    const [deviceRows] = await pool.query('SELECT * FROM devices WHERE id = ? AND project_id = ?', [
-      req.params.id,
-      req.projectId,
-    ]);
-    if (deviceRows.length === 0) return res.status(404).json({ error: 'Device not found' });
-    const device = deviceRows[0];
-
-    if (!device.ip) {
-      return res.status(400).json({ error: 'Device has no IP address' });
-    }
-    if (!device.credential_macro_id) {
-      return res.status(400).json({ error: 'Device has no credential macro assigned' });
-    }
-
-    const [macroRows] = await pool.query(
-      'SELECT * FROM project_credential_macros WHERE id = ? AND project_id = ?',
-      [device.credential_macro_id, req.projectId]
-    );
-    if (macroRows.length === 0) return res.status(400).json({ error: 'Assigned credential macro not found' });
-    const macro = decryptMacro(macroRows[0]);
-
-    if (!macro.type.startsWith('snmp')) {
-      return res.status(400).json({ error: 'Assigned credential macro is not an SNMP profile' });
-    }
-
-    let result;
-    try {
-      result = await scanDevice(device.ip, macro);
-    } catch (err) {
-      if (err instanceof snmp.RequestTimedOutError || err.name === 'RequestTimedOutError') {
-        return res.status(502).json({ error: 'SNMP timeout — check IP and community string' });
-      }
-      return res.status(502).json({ error: err.message });
-    }
-
-    const updates = ['last_scanned_at = NOW()'];
-    const values = [];
-
-    const blankHostname = !device.hostname || device.hostname.toLowerCase() === 'unknown';
-    if (blankHostname && result.sysName) {
-      updates.push('hostname = ?');
-      values.push(result.sysName);
-    }
-    if (!device.location && result.sysLocation) {
-      updates.push('location = ?');
-      values.push(result.sysLocation);
-    }
-
-    values.push(device.id, req.projectId);
-    await pool.query(`UPDATE devices SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`, values);
-
-    const [nodeRows] = await pool.query(
-      'SELECT id FROM topology_nodes WHERE device_id = ? AND project_id = ?',
-      [device.id, req.projectId]
-    );
-
-    let topologyInterfaceCount = 0;
-    let topologyNodeHostname = null;
-    if (nodeRows.length > 0) {
-      const ipByIfIndex = new Map();
-      for (const ipEntry of result.ips) {
-        if (ipEntry.ifIndex != null && ipEntry.address) {
-          ipByIfIndex.set(ipEntry.ifIndex, ipEntry.address);
-        }
-      }
-
-      const [existingInterfaces] = await pool.query(
-        'SELECT id, name, ip FROM topology_node_interfaces WHERE device_id = ? AND project_id = ?',
-        [device.id, req.projectId]
-      );
-      const existingByName = new Map(existingInterfaces.map((row) => [row.name, row]));
-
-      for (const iface of result.interfaces) {
-        const discoveredIp = ipByIfIndex.get(iface.index) || null;
-        const cleanName = translateInterfaceName(iface.name);
-        // Match on either the new clean name or the raw ifDescr previously
-        // stored (before this translation existed), so re-scanning a device
-        // renames its existing interface rows instead of duplicating them.
-        const existing = existingByName.get(cleanName) || existingByName.get(iface.name);
-
-        if (existing) {
-          await pool.query(
-            'UPDATE topology_node_interfaces SET name = ?, speed = ?, status = ?, description = ?, ip = ? WHERE id = ?',
-            [cleanName, iface.speed, iface.operStatus, iface.name, discoveredIp || existing.ip, existing.id]
-          );
-        } else {
-          await pool.query(
-            `INSERT INTO topology_node_interfaces (project_id, device_id, parent_id, name, description, ip, speed, status)
-             VALUES (?, ?, NULL, ?, ?, ?, ?, ?)`,
-            [req.projectId, device.id, cleanName, iface.name, discoveredIp, iface.speed, iface.operStatus]
-          );
-        }
-      }
-
-      topologyInterfaceCount = result.interfaces.length;
-      topologyNodeHostname =
-        blankHostname && result.sysName ? result.sysName : device.hostname || device.ip || `Device ${device.id}`;
-    }
-
-    res.json({
-      sysName: result.sysName,
-      sysDescr: result.sysDescr,
-      sysLocation: result.sysLocation,
-      sysContact: result.sysContact,
-      uptime: result.uptime,
-      interfaceCount: result.interfaces.length,
-      ipCount: result.ips.length,
-      interfaces: result.interfaces,
-      ips: result.ips,
-      topologyInterfaceCount,
-      topologyNodeHostname,
-    });
-  } catch (err) {
     next(err);
   }
 });

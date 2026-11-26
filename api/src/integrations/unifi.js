@@ -203,16 +203,6 @@ function extractList(data) {
   return [];
 }
 
-// v1 reports device state as a numeric `state` (1 = online). v2 reports a
-// `connectionState`/`status` string instead. Returns null if neither field
-// is present so callers can leave the device's status untouched.
-function isDeviceUp(dev) {
-  if (typeof dev.state === 'number') return dev.state === 1;
-  if (dev.connectionState) return dev.connectionState === 'CONNECTED';
-  if (dev.status) return dev.status === 'online' || dev.status === 'CONNECTED';
-  return null;
-}
-
 async function syncData(config, projectId, db) {
   if (config.api_key && isCloudUrl(config.base_url)) {
     console.log(`[unifi] ${CLOUD_URL_MESSAGE}`);
@@ -244,7 +234,6 @@ async function syncData(config, projectId, db) {
     }
 
     for (const dev of devices) {
-      const up = isDeviceUp(dev);
       const ok = await upsertDevice(db, projectId, config.id, {
         hostname: dev.name || dev.hostname || dev.model || dev.mac || dev.macAddress,
         ip: dev.ip || dev.ipAddress || null,
@@ -252,7 +241,6 @@ async function syncData(config, projectId, db) {
         type: mapDeviceType(dev.type),
         model: dev.model || dev.productLine || null,
         serial_number: dev.serial || dev.serialNumber || dev.mac || dev.macAddress || null,
-        status: up == null ? null : up ? 'up' : 'down',
       });
       if (ok) devicesImported += 1;
     }

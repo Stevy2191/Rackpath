@@ -32,13 +32,6 @@ const WARNING_DEFS = [
     render: (item) => item.hostname || `Device ${item.id}`,
   },
   {
-    key: 'devicesNoCredential',
-    label: 'Devices with no credential macro assigned',
-    severity: 'load',
-    to: '/macros',
-    render: (item) => item.hostname || `Device ${item.id}`,
-  },
-  {
     key: 'devicesNoRack',
     label: 'Devices with no rack assignment',
     severity: 'info',
@@ -77,8 +70,6 @@ const ACTION_LABELS = {
   'vlan.deleted': 'deleted VLAN',
   'camera.created': 'added camera',
   'camera.deleted': 'removed camera',
-  'macro.created': 'created credential macro',
-  'macro.deleted': 'deleted credential macro',
 };
 
 function describeAction(action) {
@@ -628,7 +619,7 @@ export default function DashboardPage() {
             </div>
             {attention.length === 0 ? (
               <p className="dashboard-panel-empty">
-                Nothing outstanding. Every device has an IP, a rack and a credential macro.
+                Nothing outstanding. Every device has an IP and a rack.
               </p>
             ) : (
               <div className="dashboard-attention">

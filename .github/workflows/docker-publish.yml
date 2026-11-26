@@ -22,8 +22,6 @@ jobs:
             context: ./frontend
           - name: rackpath-api
             context: ./api
-          - name: rackpath-scanner
-            context: ./scanner
 
     steps:
       - name: Checkout repository

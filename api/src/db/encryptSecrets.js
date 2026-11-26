@@ -4,12 +4,6 @@ const { encryptSecret, isEncrypted } = require('../utils/secrets');
 // Every column that holds a credential. Each must be wide enough for the
 // encrypted form (see migration 0065).
 const SECRET_COLUMNS = [
-  { table: 'project_credential_macros', column: 'community_string' },
-  { table: 'project_credential_macros', column: 'password' },
-  { table: 'project_credential_macros', column: 'auth_password' },
-  { table: 'project_credential_macros', column: 'priv_password' },
-  { table: 'project_cameras', column: 'stream_password' },
-  { table: 'scan_jobs', column: 'snmp_community' },
   // Integrations used MariaDB AES_ENCRYPT keyed with the JWT secret.
   { table: 'project_integrations', column: 'password', legacyMysqlAes: true },
   { table: 'project_integrations', column: 'api_key', legacyMysqlAes: true },

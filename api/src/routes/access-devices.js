@@ -13,17 +13,12 @@ const FIELDS = [
   'door_name',
   'location',
   'floor',
-  'online',
-  'door_lock_state',
-  'door_open_state',
   'connected_readers',
-  'access_groups',
-  'unlock_schedules',
 ];
 
-// connected_readers/access_groups/unlock_schedules are stored as JSON text;
-// the frontend sends/receives them as arrays.
-const JSON_FIELDS = ['connected_readers', 'access_groups', 'unlock_schedules'];
+// connected_readers is stored as JSON text; the frontend sends/receives it as
+// an array.
+const JSON_FIELDS = ['connected_readers'];
 
 function serializeRow(row) {
   if (!row) return row;
@@ -44,8 +39,6 @@ function serializeRow(row) {
 
 function fieldValue(field, body) {
   if (field === 'name') return body.name.trim();
-  if (field === 'online') return !!body.online;
-  if (field === 'door_lock_state' || field === 'door_open_state') return body[field] || 'unknown';
   if (JSON_FIELDS.includes(field)) return body[field] ? JSON.stringify(body[field]) : null;
   return body[field] !== undefined && body[field] !== '' ? body[field] : null;
 }

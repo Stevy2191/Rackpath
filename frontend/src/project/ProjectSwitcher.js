@@ -6,7 +6,7 @@ import TemplatePicker from '../components/TemplatePicker';
 import './ProjectSwitcher.css';
 
 const DELETE_WARNING =
-  'This will permanently delete all devices, scans, topology, and racks in this project. This cannot be undone.';
+  'This will permanently delete all devices, topology, and racks in this project. This cannot be undone.';
 
 export default function ProjectSwitcher() {
   const {

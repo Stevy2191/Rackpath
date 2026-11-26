@@ -1,49 +1,14 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
 import '../topology/Modal.css';
-import './CameraFormModal.css';
 
 export const emptyCamera = {
   name: '',
   model: '',
   mac: '',
   ip_address: '',
-  rtsp_url: '',
-  rtsps_url_high: '',
-  rtsps_url_medium: '',
-  rtsps_url_low: '',
-  username: '',
   resolution: '',
   location_notes: '',
-  status: 'unknown',
 };
-
-function MaskedField({ label, value, onChange, placeholder }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <label>
-      {label}
-      <div className="camera-masked-field">
-        <input
-          type={visible ? 'text' : 'password'}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          autoComplete="off"
-        />
-        <button
-          type="button"
-          className="camera-masked-toggle"
-          onClick={() => setVisible((v) => !v)}
-          aria-label={visible ? 'Hide' : 'Show'}
-          title={visible ? 'Hide' : 'Show'}
-        >
-          {visible ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
-      </div>
-    </label>
-  );
-}
 
 export default function CameraFormModal({ initial, onSave, onClose }) {
   const [draft, setDraft] = useState(initial || emptyCamera);
@@ -96,37 +61,6 @@ export default function CameraFormModal({ initial, onSave, onClose }) {
           <label>
             Resolution
             <input value={draft.resolution || ''} onChange={field('resolution')} placeholder="1920x1080" />
-          </label>
-          <label>
-            Username
-            <input value={draft.username || ''} onChange={field('username')} />
-          </label>
-          <MaskedField label="RTSP URL" value={draft.rtsp_url || ''} onChange={field('rtsp_url')} placeholder="rtsp://192.168.1.1:7447/alias" />
-          <MaskedField
-            label="RTSPS URL (High)"
-            value={draft.rtsps_url_high || ''}
-            onChange={field('rtsps_url_high')}
-            placeholder="rtsps://192.168.1.1:7441/alias?quality=high"
-          />
-          <MaskedField
-            label="RTSPS URL (Medium)"
-            value={draft.rtsps_url_medium || ''}
-            onChange={field('rtsps_url_medium')}
-            placeholder="rtsps://192.168.1.1:7441/alias?quality=medium"
-          />
-          <MaskedField
-            label="RTSPS URL (Low)"
-            value={draft.rtsps_url_low || ''}
-            onChange={field('rtsps_url_low')}
-            placeholder="rtsps://192.168.1.1:7441/alias?quality=low"
-          />
-          <label>
-            Status
-            <select value={draft.status || 'unknown'} onChange={field('status')}>
-              <option value="unknown">Unknown</option>
-              <option value="online">Online</option>
-              <option value="offline">Offline</option>
-            </select>
           </label>
           <label>
             Location Notes

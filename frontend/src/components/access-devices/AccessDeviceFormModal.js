@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import '../topology/Modal.css';
-import './AccessDeviceFormModal.css';
 
 export const emptyAccessDevice = {
   name: '',
@@ -12,12 +11,7 @@ export const emptyAccessDevice = {
   door_name: '',
   location: '',
   floor: '',
-  online: false,
-  door_lock_state: 'unknown',
-  door_open_state: 'unknown',
   connected_readers: [],
-  access_groups: [],
-  unlock_schedules: [],
 };
 
 const DEVICE_TYPES = [
@@ -34,8 +28,8 @@ const DEVICE_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
-// Comma-separated text fields for the list-valued columns (connected_readers,
-// access_groups, unlock_schedules), converted to/from arrays on load/save.
+// connected_readers is edited as comma-separated text and converted to/from
+// an array on load/save.
 function toListText(value) {
   return Array.isArray(value) ? value.join(', ') : '';
 }
@@ -53,8 +47,6 @@ function initDraft(initial) {
     ...emptyAccessDevice,
     ...base,
     connected_readers: toListText(base.connected_readers),
-    access_groups: toListText(base.access_groups),
-    unlock_schedules: toListText(base.unlock_schedules),
   };
 }
 
@@ -77,8 +69,6 @@ export default function AccessDeviceFormModal({ initial, onSave, onClose }) {
       await onSave({
         ...draft,
         connected_readers: fromListText(draft.connected_readers),
-        access_groups: fromListText(draft.access_groups),
-        unlock_schedules: fromListText(draft.unlock_schedules),
       });
     } catch (err) {
       setError(err.response?.data?.error || err.message);
@@ -138,44 +128,12 @@ export default function AccessDeviceFormModal({ initial, onSave, onClose }) {
             <input value={draft.floor || ''} onChange={field('floor')} placeholder="e.g. 1st Floor" />
           </label>
           <label>
-            Lock State
-            <select value={draft.door_lock_state || 'unknown'} onChange={field('door_lock_state')}>
-              <option value="unknown">Unknown</option>
-              <option value="locked">Locked</option>
-              <option value="unlocked">Unlocked</option>
-            </select>
-          </label>
-          <label>
-            Door State
-            <select value={draft.door_open_state || 'unknown'} onChange={field('door_open_state')}>
-              <option value="unknown">Unknown</option>
-              <option value="open">Open</option>
-              <option value="closed">Closed</option>
-            </select>
-          </label>
-          <label>
             Connected Readers
             <input
               value={draft.connected_readers}
               onChange={field('connected_readers')}
               placeholder="Reader 1, Reader 2"
             />
-          </label>
-          <label>
-            Access Groups
-            <input value={draft.access_groups} onChange={field('access_groups')} placeholder="Employees, Visitors" />
-          </label>
-          <label>
-            Unlock Schedules
-            <input value={draft.unlock_schedules} onChange={field('unlock_schedules')} placeholder="Business Hours" />
-          </label>
-          <label className="access-device-checkbox-label">
-            <input
-              type="checkbox"
-              checked={!!draft.online}
-              onChange={(e) => setDraft((prev) => ({ ...prev, online: e.target.checked }))}
-            />
-            Online
           </label>
 
           <div className="modal-actions">

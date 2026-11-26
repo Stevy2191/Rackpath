@@ -20,27 +20,23 @@ const SCOPED_TABLES = [
   'topology_shapes',
   'topology_labels',
   'topology_layout',
-  // Children of scan_jobs
-  'scan_results',
-  'scan_jobs',
-  // Children of project_integrations
-  'integration_sync_log',
+  // Children of project_integrations (no project_id of their own)
+  { table: 'integration_sync_log', where: 'integration_id IN (SELECT id FROM project_integrations WHERE project_id = ?)' },
   'project_integrations',
   // Children of project_cameras / device_tags
-  'camera_tag_assignments',
+  { table: 'camera_tag_assignments', where: 'camera_id IN (SELECT id FROM project_cameras WHERE project_id = ?)' },
   'project_cameras',
   // Children of devices / device_tags
-  'device_tag_assignments',
+  { table: 'device_tag_assignments', where: 'device_id IN (SELECT id FROM devices WHERE project_id = ?)' },
   'device_tags',
   'project_access_devices',
-  'rooms',
+  { table: 'rooms', where: 'location_id IN (SELECT id FROM locations WHERE project_id = ?)' },
   'locations',
   // Children of racks
   'rack_slots',
   'rack_custom_devices',
   'racks',
   // Remaining project-scoped tables
-  'project_credential_macros',
   'project_vlans',
   'project_activity_log',
   'devices',
@@ -246,9 +242,8 @@ router.get('/:id/counts', async (req, res, next) => {
          (SELECT COUNT(*) FROM project_cameras WHERE project_id = ?)    AS cameras,
          (SELECT COUNT(*) FROM project_access_devices WHERE project_id = ?) AS accessDevices,
          (SELECT COUNT(*) FROM locations WHERE project_id = ?)          AS locations,
-         (SELECT COUNT(*) FROM project_integrations WHERE project_id = ?) AS integrations,
-         (SELECT COUNT(*) FROM project_credential_macros WHERE project_id = ?) AS macros`,
-      Array(8).fill(projectId)
+         (SELECT COUNT(*) FROM project_integrations WHERE project_id = ?) AS integrations`,
+      Array(7).fill(projectId)
     );
     res.json(rows[0]);
   } catch (err) {
@@ -279,7 +274,6 @@ router.get('/:id/overview', async (req, res, next) => {
       rackUsage,
       devicesNoIp,
       devicesNoRack,
-      devicesNoCredential,
       vlansNoSubnet,
       nodesNoDevice,
       devices,
@@ -308,7 +302,6 @@ router.get('/:id/overview', async (req, res, next) => {
          )`,
         [projectId, projectId]
       ),
-      pool.query('SELECT id, hostname FROM devices WHERE project_id = ? AND credential_macro_id IS NULL', [projectId]),
       pool.query("SELECT id, vlan_id, name FROM project_vlans WHERE project_id = ? AND (subnet IS NULL OR subnet = '')", [projectId]),
       pool.query("SELECT id, label, type FROM topology_nodes WHERE project_id = ? AND device_id IS NULL", [projectId]),
       // status feeds the dashboard's "unreachable" count as well as the export
@@ -373,7 +366,6 @@ router.get('/:id/overview', async (req, res, next) => {
       warnings: {
         devicesNoIp: devicesNoIp[0],
         devicesNoRack: devicesNoRack[0],
-        devicesNoCredential: devicesNoCredential[0],
         vlansNoSubnet: vlansNoSubnet[0],
         nodesNoDevice: nodesNoDevice[0],
       },
@@ -427,8 +419,9 @@ router.delete('/:id', async (req, res, next) => {
     }
 
     await conn.beginTransaction();
-    for (const table of SCOPED_TABLES) {
-      await conn.query(`DELETE FROM ${table} WHERE project_id = ?`, [projectId]);
+    for (const entry of SCOPED_TABLES) {
+      const { table, where } = typeof entry === 'string' ? { table: entry, where: 'project_id = ?' } : entry;
+      await conn.query(`DELETE FROM ${table} WHERE ${where}`, [projectId]);
     }
     await conn.query('DELETE FROM projects WHERE id = ?', [projectId]);
     await conn.commit();

@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Columns3, Loader2, Network, Plus, Radio, Search, Tag, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Columns3, Network, Plus, Search, Tag, X } from 'lucide-react';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
 import { platformInfo } from '../components/integrations/platforms';
 import ManageTagsModal from '../components/devices/ManageTagsModal';
-import ScanResultModal from '../components/devices/ScanResultModal';
 import BulkActionToolbar from '../components/devices/BulkActionToolbar';
 import BulkEditModal from '../components/devices/BulkEditModal';
 import CameraFormModal from '../components/cameras/CameraFormModal';
@@ -47,8 +46,6 @@ const COLUMN_DEFS = [
   { key: 'model', label: 'Model' },
   { key: 'serial_number', label: 'Serial Number' },
   { key: 'tags', label: 'Tags' },
-  { key: 'credential', label: 'Credential' },
-  { key: 'last_seen', label: 'Last Seen' },
 ];
 
 const DEFAULT_VISIBLE_COLUMNS = {
@@ -62,8 +59,6 @@ const DEFAULT_VISIBLE_COLUMNS = {
   model: true,
   serial_number: false,
   tags: true,
-  credential: true,
-  last_seen: true,
 };
 
 const PAGE_SIZE = 25;
@@ -78,13 +73,6 @@ function deviceStatusClass(status) {
 // each have their own id sequence and a device and camera can share an id.
 function rowKey(row) {
   return `${row.source || 'device'}:${row.id}`;
-}
-
-function formatLastSeen(value) {
-  if (!value) return 'Never';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Never';
-  return date.toLocaleString();
 }
 
 // Picks readable foreground text for a colored tag pill.
@@ -111,14 +99,10 @@ export default function DevicesPage() {
   const [accessDevices, setAccessDevices] = useState([]);
   const [cameras, setCameras] = useState([]);
   const [tags, setTags] = useState([]);
-  const [macros, setMacros] = useState([]);
   const [locations, setLocations] = useState([]);
   const [roomsList, setRoomsList] = useState([]);
   const [locationIdFilter, setLocationIdFilter] = useState('');
   const [roomIdFilter, setRoomIdFilter] = useState('');
-  const [scanningId, setScanningId] = useState(null);
-  const [scanResult, setScanResult] = useState(null); // { device, result }
-  const [toast, setToast] = useState(null);
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -169,19 +153,6 @@ export default function DevicesPage() {
     client
       .get(`/projects/${currentProjectId}/device-tags`)
       .then((res) => setTags(res.data || []))
-      .catch((err) => setError(err.response?.data?.error || err.message));
-  };
-
-  const showToast = (toastInfo) => {
-    setToast(toastInfo);
-    setTimeout(() => setToast(null), 6000);
-  };
-
-  const loadMacros = () => {
-    if (!currentProjectId) return;
-    client
-      .get(`/projects/${currentProjectId}/macros`)
-      .then((res) => setMacros(res.data || []))
       .catch((err) => setError(err.response?.data?.error || err.message));
   };
 
@@ -240,7 +211,6 @@ export default function DevicesPage() {
 
   useEffect(() => {
     loadTags();
-    loadMacros();
     loadAccessDevices();
     loadCameras();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -388,17 +358,6 @@ export default function DevicesPage() {
     }
   };
 
-  const handleCredentialChange = async (device, macroId) => {
-    try {
-      const res = await client.patch(`/devices/${device.id}`, { credential_macro_id: macroId || null });
-      setDevices((prev) =>
-        prev.map((d) => (d.id === device.id ? { ...d, credential_macro_id: res.data.credential_macro_id } : d))
-      );
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    }
-  };
-
   const toggleSelect = (key) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -480,56 +439,6 @@ export default function DevicesPage() {
     }
   };
 
-  const macroById = React.useMemo(() => new Map(macros.map((m) => [m.id, m])), [macros]);
-
-  const canScan = (device) => {
-    if (!device.ip || !device.credential_macro_id) return false;
-    const macro = macroById.get(device.credential_macro_id);
-    return !!macro && macro.type.startsWith('snmp');
-  };
-
-  const handleScan = async (device) => {
-    setScanningId(device.id);
-    setError('');
-    try {
-      const res = await client.post(`/devices/${device.id}/scan`, {});
-      setDevices((prev) =>
-        prev.map((d) => (d.id === device.id ? { ...d, last_scanned_at: new Date().toISOString() } : d))
-      );
-      setScanResult({ device, result: res.data });
-      if (res.data.topologyInterfaceCount > 0) {
-        window.dispatchEvent(new CustomEvent('device-scan-complete', { detail: { deviceId: device.id } }));
-        const count = res.data.topologyInterfaceCount;
-        showToast({
-          type: 'success',
-          text: `Topology updated — ${count} interface${count === 1 ? '' : 's'} synced to ${res.data.topologyNodeHostname}`,
-        });
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    } finally {
-      setScanningId(null);
-    }
-  };
-
-  const handleUpdateDeviceFromScan = async (device, result) => {
-    const patch = {};
-    if (result.sysName) patch.hostname = result.sysName;
-    if (result.sysLocation) patch.location = result.sysLocation;
-    if (Object.keys(patch).length === 0) {
-      setScanResult(null);
-      return;
-    }
-    try {
-      const res = await client.patch(`/devices/${device.id}`, patch);
-      setDevices((prev) => prev.map((d) => (d.id === device.id ? { ...d, ...res.data } : d)));
-      loadLocations();
-      setScanResult(null);
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    }
-  };
-
   const toggleTagFilter = (tagId) => {
     setTagFilterIds((prev) => (prev.includes(tagId) ? prev.filter((tid) => tid !== tagId) : [...prev, tagId]));
   };
@@ -584,10 +493,8 @@ export default function DevicesPage() {
           make: null,
           model: a.model,
           serial_number: null,
-          status: a.last_seen ? (a.online ? 'up' : 'down') : null,
-          last_scanned_at: a.last_seen,
+          status: null,
           tags: [],
-          credential_macro_id: null,
           topology_node_id: null,
           source_integration_id: null,
         }));
@@ -812,9 +719,6 @@ export default function DevicesPage() {
               {visibleColumns.model && <th>Model</th>}
               {visibleColumns.serial_number && <th>Serial Number</th>}
               {visibleColumns.tags && <th>Tags</th>}
-              {visibleColumns.credential && <th>Credential</th>}
-              {visibleColumns.last_seen && <th>Last Seen</th>}
-              <th>Scan</th>
               <th></th>
             </tr>
           </thead>
@@ -966,44 +870,6 @@ export default function DevicesPage() {
                       )}
                     </td>
                   )}
-                  {visibleColumns.credential && (
-                    <td>
-                      {isAccess || isCamera ? (
-                        '—'
-                      ) : (
-                      <select
-                        className="devices-credential-select"
-                        value={device.credential_macro_id != null ? device.credential_macro_id.toString() : ''}
-                        onChange={(e) => handleCredentialChange(device, e.target.value ? Number(e.target.value) : null)}
-                      >
-                        <option value="">—</option>
-                        {macros.map((m) => (
-                          <option key={m.id} value={m.id.toString()}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
-                      )}
-                    </td>
-                  )}
-                  {visibleColumns.last_seen && <td>{formatLastSeen(device.last_scanned_at)}</td>}
-                  <td>
-                    {!isAccess && !isCamera && (
-                      <button
-                        type="button"
-                        className="devices-scan-btn"
-                        title={canScan(device) ? 'Run SNMP scan' : 'Requires an IP address and an SNMP credential macro'}
-                        disabled={!canScan(device) || scanningId === device.id}
-                        onClick={() => handleScan(device)}
-                      >
-                        {scanningId === device.id ? (
-                          <Loader2 size={14} className="devices-spin" />
-                        ) : (
-                          <Radio size={14} />
-                        )}
-                      </button>
-                    )}
-                  </td>
                   <td>
                     <button
                       className="delete-btn"
@@ -1087,14 +953,6 @@ export default function DevicesPage() {
               />
             </label>
             <label>
-              SNMP Credential
-              <div className="device-readonly-field">
-                {selectedDevice.credential_macro_id
-                  ? macroById.get(selectedDevice.credential_macro_id)?.name || 'No credential assigned'
-                  : 'No credential assigned'}
-              </div>
-            </label>
-            <label>
               Make
               <input
                 value={editDevice.make || ''}
@@ -1154,7 +1012,7 @@ export default function DevicesPage() {
           ) : interfacesLoading ? (
             <p className="device-interfaces-empty">Loading…</p>
           ) : interfaces.length === 0 ? (
-            <p className="device-interfaces-empty">No ports discovered yet — run an SNMP scan.</p>
+            <p className="device-interfaces-empty">No ports recorded yet.</p>
           ) : (
             <table className="port-table">
               <thead>
@@ -1197,20 +1055,10 @@ export default function DevicesPage() {
         />
       )}
 
-      {scanResult && (
-        <ScanResultModal
-          device={scanResult.device}
-          result={scanResult.result}
-          onClose={() => setScanResult(null)}
-          onUpdateDevice={handleUpdateDeviceFromScan}
-        />
-      )}
-
       {showBulkEdit && (
         <BulkEditModal
           count={selectedIds.size}
           tags={tags}
-          macros={macros}
           onSave={handleBulkEditSave}
           onClose={() => setShowBulkEdit(false)}
         />
@@ -1220,7 +1068,6 @@ export default function DevicesPage() {
         <CameraFormModal initial={cameraModalState} onSave={handleSaveCamera} onClose={() => setCameraModalState(null)} />
       )}
 
-      {toast && <div className={`devices-toast devices-toast-${toast.type}`}>{toast.text}</div>}
     </div>
   );
 }

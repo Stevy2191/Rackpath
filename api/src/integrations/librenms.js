@@ -45,7 +45,6 @@ async function syncData(config, projectId, db) {
         type: dev.type || null,
         model: dev.hardware || null,
         serial_number: dev.serial || null,
-        status: Number(dev.status) === 1 ? 'up' : 'down',
       });
       if (ok) devicesImported += 1;
     }

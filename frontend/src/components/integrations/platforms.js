@@ -1,4 +1,4 @@
-import { Wifi, Activity, BarChart3, Database, Radio, Code2, Camera, DoorOpen } from 'lucide-react';
+import { Wifi, Activity, BarChart3, Database, Camera, DoorOpen } from 'lucide-react';
 
 export const PLATFORMS = [
   { id: 'unifi', label: 'UniFi', icon: Wifi },
@@ -7,8 +7,6 @@ export const PLATFORMS = [
   { id: 'zabbix', label: 'Zabbix', icon: Activity },
   { id: 'librenms', label: 'LibreNMS', icon: BarChart3 },
   { id: 'netbox', label: 'NetBox', icon: Database },
-  { id: 'snmp', label: 'SNMP', icon: Radio },
-  { id: 'custom', label: 'Custom REST API', icon: Code2 },
 ];
 
 export function platformInfo(id) {

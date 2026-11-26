@@ -83,7 +83,7 @@ async function syncData(config, projectId, db) {
       'host.get',
       {
         output: ['hostid', 'host', 'name', 'status'],
-        selectInterfaces: ['ip', 'available'],
+        selectInterfaces: ['ip'],
         selectGroups: ['name'],
         selectInventory: ['serialno_a', 'hardware'],
       },
@@ -92,14 +92,12 @@ async function syncData(config, projectId, db) {
 
     for (const host of hosts || []) {
       const iface = (host.interfaces || [])[0] || {};
-      const available = Number(iface.available);
       const ok = await upsertDevice(db, projectId, config.id, {
         hostname: host.name || host.host,
         ip: iface.ip || null,
         type: inferTypeFromGroups(host.groups),
         model: host.inventory?.hardware || null,
         serial_number: host.inventory?.serialno_a || null,
-        status: available === 1 ? 'up' : available === 2 ? 'down' : 'unknown',
       });
       if (ok) devicesImported += 1;
     }

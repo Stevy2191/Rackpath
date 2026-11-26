@@ -15,8 +15,6 @@
 # Ports are asked for interactively. To install without a terminal (or to
 # script it), set any of these and the matching question is skipped:
 #   RACKPATH_FRONTEND_PORT   - web UI            (default: 8080)
-#   RACKPATH_API_PORT        - API               (default: 3010)
-#   RACKPATH_SCANNER_PORT    - scanner service   (default: 5001)
 #   RACKPATH_DB_PORT         - MariaDB           (default: 3306)
 # ---------------------------------------------------------------------------
 set -uo pipefail
@@ -26,8 +24,6 @@ DEPLOY_DIR="${RACKPATH_DEPLOY_DIR:-rackpath}"
 DB_HEALTH_TIMEOUT=120
 
 DEFAULT_FRONTEND_PORT=8080
-DEFAULT_API_PORT=3010
-DEFAULT_SCANNER_PORT=5001
 DEFAULT_DB_PORT=3306
 
 log()  { printf '\n==> %s\n' "$1"; }
@@ -212,7 +208,7 @@ cd "$DEPLOY_DIR" || die "Failed to cd into deployment directory: $DEPLOY_DIR"
 # ---------------------------------------------------------------------------
 
 log "Choosing ports"
-if have_tty && [ -z "${RACKPATH_FRONTEND_PORT:-}${RACKPATH_API_PORT:-}${RACKPATH_SCANNER_PORT:-}${RACKPATH_DB_PORT:-}" ]; then
+if have_tty && [ -z "${RACKPATH_FRONTEND_PORT:-}${RACKPATH_DB_PORT:-}" ]; then
   echo "Press Enter to accept the default for each."
   echo ""
 fi
@@ -226,12 +222,10 @@ default_for() {
 }
 
 frontend_port=$(prompt_port "Web UI"   "$(default_for FRONTEND_PORT "$DEFAULT_FRONTEND_PORT")" "${RACKPATH_FRONTEND_PORT:-}")
-api_port=$(prompt_port      "API"      "$(default_for API_PORT      "$DEFAULT_API_PORT")"      "${RACKPATH_API_PORT:-}")
-scanner_port=$(prompt_port  "Scanner"  "$(default_for SCANNER_PORT  "$DEFAULT_SCANNER_PORT")"  "${RACKPATH_SCANNER_PORT:-}")
 db_port=$(prompt_port       "Database" "$(default_for DB_PORT       "$DEFAULT_DB_PORT")"       "${RACKPATH_DB_PORT:-}")
 
-for pair in "Web UI:$frontend_port" "API:$api_port" "Scanner:$scanner_port" "Database:$db_port"; do
-  for other in "Web UI:$frontend_port" "API:$api_port" "Scanner:$scanner_port" "Database:$db_port"; do
+for pair in "Web UI:$frontend_port" "Database:$db_port"; do
+  for other in "Web UI:$frontend_port" "Database:$db_port"; do
     if [ "${pair%%:*}" != "${other%%:*}" ] && [ "${pair##*:}" = "${other##*:}" ]; then
       die "${pair%%:*} and ${other%%:*} are both set to port ${pair##*:}. Each service needs its own port."
     fi
@@ -291,12 +285,6 @@ elif env_value MYSQL_ROOT_PASSWORD | grep -q '^changeme' || env_value MYSQL_PASS
   warn "Your .env still uses the default changeme_* database passwords. The database is only published on 127.0.0.1, but you should change them (see README: Changing the database passwords)."
 fi
 
-# Shared secret between the API and the scanner. Generated once and kept.
-if [ -z "$(env_value SCANNER_TOKEN)" ]; then
-  set_env_value SCANNER_TOKEN "$(generate_secret)"
-  echo "Generated a scanner token."
-fi
-
 # Key for credentials stored in the database. Generated once and never
 # replaced: changing it makes every stored password unreadable.
 if [ -z "$(env_value RACKPATH_ENCRYPTION_KEY)" ]; then
@@ -306,13 +294,7 @@ fi
 
 set_env_value RACKPATH_JWT_SECRET "$jwt_secret"
 set_env_value FRONTEND_PORT "$frontend_port"
-set_env_value API_PORT "$api_port"
-set_env_value SCANNER_PORT "$scanner_port"
 set_env_value DB_PORT "$db_port"
-# Both are addresses the services use to reach each other across the host
-# network, so they have to carry the ports chosen above.
-set_env_value API_PUBLIC_URL "http://localhost:${api_port}"
-set_env_value SCANNER_URL "http://host.docker.internal:${scanner_port}"
 
 # ---------------------------------------------------------------------------
 # Start the stack
@@ -327,9 +309,21 @@ if ! wait_for_healthy rackpath-db "$DB_HEALTH_TIMEOUT"; then
   die "rackpath-db did not become healthy within ${DB_HEALTH_TIMEOUT}s. Check 'docker compose logs rackpath-db'."
 fi
 
-log "Applying database schema"
-if ! "${COMPOSE[@]}" exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql; then
-  die "Failed to apply database schema. Check 'docker compose logs rackpath-db'."
+# MariaDB applies db/init.sql itself when it creates a new data volume, and the
+# API applies migrations on every start. Apply init.sql here only if the
+# database has no schema at all (for example a volume created without it), so
+# a re-run never recreates tables that a later migration removed.
+log "Checking database schema"
+schema_present=$("${COMPOSE[@]}" exec -T rackpath-db sh -c \
+  'exec mariadb -N -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '"'"'projects'"'"'"' \
+  < /dev/null 2>/dev/null | tr -d '[:space:]')
+if [ "$schema_present" = "1" ]; then
+  echo "Schema already present; the API applies any pending migrations on start."
+else
+  log "Applying database schema"
+  if ! "${COMPOSE[@]}" exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql; then
+    die "Failed to apply database schema. Check 'docker compose logs rackpath-db'."
+  fi
 fi
 
 log "Creating default admin user"
@@ -358,8 +352,6 @@ echo ""
 echo "  You will be asked to change your password on first login."
 echo ""
 echo "  Ports:    web UI   ${frontend_port}"
-echo "            API      ${api_port}"
-echo "            scanner  ${scanner_port}"
 echo "            database ${db_port}"
 echo ""
 echo "  To change a port later, edit .env and run 'docker compose up -d'."

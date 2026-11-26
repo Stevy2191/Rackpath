@@ -128,26 +128,6 @@
   background: var(--color-bg-subtle);
 }
 
-.access-devices-status-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-}
-
-.access-devices-status-dot.access-devices-status-online {
-  background: var(--color-success);
-}
-
-.access-devices-status-dot.access-devices-status-offline {
-  background: var(--color-danger);
-}
-
-.access-devices-status-dot.access-devices-status-unknown {
-  background: var(--color-text-muted);
-}
-
 .access-devices-badge {
   display: inline-block;
   font-size: 0.7rem;
@@ -159,36 +139,9 @@
   white-space: nowrap;
 }
 
-.access-devices-badge-green {
-  background: color-mix(in srgb, var(--color-success) 13%, transparent);
-  color: var(--color-success);
-}
-
-.access-devices-badge-red {
-  background: color-mix(in srgb, var(--color-danger) 13%, transparent);
-  color: var(--color-danger);
-}
-
 .access-devices-badge-grey {
   background: var(--color-bg-subtle);
   color: var(--color-text-muted);
-}
-
-.access-devices-pill-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.access-devices-pill {
-  display: inline-block;
-  font-size: 0.7rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  white-space: nowrap;
 }
 
 .access-devices-icon-btn {

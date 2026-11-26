@@ -46,8 +46,6 @@ async function testConnection(config) {
   }
 }
 
-const STATUS_MAP = { active: 'up', offline: 'down', failed: 'down', decommissioning: 'down' };
-
 async function syncData(config, projectId, db) {
   const http = makeClient(config);
 
@@ -66,7 +64,6 @@ async function syncData(config, projectId, db) {
         type: dev.device_role?.slug || dev.device_type?.slug || null,
         model: dev.device_type?.model || null,
         serial_number: dev.serial || null,
-        status: STATUS_MAP[dev.status?.value] || 'unknown',
       });
       if (ok) devicesImported += 1;
     }

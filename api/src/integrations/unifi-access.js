@@ -155,39 +155,6 @@ function mapDeviceType(raw) {
   return 'other';
 }
 
-function isDeviceOnline(dev) {
-  if (typeof dev.connected === 'boolean') return dev.connected;
-  if (typeof dev.is_connected === 'boolean') return dev.is_connected;
-  const state = dev.connection_status || dev.status || dev.state;
-  if (!state) return false;
-  return /online|connected/i.test(state);
-}
-
-// UniFi Access timestamps may be unix seconds, unix milliseconds, or ISO
-// strings depending on endpoint/version.
-function parseTimestamp(value) {
-  if (value == null) return null;
-  if (typeof value === 'number') {
-    return new Date(value < 1e12 ? value * 1000 : value);
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function mapLockState(value) {
-  const v = `${value || ''}`.toLowerCase();
-  if (v.includes('unlock')) return 'unlocked';
-  if (v.includes('lock')) return 'locked';
-  return 'unknown';
-}
-
-function mapOpenState(value) {
-  const v = `${value || ''}`.toLowerCase();
-  if (v.includes('open')) return 'open';
-  if (v.includes('clos')) return 'closed';
-  return 'unknown';
-}
-
 // Pulls device/resource ids out of whatever shape a relation field happens to
 // be: a bare id, an array of ids, or an array of objects with id/device_id.
 function flattenIds(value) {
@@ -229,7 +196,7 @@ function buildDeviceIndex(devices) {
 }
 
 // Maps each device id referenced by a door to that door's name/location/
-// floor/lock-and-open state, so devices can be enriched with their door info.
+// floor, so devices can be enriched with their door info.
 function buildDoorIndex(doors) {
   const byDeviceId = new Map();
   for (const door of doors) {
@@ -239,8 +206,6 @@ function buildDoorIndex(doors) {
       name: door.full_name || door.name || null,
       location: door.floor?.building_name || door.location || null,
       floor: door.floor?.name || door.floor_name || (typeof door.floor === 'string' ? door.floor : null),
-      lockState: mapLockState(door.door_lock_relay_status || door.lock_state || door.relay_status),
-      openState: mapOpenState(door.door_position_status || door.open_state || door.position_status),
     };
 
     const deviceIds = flattenIds(door.device_groups || door.door_device_ids || door.devices || door.access_devices);
@@ -249,23 +214,6 @@ function buildDoorIndex(doors) {
     }
   }
   return byDeviceId;
-}
-
-// Maps each door id referenced by a policy/schedule to the resource's name,
-// so a door's devices can be enriched with the access groups / unlock
-// schedules that apply to it.
-function buildResourceIndex(items) {
-  const byDoorId = new Map();
-  for (const item of items) {
-    const name = item.name || item.policy_name || item.schedule_name;
-    if (!name) continue;
-    const doorIds = flattenIds(item.resources || item.door_ids || item.doors || item.scope);
-    for (const doorId of doorIds) {
-      if (!byDoorId.has(doorId)) byDoorId.set(doorId, []);
-      byDoorId.get(doorId).push(name);
-    }
-  }
-  return byDoorId;
 }
 
 async function testConnection(config) {
@@ -306,24 +254,18 @@ async function syncData(config, projectId, db) {
       console.log(`[unifi-access] first device fields: ${Object.keys(devices[0]).join(', ')}`);
     }
 
-    const [doors, policies, schedules] = await Promise.all([
-      fetchList(http, headers, '/proxy/access/api/v2/door'),
-      fetchList(http, headers, '/proxy/access/api/v2/policy'),
-      fetchList(http, headers, '/proxy/access/api/v2/schedule'),
-    ]);
+    // Doors are fetched only to record which door each device serves and
+    // where it is. Lock/open state, access policies and schedules are live or
+    // security configuration, not documentation, and are not imported.
+    const doors = await fetchList(http, headers, '/proxy/access/api/v2/door');
     console.log(`[unifi-access] door endpoint returned ${doors.length} door(s)`);
-    console.log(`[unifi-access] policy endpoint returned ${policies.length} polic${policies.length === 1 ? 'y' : 'ies'}`);
-    console.log(`[unifi-access] schedule endpoint returned ${schedules.length} schedule(s)`);
 
     const deviceIndex = buildDeviceIndex(devices);
     const doorIndex = buildDoorIndex(doors);
-    const policyIndex = buildResourceIndex(policies);
-    const scheduleIndex = buildResourceIndex(schedules);
 
     for (const dev of devices) {
       const devId = dev.id || dev.device_id || dev.unique_id;
       const door = devId != null ? doorIndex.get(String(devId)) : null;
-      const doorId = door?.id != null ? String(door.id) : null;
 
       const readerIds = flattenIds(dev.readers || dev.connected_readers || dev.reader_ids);
       const connectedReaders = readerIds.map((id) => deviceIndex.get(id)?.name).filter(Boolean);
@@ -335,16 +277,10 @@ async function syncData(config, projectId, db) {
         ip_address: dev.ip || dev.ip_address || null,
         firmware_version: dev.firmware_version || dev.version || null,
         device_type: mapDeviceType(dev.device_type || dev.type || dev.model),
-        online: isDeviceOnline(dev),
-        last_seen: parseTimestamp(dev.last_seen || dev.last_seen_at) || new Date(),
         door_name: door?.name || null,
         location: door?.location || null,
         floor: door?.floor || null,
-        door_lock_state: door?.lockState || 'unknown',
-        door_open_state: door?.openState || 'unknown',
         connected_readers: connectedReaders,
-        access_groups: doorId ? policyIndex.get(doorId) || [] : [],
-        unlock_schedules: doorId ? scheduleIndex.get(doorId) || [] : [],
       });
       if (ok) accessDevicesImported += 1;
     }

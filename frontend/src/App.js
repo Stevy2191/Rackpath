@@ -7,20 +7,16 @@ import TopologyPage from './pages/Topology';
 import VlansPage from './pages/Vlans';
 import RacksPage from './pages/Racks';
 import DevicesPage from './pages/Devices';
-import MacrosPage from './pages/Macros';
 import CamerasPage from './pages/Cameras';
 import AccessDevicesPage from './pages/AccessDevices';
 import LocationsPage from './pages/Locations';
 import IntegrationsPage from './pages/Integrations';
-import NetworkToolsPage from './pages/NetworkTools';
-import ScanPage from './pages/Scan';
 import LoginPage from './pages/Login';
 import ChangePasswordPage from './pages/ChangePassword';
 import ProjectSelectPage from './pages/ProjectSelect';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ProjectProvider, useProject } from './project/ProjectContext';
 import RequireAuth from './auth/RequireAuth';
-import ErrorBoundary from './components/ErrorBoundary';
 import LandingRedirect from './components/LandingRedirect';
 import { ThemeProvider } from './theme/ThemeContext';
 import './App.css';
@@ -145,14 +141,6 @@ function AppShell() {
               </RequireAuth>
             }
           />
-          <Route
-            path="/macros"
-            element={
-              <RequireAuth>
-                <MacrosPage />
-              </RequireAuth>
-            }
-          />
           <Route path="/cameras" element={<Navigate to="/devices/cameras" replace />} />
           <Route
             path="/integrations"
@@ -163,28 +151,10 @@ function AppShell() {
             }
           />
           <Route
-            path="/network-tools"
-            element={
-              <RequireAuth>
-                <NetworkToolsPage />
-              </RequireAuth>
-            }
-          />
-          <Route
             path="/locations"
             element={
               <RequireAuth>
                 <LocationsPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/scan"
-            element={
-              <RequireAuth>
-                <ErrorBoundary label="The Scan page ran into an unexpected error.">
-                  <ScanPage />
-                </ErrorBoundary>
               </RequireAuth>
             }
           />

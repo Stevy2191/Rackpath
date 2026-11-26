@@ -7,9 +7,6 @@ import {
   Server,
   Network,
   MapPin,
-  Radar,
-  Wrench,
-  Key,
   Blocks,
   Camera,
   DoorOpen,
@@ -62,16 +59,8 @@ const GROUPS = [
     ],
   },
   {
-    title: 'Discover',
-    items: [
-      { to: '/scan', label: 'Scan', icon: Radar },
-      { to: '/network-tools', label: 'Network tools', icon: Wrench },
-    ],
-  },
-  {
     title: 'Configure',
     items: [
-      { to: '/macros', label: 'Macros', icon: Key, countKey: 'macros' },
       { to: '/integrations', label: 'Integrations', icon: Blocks, countKey: 'integrations' },
     ],
   },

@@ -22,30 +22,6 @@ function deviceTypeLabel(type) {
   return DEVICE_TYPE_LABELS[type] || type || 'Unknown';
 }
 
-function statusClass(device) {
-  if (!device.last_seen) return 'unknown';
-  return device.online ? 'online' : 'offline';
-}
-
-function lockStateClass(state) {
-  if (state === 'unlocked') return 'green';
-  if (state === 'locked') return 'red';
-  return 'grey';
-}
-
-function openStateClass(state) {
-  if (state === 'closed') return 'green';
-  if (state === 'open') return 'red';
-  return 'grey';
-}
-
-function formatLastSeen(value) {
-  if (!value) return 'Never';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Never';
-  return date.toLocaleString();
-}
-
 export default function AccessDevicesPage() {
   const { currentProjectId } = useProject();
   const [devices, setDevices] = useState([]);
@@ -167,7 +143,6 @@ export default function AccessDevicesPage() {
         <table className="access-devices-table">
           <thead>
             <tr>
-              <th>Status</th>
               <th>Name</th>
               <th>Device Type</th>
               <th>Model</th>
@@ -175,29 +150,16 @@ export default function AccessDevicesPage() {
               <th>Door Name</th>
               <th>Location</th>
               <th>Floor</th>
-              <th>Lock State</th>
-              <th>Door State</th>
               <th>Connected Readers</th>
-              <th>Access Groups</th>
-              <th>Unlock Schedules</th>
               <th>Firmware Version</th>
-              <th>Last Seen</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((device) => {
               const readers = device.connected_readers || [];
-              const groups = device.access_groups || [];
-              const schedules = device.unlock_schedules || [];
               return (
                 <tr key={device.id}>
-                  <td>
-                    <span
-                      className={`access-devices-status-dot access-devices-status-${statusClass(device)}`}
-                      title={statusClass(device)}
-                    />
-                  </td>
                   <td>{device.name}</td>
                   <td>
                     <span className="access-devices-badge access-devices-badge-grey">{deviceTypeLabel(device.device_type)}</span>
@@ -207,33 +169,8 @@ export default function AccessDevicesPage() {
                   <td>{device.door_name || '—'}</td>
                   <td>{device.location || '—'}</td>
                   <td>{device.floor || '—'}</td>
-                  <td>
-                    <span className={`access-devices-badge access-devices-badge-${lockStateClass(device.door_lock_state)}`}>
-                      {device.door_lock_state || 'unknown'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`access-devices-badge access-devices-badge-${openStateClass(device.door_open_state)}`}>
-                      {device.door_open_state || 'unknown'}
-                    </span>
-                  </td>
                   <td>{readers.length > 0 ? readers.join(', ') : '—'}</td>
-                  <td>
-                    {groups.length > 0 ? (
-                      <div className="access-devices-pill-list">
-                        {groups.map((g) => (
-                          <span key={g} className="access-devices-pill">
-                            {g}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td>{schedules.length > 0 ? schedules.join(', ') : '—'}</td>
                   <td>{device.firmware_version || '—'}</td>
-                  <td>{formatLastSeen(device.last_seen)}</td>
                   <td className="access-devices-actions">
                     <button
                       type="button"
@@ -260,7 +197,7 @@ export default function AccessDevicesPage() {
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={16} className="access-devices-empty">
+                <td colSpan={10} className="access-devices-empty">
                   {devices.length === 0
                     ? 'No access devices yet. Click "+ Add Access Device" to create one.'
                     : 'No access devices match your search.'}

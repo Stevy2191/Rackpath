@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
--- projects - top-level container. Every device/rack/scan/topology row belongs
+-- projects - top-level container. Every device/rack/topology row belongs
 -- to exactly one project, and the data of different projects is isolated.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS projects (
@@ -159,7 +159,9 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS icon_color VARCHAR(16) NULL AFTER n
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS text_color VARCHAR(16) NULL AFTER icon_color;
 
 -- ---------------------------------------------------------------------------
--- scan_jobs
+-- scan_jobs / scan_results: network scanning was removed in migration 0067,
+-- which drops these tables. They stay here only because earlier migrations
+-- (0006, 0010, 0036, 0037) alter them while replaying on a fresh install.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS scan_jobs (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

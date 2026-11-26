@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, Clipboard, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import client from '../api/client';
 import { useProject } from '../project/ProjectContext';
 import CameraFormModal from '../components/cameras/CameraFormModal';
@@ -7,26 +7,12 @@ import BulkActionToolbar from '../components/devices/BulkActionToolbar';
 import BulkEditModal from '../components/devices/BulkEditModal';
 import './Cameras.css';
 
-function formatLastSeen(value) {
-  if (!value) return 'Never';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Never';
-  return date.toLocaleString();
-}
-
-const RTSPS_FIELDS = [
-  { key: 'rtsps_url_high', label: 'High' },
-  { key: 'rtsps_url_medium', label: 'Medium' },
-  { key: 'rtsps_url_low', label: 'Low' },
-];
-
 export default function CamerasPage() {
   const { currentProjectId } = useProject();
   const [cameras, setCameras] = useState([]);
   const [error, setError] = useState(null);
   const [modalState, setModalState] = useState(null); // null | 'new' | camera object
   const [search, setSearch] = useState('');
-  const [revealed, setRevealed] = useState(new Set());
   const [protectIntegration, setProtectIntegration] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState(null);
@@ -58,25 +44,6 @@ export default function CamerasPage() {
   const showToast = (toastInfo) => {
     setToast(toastInfo);
     setTimeout(() => setToast(null), 6000);
-  };
-
-  const toggleReveal = (id, field) => {
-    setRevealed((prev) => {
-      const key = `${id}:${field}`;
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const copyValue = async (value) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      showToast({ type: 'success', text: 'Copied to clipboard' });
-    } catch {
-      showToast({ type: 'error', text: 'Could not copy to clipboard' });
-    }
   };
 
   const handleSave = async (draft) => {
@@ -168,53 +135,6 @@ export default function CamerasPage() {
     }
   };
 
-  const renderRtspsCell = (camera) => (
-    <td className="cameras-rtsps-cell">
-      {RTSPS_FIELDS.map(({ key, label }) => {
-        const value = camera[key];
-        const isRevealed = revealed.has(`${camera.id}:${key}`);
-        return (
-          <div className="cameras-rtsps-row" key={key}>
-            <span className="cameras-rtsps-label">{label}</span>
-            <span
-              className={`cameras-rtsps-value${isRevealed ? ' cameras-rtsps-value-revealed' : ''}`}
-              title={value || undefined}
-            >
-              {value ? (isRevealed ? value : '••••••••') : '—'}
-            </span>
-            {value ? (
-              <>
-                <button
-                  type="button"
-                  className="cameras-icon-btn"
-                  onClick={() => toggleReveal(camera.id, key)}
-                  aria-label={isRevealed ? 'Hide' : 'Show'}
-                  title={isRevealed ? 'Hide' : 'Show'}
-                >
-                  {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-                <button
-                  type="button"
-                  className="cameras-icon-btn"
-                  onClick={() => copyValue(value)}
-                  aria-label="Copy"
-                  title="Copy to clipboard"
-                >
-                  <Clipboard size={14} />
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="cameras-icon-btn-spacer" aria-hidden="true" />
-                <span className="cameras-icon-btn-spacer" aria-hidden="true" />
-              </>
-            )}
-          </div>
-        );
-      })}
-    </td>
-  );
-
   const filtered = cameras.filter((c) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
@@ -272,12 +192,12 @@ export default function CamerasPage() {
                   onChange={() => toggleSelectAll(filtered)}
                 />
               </th>
-              <th>Status</th>
               <th>Name</th>
               <th>Model</th>
               <th>IP Address</th>
-              <th>RTSPS Streams</th>
-              <th>Last Seen</th>
+              <th>MAC</th>
+              <th>Resolution</th>
+              <th>Location</th>
               <th></th>
             </tr>
           </thead>
@@ -287,14 +207,12 @@ export default function CamerasPage() {
                 <td>
                   <input type="checkbox" checked={selectedIds.has(camera.id)} onChange={() => toggleSelect(camera.id)} />
                 </td>
-                <td>
-                  <span className={`cameras-status-dot cameras-status-${camera.status || 'unknown'}`} title={camera.status} />
-                </td>
                 <td>{camera.name}</td>
                 <td>{camera.model || '—'}</td>
                 <td>{camera.ip_address || '—'}</td>
-                {renderRtspsCell(camera)}
-                <td>{formatLastSeen(camera.last_seen)}</td>
+                <td>{camera.mac || '—'}</td>
+                <td>{camera.resolution || '—'}</td>
+                <td>{camera.location_notes || '—'}</td>
                 <td className="cameras-actions">
                   <button
                     type="button"
@@ -337,7 +255,6 @@ export default function CamerasPage() {
         <BulkEditModal
           count={selectedIds.size}
           showTags={false}
-          showCredentialMacro={false}
           onSave={handleBulkEditSave}
           onClose={() => setShowBulkEdit(false)}
         />
