@@ -105,9 +105,10 @@ pub async fn audit_unplaced(
     ctx: &RequestCtx,
     current: &CurrentUser,
     project_id: i64,
-    moved: &[(i64, String, String)],
+    moved: &[crate::hierarchy::Unplaced],
 ) -> AppResult<()> {
-    for (id, before, _) in moved {
+    for u in moved {
+        let (id, before) = (&u.id, &u.before);
         let after: String = sqlx::query_scalar(
             "SELECT path FROM search_entries WHERE kind = 'device' AND ref_id = ?",
         )
@@ -121,7 +122,11 @@ pub async fn audit_unplaced(
             Entry::new("move", "device", Some(*id))
                 .path(after.clone())
                 .project(Some(project_id))
-                .changes(json!({ "path": [before, after] })),
+                .changes(if u.cut.is_empty() {
+                    json!({ "path": [before, after] })
+                } else {
+                    json!({ "path": [before, after], "cables_removed": u.cut })
+                }),
         )
         .await?;
     }

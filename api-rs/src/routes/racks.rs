@@ -346,6 +346,19 @@ pub async fn update_rack(
     check_user_exists(&mut tx, responsible).await?;
     let name = merge_text(body.name, old.name.clone());
     check_len("Name", &name, 255)?;
+    // Moving to another floor cuts cables to anything outside the rack.
+    let mut cables_removed = Vec::new();
+    if room_id != old.room_id {
+        let floors: Vec<i64> = sqlx::query_scalar("SELECT floor_id FROM rooms WHERE id IN (?, ?)")
+            .bind(room_id)
+            .bind(old.room_id)
+            .fetch_all(&mut *tx)
+            .await?;
+        if floors.len() == 2 && floors[0] != floors[1] {
+            let inside = hierarchy::devices_in(&mut tx, Subtree::Rack(id)).await?;
+            cables_removed = crate::cabling::cut(&mut tx, &inside, true).await?;
+        }
+    }
     sqlx::query(
         "UPDATE racks SET room_id = ?, code = ?, name = ?, u_height = ?, width = ?, depth_mm = ?, numbering = ?,
          rack_type = ?, plan_x = ?, plan_y = ?, plan_rotation = ?, responsible_user_id = ?, notes = ?, updated_at = ?
@@ -377,6 +390,9 @@ pub async fn update_rack(
     );
     if let Some(o) = changes.as_object_mut() {
         o.remove("updated_at");
+        if !cables_removed.is_empty() {
+            o.insert("cables_removed".into(), json!(cables_removed));
+        }
     }
     let v = rack_json(&mut tx, id).await?;
     let action = if room_id != old.room_id {

@@ -130,8 +130,11 @@ pub enum Subtree {
     Floor(i64),
     Room(i64),
     Rack(i64),
-    /// One device's own entry (devices on a tray are refreshed separately).
+    /// One device's own entry and its ports (devices on a tray are
+    /// refreshed separately).
     Device(i64),
+    /// One port.
+    Port(i64),
 }
 
 macro_rules! reindex_sql {
@@ -152,6 +155,15 @@ macro_rules! reindex_sql {
 /// Recomputes paths and search text for everything in `subtree`.
 pub async fn reindex(conn: &mut SqliteConnection, subtree: Subtree) -> AppResult<()> {
     let ((delete, insert), id) = match subtree {
+        Subtree::Port(id) => (
+            (
+                "DELETE FROM search_entries WHERE kind = 'port' AND ref_id = ?",
+                "INSERT INTO search_entries (kind, ref_id, project_id, location_id, floor_id, room_id, rack_id, device_id, path, text)
+                 SELECT kind, ref_id, project_id, location_id, floor_id, room_id, rack_id, device_id, path, text
+                 FROM v_entities WHERE kind = 'port' AND ref_id = ?",
+            ),
+            id,
+        ),
         Subtree::Project(id) => (reindex_sql!("project_id"), id),
         Subtree::Location(id) => (reindex_sql!("location_id"), id),
         Subtree::Floor(id) => (reindex_sql!("floor_id"), id),
@@ -204,6 +216,7 @@ pub async fn devices_in(conn: &mut SqliteConnection, subtree: Subtree) -> AppRes
             "SELECT ref_id FROM search_entries WHERE kind = 'device' AND rack_id = ?"
         }
         Subtree::Device(_) => "SELECT id FROM devices WHERE parent_device_id = ?",
+        Subtree::Port(_) => return Ok(vec![]),
     };
     let id = match subtree {
         Subtree::Project(i)
@@ -211,7 +224,8 @@ pub async fn devices_in(conn: &mut SqliteConnection, subtree: Subtree) -> AppRes
         | Subtree::Floor(i)
         | Subtree::Room(i)
         | Subtree::Rack(i)
-        | Subtree::Device(i) => i,
+        | Subtree::Device(i)
+        | Subtree::Port(i) => i,
     };
     Ok(sqlx::query_scalar(sql).bind(id).fetch_all(conn).await?)
 }
@@ -247,9 +261,24 @@ pub async fn sibling_codes(
     )
 }
 
+/// A device moved to the Unplaced list: its id, path before, new code and
+/// the cables that were removed (an unplaced device isn't cabled).
+#[derive(Debug)]
+pub struct Unplaced {
+    pub id: i64,
+    pub before: String,
+    pub code: String,
+    pub cut: Vec<String>,
+}
+
 /// Moves a device to the project's Unplaced list, renaming it if its code
-/// is already taken there. Returns the (possibly new) code.
-pub async fn unplace_device(conn: &mut SqliteConnection, device_id: i64) -> AppResult<String> {
+/// is already taken there, and removes its cables. Returns the (possibly
+/// new) code and the cables removed.
+pub async fn unplace_device(
+    conn: &mut SqliteConnection,
+    device_id: i64,
+) -> AppResult<(String, Vec<String>)> {
+    let cut = crate::cabling::cut(conn, &[device_id], false).await?;
     let (project_id, code): (i64, String) =
         sqlx::query_as("SELECT project_id, code FROM devices WHERE id = ?")
             .bind(device_id)
@@ -272,27 +301,27 @@ pub async fn unplace_device(conn: &mut SqliteConnection, device_id: i64) -> AppR
     .bind(device_id)
     .execute(&mut *conn)
     .await?;
-    Ok(new_code)
+    Ok((new_code, cut))
 }
 
 /// What to do with devices inside a container that is being deleted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ContentsMode {
-    /// Move them to the Unplaced list (their cabling goes in later phases).
+    /// Move them to the Unplaced list (their cables are removed).
     Unplace,
     /// Delete them too.
     Delete,
 }
 
 /// Empties a container before it's deleted. Fails with 409 when it holds
-/// devices and no mode was chosen. Returns (device id, path before, code
-/// after) for each device moved to Unplaced, for the audit log.
+/// devices and no mode was chosen. Returns the number of devices and each
+/// device moved to Unplaced, for the audit log.
 pub async fn clear_contents(
     conn: &mut SqliteConnection,
     subtree: Subtree,
     mode: Option<ContentsMode>,
-) -> AppResult<(usize, Vec<(i64, String, String)>)> {
+) -> AppResult<(usize, Vec<Unplaced>)> {
     let devices = devices_in(conn, subtree).await?;
     if devices.is_empty() {
         return Ok((0, vec![]));
@@ -319,11 +348,16 @@ pub async fn clear_contents(
             let mut moved = Vec::with_capacity(devices.len());
             for id in &devices {
                 let before = path_of(conn, "device", *id).await.unwrap_or_default();
-                let code = unplace_device(conn, *id).await?;
-                moved.push((*id, before, code));
+                let (code, cut) = unplace_device(conn, *id).await?;
+                moved.push(Unplaced {
+                    id: *id,
+                    before,
+                    code,
+                    cut,
+                });
             }
-            for (id, _, _) in &moved {
-                reindex(conn, Subtree::Device(*id)).await?;
+            for u in &moved {
+                reindex(conn, Subtree::Device(u.id)).await?;
             }
             Ok((devices.len(), moved))
         }

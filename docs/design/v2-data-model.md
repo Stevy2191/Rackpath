@@ -825,6 +825,20 @@ All resolved by the project owner.
 - **Password hashing** moved to a bounded blocking pool (two at a time). Memory measured on a release build: 9 MB idle, about 28 MB after the first sign-in (argon2's working memory, reused afterwards, not growing), about 45 MB after creating 1,000 devices. Binary: 7.0 MB.
 - **Built-in device types** (29) are seeded for each project on creation and at every start, so later releases can add more.
 
+### Phase 3 notes (as built)
+
+- **Three separate things:** the port's `connector` (jack or cage: RJ45, LC, SFP, SFP+, SFP28, QSFP+, QSFP28…), the `transceiver` in a cage (10GBASE-SR, 10GBASE-LR, 10GBASE-T…), and the connection's `cable_type` (Cat5e, Cat6, Cat6a, OS2, OM4, DAC SFP+…). The catalogs live in code (`src/domain/media.rs`), so adding one needs no migration. `medium` is derived from them and stored for filtering.
+- **Compatibility** is two-level: physically impossible combinations are refused (RJ45 to LC, QSFP DAC in an SFP+ cage, DAC into a port holding an optic); plausible mistakes are accepted with warnings (single-mode cable on a multimode optic, SR facing LR, Cat5e at 10G, Cat6 at 10G beyond 55 m, multimode runs beyond the optic's reach). Changing a port's connector or transceiver is refused (409) if it would no longer fit a cable already plugged in.
+- **Connection ends** are a table with `UNIQUE (port_id, side)`; a trigger deletes a connection as soon as it loses an end, so deleting a port or device never leaves half a cable.
+- **Chain state is computed on demand**, not cached: the `port_chains` table from section 6 isn't needed yet. Listings load only the chains touching the listed ports, batch by batch. Measured on a release build: a rack with 1,920 ports and 1,920 cables lists in about 35 ms (1.4 MB of JSON), a trace takes about 2 ms, adding a cable about 3 ms.
+- **Listings are built by SQLite as one JSON value** (`json_group_array`) and serialized from typed structs: decoding thousands of rows one at a time through sqlx was the bottleneck (about 28 µs per row). Memory after listing that rack: about 31 MB; after 20 simultaneous listings, about 70 MB.
+- **Moves and cables:** the section 14 rule is applied to plain device and rack moves already: within a floor, cables stay; leaving the floor removes cables to anything not moving along. Unplacing removes all of a device's cables, and unplaced devices can't be cabled. Removed cables are listed in the change history.
+- **Power cables** (`kind: power`) are in the schema but refused until phase 5.
+- **Ports in search:** `v_entities` gained port rows (path = device path + port code). They're excluded from search unless `kind=port`, so a switch's 48 ports don't crowd out the switch.
+- **WLAN requests** reject unknown fields, so a passphrase can't be stored by accident.
+- **MPO breakout** stays one port, as in section 20.
+
+
 ---
 
 ## 20. Open questions (not blocking)

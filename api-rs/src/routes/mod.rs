@@ -5,17 +5,20 @@
 pub mod account;
 pub mod audit_log;
 pub mod auth;
+pub mod connections;
 pub mod device_types;
 pub mod devices;
 pub mod invitations;
 pub mod places;
+pub mod ports;
 pub mod projects;
 pub mod racks;
 pub mod search;
 pub mod users;
+pub mod vlans;
 
 use axum::extract::{FromRequest, Request};
-use axum::routing::{delete, get, patch, post};
+use axum::routing::{delete, get, patch, post, put};
 use axum::{middleware as axum_mw, Json, Router};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -169,6 +172,46 @@ pub fn router(state: AppState) -> Router {
             get(devices::get_one)
                 .patch(devices::update)
                 .delete(devices::remove),
+        )
+        // Ports and cabling
+        .route(
+            "/api/devices/{id}/ports",
+            get(ports::list_for_device).post(ports::create),
+        )
+        .route("/api/devices/{id}/ports/bulk", post(ports::create_bulk))
+        .route("/api/racks/{id}/ports", get(ports::list_for_rack))
+        .route(
+            "/api/ports/{id}",
+            get(ports::get_one)
+                .patch(ports::update)
+                .delete(ports::remove),
+        )
+        .route("/api/ports/{id}/trace", get(ports::trace))
+        .route("/api/ports/{id}/chain-color", post(ports::chain_color))
+        .route("/api/ports/{id}/vlans", put(ports::set_vlans))
+        .route("/api/connections", post(connections::create))
+        .route(
+            "/api/connections/{id}",
+            get(connections::get_one)
+                .patch(connections::update)
+                .delete(connections::remove),
+        )
+        // VLANs and WLANs
+        .route(
+            "/api/projects/{id}/vlans",
+            get(vlans::list_vlans).post(vlans::create_vlan),
+        )
+        .route(
+            "/api/vlans/{id}",
+            patch(vlans::update_vlan).delete(vlans::delete_vlan),
+        )
+        .route(
+            "/api/projects/{id}/wlans",
+            get(vlans::list_wlans).post(vlans::create_wlan),
+        )
+        .route(
+            "/api/wlans/{id}",
+            patch(vlans::update_wlan).delete(vlans::delete_wlan),
         )
         // Search
         .route("/api/search", get(search::search))

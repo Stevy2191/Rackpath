@@ -80,13 +80,20 @@ pub async fn search(
     if let Some(p) = q.project_id {
         b.push(" AND e.project_id = ").push_bind(p);
     }
-    if let Some(kind) = q.kind {
-        if !["location", "floor", "room", "rack", "device"].contains(&kind.as_str()) {
-            return Err(AppError::bad(
-                "kind must be location, floor, room, rack or device",
-            ));
+    match q.kind {
+        Some(kind) => {
+            if !["location", "floor", "room", "rack", "device", "port"].contains(&kind.as_str()) {
+                return Err(AppError::bad(
+                    "kind must be location, floor, room, rack, device or port",
+                ));
+            }
+            b.push(" AND e.kind = ").push_bind(kind);
         }
-        b.push(" AND e.kind = ").push_bind(kind);
+        // Ports are many and share their device's path; they're only
+        // searched when asked for.
+        None => {
+            b.push(" AND e.kind <> 'port'");
+        }
     }
     b.push(" ORDER BY f.rank LIMIT ").push_bind(limit);
     Ok(Json(b.build_query_as().fetch_all(&state.pool).await?))

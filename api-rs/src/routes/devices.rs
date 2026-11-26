@@ -424,6 +424,38 @@ async fn resolve(
     }
 }
 
+/// The floor a destination is on (None for Unplaced).
+async fn target_floor(conn: &mut SqliteConnection, t: &Resolved) -> AppResult<Option<i64>> {
+    if let Some(room) = t.room_id {
+        return Ok(Some(
+            sqlx::query_scalar("SELECT floor_id FROM rooms WHERE id = ?")
+                .bind(room)
+                .fetch_one(conn)
+                .await?,
+        ));
+    }
+    if let Some((rack, _)) = t.rack {
+        return Ok(Some(
+            sqlx::query_scalar(
+                "SELECT r.floor_id FROM racks k JOIN rooms r ON r.id = k.room_id WHERE k.id = ?",
+            )
+            .bind(rack)
+            .fetch_one(conn)
+            .await?,
+        ));
+    }
+    if let Some(tray) = t.tray_id {
+        return Ok(sqlx::query_scalar(
+            "SELECT floor_id FROM search_entries WHERE kind = 'device' AND ref_id = ?",
+        )
+        .bind(tray)
+        .fetch_optional(conn)
+        .await?
+        .flatten());
+    }
+    Ok(None)
+}
+
 fn fit_error(e: FitError, code_of: impl Fn(i64) -> String) -> AppError {
     match e {
         FitError::Overlap { device_id } => AppError::Conflict(format!(
@@ -873,6 +905,19 @@ pub async fn update(
     let name = merge_text(body.name, old.name.clone());
     check_len("Name", &name, 255)?;
 
+    // Cables stay when a device moves within its floor; otherwise those to
+    // anything that isn't moving with it are removed.
+    let mut cables_removed = Vec::new();
+    if moving {
+        let new_floor = target_floor(&mut tx, &target).await?;
+        if new_floor.is_none() || new_floor != old.floor_id {
+            let mut moving_ids = vec![id];
+            moving_ids.extend(hierarchy::devices_in(&mut tx, Subtree::Device(id)).await?);
+            // Unplaced devices aren't cabled at all.
+            cables_removed = crate::cabling::cut(&mut tx, &moving_ids, new_floor.is_some()).await?;
+        }
+    }
+
     sqlx::query(
         "UPDATE devices SET device_type_id = ?, code = ?, name = ?, room_id = ?, plan_x = ?, plan_y = ?, plan_rotation = ?,
          rack_id = ?, rack_pos_half = ?, rack_face = ?, rack_mount = ?, parent_device_id = ?, u_height_half = ?, depth = ?,
@@ -916,7 +961,12 @@ pub async fn update(
     .await?;
     hierarchy::reindex_device_tree(&mut tx, id).await?;
     let new = load_device(&mut tx, id).await?;
-    let changes = audit::diff(&old.audit_view(), &new.audit_view(), &[]);
+    let mut changes = audit::diff(&old.audit_view(), &new.audit_view(), &[]);
+    if !cables_removed.is_empty() {
+        if let Some(o) = changes.as_object_mut() {
+            o.insert("cables_removed".into(), json!(cables_removed));
+        }
+    }
     let action = if new.path != old.path && moving {
         "move"
     } else {
@@ -955,6 +1005,7 @@ pub async fn remove(
     require(&current, Action::Write, &placed.chain)?;
     let (count, moved) =
         hierarchy::clear_contents(&mut tx, Subtree::Device(id), body.devices).await?;
+    let cables = crate::cabling::count_for_device(&mut tx, id).await?;
     audit::record(
         &mut tx,
         &ctx,
@@ -962,7 +1013,7 @@ pub async fn remove(
         Entry::new("delete", "device", Some(id))
             .path(placed.path.clone())
             .project(Some(placed.project_id))
-            .changes(json!({ "devices_on_tray": count })),
+            .changes(json!({ "devices_on_tray": count, "cables_removed": cables })),
     )
     .await?;
     sqlx::query("DELETE FROM devices WHERE id = ?")

@@ -2,6 +2,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod cabling;
 pub mod config;
 pub mod db;
 pub mod domain;

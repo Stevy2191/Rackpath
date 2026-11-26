@@ -5,7 +5,7 @@ SQLite file. It is being built in phases (see
 [`docs/design/v2-data-model.md`](../docs/design/v2-data-model.md), section 21).
 The v1 Node API in `api/` keeps serving the current frontend until phase 7.
 
-**Status: phases 1 and 2 complete.**
+**Status: phases 1, 2 and 3 complete.**
 
 - **Phase 1, security core:** users, roles and scoped permissions,
   server-side sessions, two-factor login, invitations, projects, account
@@ -13,9 +13,13 @@ The v1 Node API in `api/` keeps serving the current frontend until phase 7.
 - **Phase 2, hierarchy and naming:** locations, floors, rooms, racks,
   device types and devices; full paths like `ACME/HQ/2/MDF/RK01/SW02`; the
   Unplaced list; rack fit checks; global search. Grants can be given on a
-  location, floor, room, rack or single device.
+    location, floor, room, rack or single device.
+- **Phase 3, ports and cabling:** ports with connectors, transceivers and
+  cable types; cables between port sides with the patch/permanent rules;
+  chain tracing with complete/incomplete states; checks for cables that
+  can't fit or probably won't work; chain colours; VLANs and WLANs.
 
-Cabling, IPAM, templates and power follow in later phases.
+IPAM, templates and power follow in later phases.
 
 ## Running it
 
@@ -118,6 +122,42 @@ rackpath version
 - **Moving:** a device can only be moved by someone who can edit both where it is and where it's going.
 - **Deleting a container that still holds devices** needs `"devices": "unplace"` (they move to Unplaced, renamed if their code is taken there) or `"devices": "delete"`, plus `"confirm_code"`.
 - **Updates:** omitted fields are unchanged. For text fields `""` clears; for numbers, dates and the responsible user, `null` clears.
+
+## API overview (phase 3)
+
+| Area | Endpoints |
+|---|---|
+| Ports | `GET/POST /api/devices/{id}/ports`, `POST /api/devices/{id}/ports/bulk`, `GET/PATCH/DELETE /api/ports/{id}` |
+| Rack patching view | `GET /api/racks/{id}/ports` (every port with both cables, VLANs and chain state) |
+| Cables | `POST /api/connections`, `GET/PATCH/DELETE /api/connections/{id}` |
+| Chains | `GET /api/ports/{id}/trace`, `POST /api/ports/{id}/chain-color` |
+| VLANs | `GET/POST /api/projects/{id}/vlans`, `PATCH/DELETE /api/vlans/{id}`, `PUT /api/ports/{id}/vlans` |
+| WLANs | `GET/POST /api/projects/{id}/wlans`, `PATCH/DELETE /api/wlans/{id}` |
+| Search | `GET /api/search?q=…&kind=port` (ports are only searched when asked for) |
+
+**What's recorded where:**
+- **On the port:** its `connector` (RJ45, RJ11, SFP, SFP+, SFP28, QSFP+,
+  QSFP28, LC, SC, ST, E2000, MPO, DB9, USB, F, BNC, Other) and, for SFP and
+  QSFP cages, the `transceiver` plugged in (1000BASE-T/SX/LX/ZX/BX,
+  10GBASE-T/SR/LR/ER/BX, 25GBASE-SR/LR, 40GBASE-SR4/LR4, 100GBASE-SR4/LR4).
+  A module must fit its cage: a 10G SFP+ module can't go in a 1G SFP port.
+  `medium` (copper, fiber, wireless, console, coax, other) follows from
+  these. Also `speed` (Mb/s), `poe`, `interface_name` (e.g. `Gi1/0/24`), MAC,
+  and for wireless ports the WLAN.
+- **On the cable:** `cable_type` (Cat3, Cat5, Cat5e, Cat6, Cat6a, Cat7, Cat8,
+  OM1–OM5, OS1, OS2, DAC/AOC SFP+, SFP28, QSFP+, QSFP28, Console, USB, Coax,
+  Other), `length_m`, `color`, `label`, `notes`.
+
+**Cabling rules:**
+- **Ports are active or passive.** Active ports (switch ports, NICs) have one side. Passive ports (patch-panel ports, wall outlets) have a `front` for patch cords and a `rear` for the permanent cable. Panel and outlet ports are passive by default.
+- **Permanent cables** join the rear sides of passive ports; **patch cables** join front sides. A panel port can't be patched until its rear is cabled, unless the port has `requires_permanent: false` (couplers).
+- **One cable per port side**, enforced by the database. Deleting a port or device removes its cables.
+- **Refused:** combinations that can't physically be joined, e.g. RJ45 to LC, a fibre cable on a copper port, a QSFP DAC in an SFP+ port, a DAC into a port that holds an optic, an empty SFP cage to anything but a DAC/AOC, a cable to a wireless port.
+- **Accepted with `warnings`:** single-mode cable on a multimode optic (or the reverse), an SR optic facing an LR optic, optics of different speeds, Cat5e at 10G, Cat6 at 10G over about 55 m, copper over 100 m, multimode runs longer than the optic reaches at that speed, a faster DAC in a slower cage.
+- **Tracing** follows cables through passive ports in both directions (at most 64 hops). A chain is **complete** when both ends are active ports, **incomplete** otherwise, **unconnected** with no cables. The trace lists every port and cable in order, the total length, and the same warnings checked at the chain's real link speed.
+- **Moving devices:** cables stay when a device or rack moves within its floor. Moving to another floor removes the cables to anything that isn't moving with it. Unplaced devices can't be cabled, so unplacing one removes its cables. Every removed cable is listed in the change history.
+- **Permissions:** anyone who can edit either end of a cable can add, change or remove it. Ports need edit rights on their device; VLANs and WLANs on the project.
+- **WLANs never store a passphrase**; a request that includes one is refused.
 
 ## Development
 
