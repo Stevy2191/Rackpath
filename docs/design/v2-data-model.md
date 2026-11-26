@@ -683,8 +683,8 @@ All resolved by the project owner.
 | D3 | Reading: project-wide, or narrowable to a location? | **Project-wide.** Narrowing reads would make traced cables disappear into places a user can't see |
 | D4 | Floor plans: bundle a PDF rasteriser, or images only? | **Images only** (PNG, JPEG, WebP) in the first release. A PDF page can be exported to PNG with any PDF viewer. Can be revisited later |
 | D5 | Frontend build: move from Create React App to Vite? | **Yes, in v2.** No user-facing change; clears the 28 remaining build-tool advisories |
-| D7 | How do connections get in? | **By hand, as in Patchdocs:** drag port to port in the rack view, pick the far end in a dialog, or the CSV importer for bulk loads. No connection data is imported from integrations, and no neighbour-table suggestions |
 | D6 | Scope | **Documentation only.** No scanning, network tools, polling, live state, stored device credentials, map, or outbound email (section 1) |
+| D7 | How do connections get in? | **By hand, as in Patchdocs:** drag port to port in the rack view, pick the far end in a dialog, or the CSV importer for bulk loads. No connection data is imported from integrations, and no neighbour-table suggestions |
 
 ---
 
