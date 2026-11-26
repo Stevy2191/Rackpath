@@ -20,7 +20,7 @@ import {
   AlignCenterVertical,
   AlignEndVertical,
 } from 'lucide-react';
-import { SHAPE_TYPES } from './ShapeNode';
+import { SHAPE_TYPES } from './shapeTypes';
 import './TopologyToolbar.css';
 
 const MODES = [
