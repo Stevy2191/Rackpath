@@ -11,7 +11,7 @@ Features and ideas were taken from reviewing Patchdocs. None of its text, design
 
 **Rackpath is documentation software.** It records what exists and how it's connected. It does not probe, poll or monitor the network, and it stores no device logins. Network scanning, network tools, credential macros, SNMP polling and live state from integrations were removed from v1 in the same spirit (migration 0067), and none of them come back in v2.
 
-What stays from v1: inventory-only integrations, the logical topology diagram, UPS and power planning, VLANs, tags and self-hosting.
+What stays from v1: inventory-only integrations (UniFi and Zabbix), the logical topology diagram, UPS and power planning, VLANs, tags and self-hosting. New in v2 alongside the physical documentation: **IP address management (IPAM)**, filled automatically from Windows DHCP and DNS (section 9).
 
 Decisions taken by the project owner are recorded in section 19.
 
@@ -98,7 +98,7 @@ Built-in device types:
 | Rack | Switch (SW), Router (RT), Firewall (FW), Server (SRV), NAS (NAS), Patch panel (PP), Fibre panel (FP), Cable manager (CM), Blanking panel (BLK), PDU (PDU), UPS (UPS), Battery module (EBM), Shelf/tray (TR), KVM (KVM), Miscellaneous (MISC) |
 | Either | Media converter (MC), Modem (MDM), Misc (MISC) |
 
-Each integration's device kinds (UniFi `usw`/`uap`/`ugw`, NetBox roles, LibreNMS and Zabbix groups) map onto these when devices are imported.
+Each integration's device kinds (UniFi `usw`/`uap`/`ugw`, Zabbix host groups) map onto these when devices are imported.
 
 **Network identity stays separate.** `hostname`, `ip`, `mac` and similar fields are device attributes, not the code. A switch can be `SW02` in the documentation and `core-sw-2.acme.lan` on the network.
 
@@ -116,7 +116,6 @@ Each integration's device kinds (UniFi `usw`/`uap`/`ugw`, NetBox roles, LibreNMS
 | contact_name, contact_phone, contact_email | text | |
 | responsible_user_id | FK users null | |
 | isp_primary_name, isp_primary_circuit, isp_primary_contact, isp_secondary_… | text | **Moved here from projects:** they describe a site |
-| wan_ip, wan_subnet, wan_gateway, lan_ip, lan_subnet, lan_gateway, dns_servers | text | Also moved from projects |
 | notes | text | |
 
 ### floors
@@ -168,7 +167,9 @@ When a device is dropped where rooms overlap, the UI asks and suggests the small
 | responsible_user_id | FK users null | |
 | status | enum planned, active, spare, faulty, retired | Lifecycle, set by people. Never online/offline |
 | **Network identity** | | |
-| hostname, mgmt_ip, mac, os, firmware | text | Recorded facts, not polled |
+| hostname, mac, os, firmware | text | Recorded facts, not polled |
+| primary_ip_id | FK ip_addresses null | The device's main address (section 9). Replaces v1's free-text `ip` |
+| zabbix_host_id | text null | Set by the Zabbix import; the UI shows an **Open in Zabbix** link. No monitoring data is pulled |
 | **Origin** | | |
 | source | enum manual, integration, csv_import, v1_import | |
 | source_integration_id, external_id | null | Lets integration syncs match records on later syncs |
@@ -409,14 +410,81 @@ Today's power maths (outlet counts, load in VA and W, UPS runtime curves, cross-
 
 ---
 
-## 9. Networks
+## 9. Networks and IP addresses
 
-- **project_vlans**: unchanged, plus `notes`. Assigned to ports through `port_vlans`.
+### VLANs, WLANs and the logical topology
+- **project_vlans**: unchanged, plus `notes`. Assigned to ports through `port_vlans`. v1's free-text `subnet` becomes a linked prefix (below).
 - **wlans** (new): `id, project_id, ssid, description, security (open|wpa2|wpa3|enterprise), hidden, vlan_id FK null, notes`. No passphrase is stored. Wireless ports point to one through `ports.wlan_id`.
 - **Logical topology** (`topologies`, `topology_nodes`, `topology_edges`, zones, labels, shapes): kept as the logical or diagram view. It is ported as-is, with two changes:
   - topology nodes reference `devices.id` (unchanged);
   - `topology_edges` may optionally reference `connection_id` or the two `port_id`s, so a diagram link can be "backed by" a real traced cable.
 - `topology_node_interfaces` becomes physical `ports`. Logical sub-interfaces (SVIs, VLAN sub-ports) are configuration, not physical documentation, and are not modelled; record them in a device's notes if needed.
+
+### IP address management (IPAM)
+
+IPAM **records the address plan**. It never pings, scans or checks whether an address is alive. Data comes from people, the CSV importer, and the integrations in section 15 (Windows DHCP/DNS, Zabbix, UniFi).
+
+#### Storage of addresses
+Every address and range bound is stored twice: as canonical text (`10.20.30.5`, `2001:db8::5`) for display, and as a **16-byte binary** for sorting and range queries. IPv4 is stored in its IPv4-mapped IPv6 form (`::ffff:10.20.30.5`), so one comparison works for both families. All maths (containment, next free, overlap) lives in pure Rust functions in `domain/` with unit tests.
+
+#### address_spaces
+`id, project_id, name, description`. Every project gets one, `Default`. A second space is only needed when the same private range really exists twice in one project (separate routing domains). Unique `(project_id, name)`.
+
+#### prefixes (subnets)
+| Column | Notes |
+|---|---|
+| id, project_id, space_id | |
+| cidr | Canonical, e.g. `10.20.30.0/24`. Host bits must be zero. Unique `(space_id, cidr)` |
+| family, prefix_len, net_start, net_end | Derived from `cidr` on save |
+| vlan_id | FK project_vlans null. A VLAN's page lists its prefixes |
+| location_id | FK locations null |
+| role | users, servers, management, voice, printers, iot, guest, transit, wan, loopback, other |
+| status | planned, active, deprecated |
+| gateway | text null: the default gateway, from DHCP option 3 or typed in |
+| dns_servers, domain_name | text null: from DHCP options 6 and 15, or typed in |
+| description, notes | |
+| source, source_integration_id, external_id, missing_from_source_at | Ownership fields (section 15) |
+
+**Nesting is computed, not stored.** CIDR blocks either nest or don't overlap at all, so a prefix's parent is simply the smallest prefix in the same space that contains it. The UI shows them as a tree.
+
+v1's location WAN/LAN fields become prefixes with role `wan` or `users` on that location; ISP name, circuit ID and contact stay on the location.
+
+#### ip_ranges
+`id, prefix_id, start_text, end_text, start_bin, end_bin, kind (dhcp_pool | reserved | static), description` + ownership fields. A range must sit inside its prefix and must not overlap another range in it.
+
+#### ip_addresses
+| Column | Notes |
+|---|---|
+| id, project_id, space_id | |
+| address, family, addr_bin | Unique `(space_id, address)` |
+| prefix_len | The mask configured on the interface (usually the prefix's) |
+| device_id, port_id | Both null for a documented-but-unassigned address. A port implies its device |
+| role | primary, secondary, gateway, vip (shared by a redundant pair; recorded once), loopback |
+| status | reserved, assigned, deprecated |
+| mac | text null. A **DHCP reservation's MAC** is how imports link an address to a device automatically |
+| dns_name, dns_aliases (JSON) | From DNS imports or typed in |
+| dhcp_reservation | bool: true when Windows DHCP holds a reservation for it |
+| description, notes | |
+| source, source_integration_id, external_id, missing_from_source_at | Ownership fields (section 15) |
+
+The prefix an address belongs to is computed (smallest containing prefix in its space). An address outside every prefix is allowed but raises a warning.
+
+#### dhcp_lease_snapshots (optional, per integration)
+`id, integration_id, scope_external_id, address, mac, hostname, expires_at, state, captured_at`. **Replaced wholesale on every import.** Leases are not documentation and are never turned into `ip_addresses` automatically. They're shown in the address grid as a separate layer ("lease, seen 26 Nov 14:00") so you can see pool usage. One click on a lease promotes it to a documented address. Off by default.
+
+#### What IPAM shows and checks
+- **Prefix tree** per space, each with a usage bar: documented addresses, DHCP pool size and, when snapshots are on, leases in use.
+- **Address grid** for any IPv4 prefix up to /22: one cell per address, coloured by state (gateway, assigned, reserved, DHCP pool, reserved range, lease snapshot, free). IPv6 prefixes show a list instead.
+- **Next free address**: the first address not documented, not in a DHCP pool or reserved range, not the network or broadcast address, and not the gateway. Offered when adding an address or a device.
+- **Warnings** on the dashboard and the prefix page:
+  - an address outside every documented prefix;
+  - the same MAC on two reservations;
+  - a manually documented static address inside a DHCP pool (Windows reservations are expected inside the pool range and don't count);
+  - a port's address in a prefix whose VLAN isn't on that port;
+  - a prefix with no VLAN (for user, server, voice, printer and IoT roles);
+  - an imported record marked "missing from source".
+- **Search** finds any address or prefix and shows the device, port and full path, e.g. `10.20.30.2 → HQ/2/MDF/RK01/SW02/24`.
+- **Resources tables** get Prefixes, Ranges and Addresses tabs with filters and CSV export; PDF reports include each location's address plan.
 
 ---
 
@@ -531,9 +599,9 @@ Every resource also has a free-text `notes` field. Its change history is in the 
 
 ## 13. Cross-site search and tables
 
-**Global search** covers code, name, full path, hostname, IP, MAC, serial number and asset tag. Results are grouped by type, each with its path. It's backed by:
+**Global search** covers code, name, full path, hostname, IP addresses and prefixes, DNS names, MAC, serial number and asset tag. Results are grouped by type, each with its path. It's backed by:
 - the `search_path` column, plus a combined `search_text` column on devices, ports, racks, rooms, floors and locations, kept in sync by the API;
-- an SQLite **FTS5** full-text index on `search_text`, with prefix matching on `code` and `mgmt_ip`.
+- an SQLite **FTS5** full-text index on `search_text`, with prefix matching on `code`, addresses and prefixes.
 
 **Resource tables** (the "Resources" page) have tabs for Locations, Floors, Rooms, Racks, Devices, Ports and Connections. Every list endpoint shares one query convention:
 
@@ -578,9 +646,53 @@ The real move runs in one transaction, writes one audit entry group, and needs e
 
 ---
 
-## 15. Locations map
+## 15. Integrations and imports
 
-**Not included.** A map needs outside tile and geocoding services, which conflicts with keeping all data inside your network. The Locations page shows cards with each site's address and contact, and a location's address can be copied into any mapping app.
+All automation follows one rule: **Rackpath reads from systems that already hold the facts. It never contacts devices.** Connections between ports are always entered by hand (decision D7). There is no locations map: it would need outside tile and geocoding services.
+
+| Source | Direction | What it brings in |
+|---|---|---|
+| **Windows DHCP and DNS** (Active Directory) | **Pushed to Rackpath** by a PowerShell script, or an uploaded export file | Prefixes, DHCP pools, exclusions, reservations, static DNS names, optional lease snapshot |
+| **Zabbix** (the network monitor) | Rackpath pulls through the Zabbix API, read-only API token | Devices (hosts), their interface IPs, inventory fields (model, serial), and the Zabbix host ID for an "Open in Zabbix" link. **No monitoring data** (problems, availability, graphs) |
+| **UniFi Network / Protect / Access** | Rackpath pulls through the UniFi API | Devices, management IPs, and configured networks (VLAN ID and subnet). UniFi DHCP settings are ignored, since DHCP runs on Windows |
+| **CSV** | Uploaded | Locations, racks, devices, ports, connections, prefixes, ranges and addresses, using the same column names as the CSV exports |
+
+### Windows DHCP and DNS
+
+**Push, not pull.** Windows DHCP has no web API, and logging in to it from Rackpath would mean storing a domain credential. Instead a small script on the Windows side sends the data:
+
+1. An admin creates a **Windows DHCP/DNS** integration in Rackpath and chooses the project and address space. Rackpath generates an **import token**, shows it once, and stores only its hash. The token can only call this integration's import endpoint and can be revoked or rotated at any time.
+2. The repo ships `tools/windows/Push-RackpathDhcp.ps1` (plain PowerShell, readable before use) and `Register-RackpathTask.ps1`, which installs it as a **scheduled task** (default: hourly). Recommended: run it as a **group managed service account (gMSA)**, so there's no password to manage. The token is stored on the Windows side encrypted with DPAPI, so only that account can read it.
+3. The script runs on a domain controller or the DHCP server and needs **read-only** rights:
+   - **DHCP:** membership of the built-in **DHCP Users** group;
+   - **DNS:** read access to the zones it exports (confirmed during build; see section 20).
+4. It collects, using Microsoft's own `DhcpServer` and `DnsServer` modules:
+   - scopes (`Get-DhcpServerv4Scope`, `Get-DhcpServerv6Scope`) with options 3, 6 and 15;
+   - exclusion ranges and reservations;
+   - DNS A, AAAA and PTR records from the zones you list, **static records only**. Windows timestamps the records that DHCP clients register dynamically, and the script skips those, so laptops and phones never flood the documentation;
+   - leases, only if the integration has "lease snapshot" switched on.
+5. It sends one JSON document over **HTTPS** (it refuses plain HTTP unless told otherwise) to `POST /api/imports/windows-dhcp` with `Authorization: Bearer <token>`. The body is gzip-compressed, limited to 20 MB, at most one import per minute per token.
+
+**Alternative with nothing installed:** run `Export-DhcpServer -File dhcp.xml` and upload the file on the IPAM page. It covers DHCP only (no DNS) and is handy for a first load or a one-off site.
+
+**What lands where**
+
+| Windows | Rackpath |
+|---|---|
+| Scope (`10.20.30.0`, mask `255.255.255.0`, name, description) | Prefix `10.20.30.0/24`; name goes to description; gateway, DNS servers and domain from options 3, 6, 15 |
+| Scope start–end range | `dhcp_pool` range |
+| Exclusion range | `reserved` range |
+| Reservation (IP, MAC, name, description) | Address with `dhcp_reservation = true`, status reserved. **Linked to a device automatically** when exactly one device has that MAC |
+| Static DNS A/AAAA record | Address with `dns_name`, or the name added to an existing address. A second name for the same address goes to `dns_aliases` |
+| Static PTR record | Fills `dns_name` if empty; a PTR that disagrees with the A record raises a warning |
+| Lease (optional) | `dhcp_lease_snapshots` row, replaced on every import |
+
+### Ownership rules (all imports)
+- Every imported record carries `source`, `source_integration_id` and an `external_id` (for Windows: server name plus scope ID, reservation IP and so on), so later imports update the same record instead of creating duplicates.
+- **An import owns only the facts it brought in** (for an address: MAC, DNS name, reservation flag, description from Windows). **People own everything else** (notes, the device and port it's linked to, location, role). A sync never overwrites people's fields.
+- **When a record disappears at the source**, Rackpath sets `missing_from_source_at` and shows a warning. It is never deleted automatically; a person confirms the removal.
+- An import is processed in one transaction and writes one grouped `sync` entry in the audit log, with counts and the changed records.
+- An import that would change more than a set share of a source's records at once (default 50%) is held for an admin to approve, so a broken script or wrong token can't wipe the documentation.
 
 ---
 
@@ -588,7 +700,7 @@ The real move runs in one transaction, writes one audit entry group, and needs e
 
 | Export | Contents | How |
 |---|---|---|
-| **PDF report** of a project, location, floor, room, rack or device | Cover page (resource, project, date, exported by), table of contents, the naming scheme (prefix table), one section per resource with its details and contents, rack elevations front and rear, port and connection lists with full traced paths, VLANs and WLANs used. **Every section has a QR code** linking to `PUBLIC_URL/r/{type}/{id}`, which opens that page in Rackpath | Generated in the API (section 18). Capped at 1,500 devices per report; larger exports are refused with a suggestion to export smaller parts. At most 3 exports per minute per user |
+| **PDF report** of a project, location, floor, room, rack or device | Cover page (resource, project, date, exported by), table of contents, the naming scheme (prefix table), one section per resource with its details and contents, rack elevations front and rear, port and connection lists with full traced paths, the location's address plan (prefixes, ranges, documented addresses), VLANs and WLANs used. **Every section has a QR code** linking to `PUBLIC_URL/r/{type}/{id}`, which opens that page in Rackpath | Generated in the API (section 18). Capped at 1,500 devices per report; larger exports are refused with a suggestion to export smaller parts. At most 3 exports per minute per user |
 | **Rack bill of materials** | The rack's devices grouped by type and model, with quantity, codes and U positions; patch cords grouped by type, length and colour | PDF and CSV |
 | **CSV** | Any resource table (section 13) | Streamed |
 | **PNG / SVG** | Rack elevation, floor plan with devices and cables, topology diagram | Rendered in the browser, as today |
@@ -605,7 +717,7 @@ There are no production installs, so **v2 starts with a fresh schema** rather th
 | v1 table | v2 |
 |---|---|
 | users | users (role: owner and account admin) |
-| projects | projects. Site fields (address, ISP, WAN, LAN) move to its first location. A `code` is derived from the name |
+| projects | projects. Site fields (address, ISP) move to its first location; WAN and LAN fields become prefixes and addresses on it. A `code` is derived from the name |
 | locations | locations; `building_number` goes into `code` if it's valid |
 | rooms | floors (one per distinct `rooms.floor` value) + rooms |
 | racks | racks. Ones with no room go to the location's floor `0` DEFAULT room, or a "Imported" location when there's no location |
@@ -616,7 +728,9 @@ There are no production installs, so **v2 starts with a fresh schema** rather th
 | rack_custom_devices, user_catalog_entries | device_templates |
 | topology_node_interfaces | ports |
 | topology_* (the rest) | unchanged, renumbered |
-| project_vlans, device_tags, assignments, integrations | unchanged (integration secrets copied as-is; same key) |
+| project_vlans | VLANs; the free-text `subnet` becomes a prefix linked to the VLAN |
+| devices.ip, topology interface IPs | ip_addresses linked to the device (and port, where known) |
+| device_tags, assignments, integrations (UniFi, Zabbix) | unchanged (integration secrets copied as-is; same key) |
 | project_activity_log, integration_sync_log | audit_log |
 
 ---
@@ -637,7 +751,8 @@ There are no production installs, so **v2 starts with a fresh schema** rather th
 | PDF | **Typst** (embedded `typst` crate) with templates in the repo | Real layout and table-of-contents support. No headless browser; one binary |
 | QR codes | `qrcode` crate → SVG embedded in Typst | |
 | Images | `image` crate (validation, thumbnails). No PDF rasteriser (decision D4) | |
-| HTTP client | `reqwest` with rustls, used **only** for integrations the user configures | Nothing else makes outbound connections |
+| HTTP client | `reqwest` with rustls, used **only** for the UniFi and Zabbix integrations the user configures | Nothing else makes outbound connections. Windows data arrives inbound on the token-protected import endpoint |
+| Import tokens | 256-bit random, shown once, stored as a SHA-256 hash, scoped to one integration's import endpoint | Same pattern as sessions; revocable |
 | Errors | One `AppError` type → JSON `{error, code}`. 5xx bodies never include internals | Same rule as v1 |
 | Observability | `tracing` with JSON logs; a request ID in every log line and audit entry | |
 | Config | Environment variables, validated at startup. The process exits with a clear message if a required secret is missing | Same behaviour as v1 now |
@@ -653,7 +768,7 @@ api-rs/
     db/                sqlx queries per aggregate
     routes/            thin handlers: parse → authorise → call domain/db → audit → respond
     export/            typst templates, BOM, CSV
-    integrations/      unifi, protect, access, zabbix, librenms, netbox (inventory import only)
+    integrations/      unifi, protect, access, zabbix (pull); windows_dhcp (push endpoint + XML upload); csv
   migrations/
   tests/               API tests against a temporary SQLite file (no services needed)
 ```
@@ -685,6 +800,8 @@ All resolved by the project owner.
 | D5 | Frontend build: move from Create React App to Vite? | **Yes, in v2.** No user-facing change; clears the 28 remaining build-tool advisories |
 | D6 | Scope | **Documentation only.** No scanning, network tools, polling, live state, stored device credentials, map, or outbound email (section 1) |
 | D7 | How do connections get in? | **By hand, as in Patchdocs:** drag port to port in the rack view, pick the far end in a dialog, or the CSV importer for bulk loads. No connection data is imported from integrations, and no neighbour-table suggestions |
+| D8 | Integrations | **UniFi (Network, Protect, Access) and Zabbix**, inventory only. NetBox and LibreNMS removed (NetBox holds one site, not worth importing). **Windows DHCP/DNS** added for IPAM |
+| D9 | How does Windows data get in? | **Pushed by a read-only PowerShell scheduled task** with a revocable import token, or an uploaded `Export-DhcpServer` file. Rackpath stores no Windows credentials. DNS: static records only. Leases: optional snapshot, never documentation |
 
 ---
 
@@ -692,18 +809,21 @@ All resolved by the project owner.
 
 - **MPO/MTP breakout cassettes:** model as one port for now. Per-strand tracing would need "sub-ports".
 - **Rack-to-rack shortcuts:** should a patch cord directly between two racks in the same room (no panel) be a `patch` connection? Yes, as designed; just confirm the UI makes it easy.
+- **DNS read rights for the Windows script:** confirm the minimum rights `Get-DnsServerResourceRecord` needs on your domain controllers, and document them in the script's README.
+- **DHCP failover pairs:** if two Windows servers share scopes in a failover relationship, the script should run against one partner only, or Rackpath should de-duplicate by scope ID. Decide when building.
 - **Cable length warnings:** compute rack-unit distance for patch cords within a rack and warn when `length_m` is too short. Cheap to add once lengths are recorded.
 
 ---
 
 ## 21. Build order
 
-Each phase ends with something usable and tested. The old Node API keeps serving the frontend until the switch in Phase 6.
+Each phase ends with something usable and tested. The old Node API keeps serving the frontend until the switch in phase 7.
 
 1. **Skeleton and security core.** Rust project, config, startup checks, sessions, users, roles, permission extractor, TOTP, audit log, invitations. Tests for every permission rule.
 2. **Hierarchy and naming.** Projects, locations, floors, rooms, racks, device types, devices (all placements), unplaced inventory, code generation and validation, global search.
 3. **Ports and cabling.** Ports, connections, the side rules, chain tracing, port states, VLAN and WLAN assignment, colours.
-4. **Library and power.** Templates and port groups, instantiation, safe template edits with dry run, power ports and connections, the power and runtime calculations.
-5. **Port the rest from v1**, behaviour unchanged and checked by contract tests: inventory-only integrations, topology diagrams, VLANs, tags. Add the **CSV importer** for devices, ports and connections, which replaces discovery as the bulk way to bring in a site.
-6. **Frontend switch** (Vite, served from the Rust binary): Locations and floor plan editor, rack patching view, template designer, Resources tables, Activity Log, user management, 2FA. Retire the Node API, nginx and MariaDB containers.
-7. **Reports and extras.** PDF reports with QR codes, BOM, moves, the v1 importer.
+4. **IPAM.** Address spaces, prefixes, ranges, addresses, next-free and warnings; addresses attached to ports and devices.
+5. **Library and power.** Templates and port groups, instantiation, safe template edits with dry run, power ports and connections, the power and runtime calculations.
+6. **Integrations and imports.** Port UniFi and Zabbix (inventory only, plus their IPs into IPAM) and the topology diagrams, VLANs and tags, checked by contract tests. Add the **Windows DHCP/DNS import** (endpoint, tokens, PowerShell script and scheduled-task installer, XML upload) and the **CSV importer**, with the ownership rules and the held-import safeguard.
+7. **Frontend switch** (Vite, served from the Rust binary): Locations and floor plan editor, rack patching view, template designer, Resources tables, Activity Log, user management, 2FA. Retire the Node API, nginx and MariaDB containers.
+8. **Reports and extras.** PDF reports with QR codes, BOM, moves, the v1 importer.
