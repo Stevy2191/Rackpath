@@ -55,6 +55,9 @@ pub struct PortRow {
     pub description: Option<String>,
     pub mac: Option<String>,
     pub wlan_id: Option<i64>,
+    pub outlet_group: Option<i64>,
+    #[serde(deserialize_with = "int_bool")]
+    pub from_template: bool,
     pub notes: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -68,7 +71,7 @@ pub struct PortRow {
 macro_rules! port_select {
     () => {
         "SELECT o.id, o.device_id, o.code, o.face, o.role, o.requires_permanent, o.medium, o.connector, o.transceiver, \
-         o.fiber_mode, o.sort_order, o.interface_name, o.speed, o.poe, o.description, o.mac, o.wlan_id, o.notes, \
+         o.fiber_mode, o.sort_order, o.interface_name, o.speed, o.poe, o.description, o.mac, o.wlan_id, o.outlet_group, o.from_template, o.notes, \
          o.created_at, o.updated_at, s.path, s.project_id, s.room_id \
          FROM ports o JOIN search_entries s ON s.kind = 'port' AND s.ref_id = o.id "
     };
@@ -84,7 +87,7 @@ macro_rules! port_json_list {
              'role', o.role, 'requires_permanent', o.requires_permanent, 'medium', o.medium, 'connector', o.connector, \
              'transceiver', o.transceiver, 'fiber_mode', o.fiber_mode, 'sort_order', o.sort_order, \
              'interface_name', o.interface_name, 'speed', o.speed, 'poe', o.poe, 'description', o.description, \
-             'mac', o.mac, 'wlan_id', o.wlan_id, 'notes', o.notes, 'created_at', o.created_at, \
+             'mac', o.mac, 'wlan_id', o.wlan_id, 'outlet_group', o.outlet_group, 'from_template', o.from_template, 'notes', o.notes, 'created_at', o.created_at, \
              'updated_at', o.updated_at, 'path', s.path, 'project_id', s.project_id, 'room_id', s.room_id) \
              ORDER BY ",
             $order,
@@ -139,7 +142,7 @@ impl PortRow {
             "medium": self.medium, "connector": self.connector, "transceiver": self.transceiver,
             "fiber_mode": self.fiber_mode, "sort_order": self.sort_order, "interface_name": self.interface_name,
             "speed": self.speed, "effective_speed": self.media(Side::Front).speed(), "poe": self.poe,
-            "description": self.description, "mac": self.mac, "wlan_id": self.wlan_id, "notes": self.notes,
+            "description": self.description, "mac": self.mac, "wlan_id": self.wlan_id, "outlet_group": self.outlet_group, "from_template": self.from_template, "notes": self.notes,
             "created_at": self.created_at, "updated_at": self.updated_at,
         })
     }
@@ -153,6 +156,20 @@ impl PortRow {
         }
         v
     }
+}
+
+/// A device's template-made ports, in one query.
+pub async fn template_ports(
+    conn: &mut SqliteConnection,
+    device_id: i64,
+) -> AppResult<Vec<PortRow>> {
+    Ok(sqlx::query_as::<_, PortRow>(concat!(
+        port_select!(),
+        "WHERE o.device_id = ? AND o.from_template = 1 ORDER BY o.id"
+    ))
+    .bind(device_id)
+    .fetch_all(conn)
+    .await?)
 }
 
 pub async fn load_port(conn: &mut SqliteConnection, id: i64) -> AppResult<PortRow> {
@@ -385,27 +402,30 @@ pub struct PortFields {
     mac: Option<Option<String>>,
     #[serde(default, deserialize_with = "super::nullable")]
     wlan_id: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "super::nullable")]
+    outlet_group: Option<Option<i64>>,
     notes: Option<String>,
 }
 
 /// Final values for a port row.
 #[derive(Debug, Clone)]
-struct PortValues {
-    face: &'static str,
-    role: Role,
-    requires_permanent: bool,
-    medium: Medium,
-    connector: Option<Connector>,
-    transceiver: Option<Transceiver>,
-    fiber_mode: Option<String>,
-    sort_order: i64,
-    interface_name: Option<String>,
-    speed: Option<i64>,
-    poe: Option<String>,
-    description: Option<String>,
-    mac: Option<String>,
-    wlan_id: Option<i64>,
-    notes: Option<String>,
+pub struct PortValues {
+    pub face: &'static str,
+    pub role: Role,
+    pub requires_permanent: bool,
+    pub medium: Medium,
+    pub connector: Option<Connector>,
+    pub transceiver: Option<Transceiver>,
+    pub fiber_mode: Option<String>,
+    pub sort_order: i64,
+    pub interface_name: Option<String>,
+    pub speed: Option<i64>,
+    pub poe: Option<String>,
+    pub description: Option<String>,
+    pub mac: Option<String>,
+    pub wlan_id: Option<i64>,
+    pub outlet_group: Option<i64>,
+    pub notes: Option<String>,
 }
 
 fn port_code(code: &str) -> AppResult<String> {
@@ -432,7 +452,7 @@ fn parse_transceiver(s: &str) -> AppResult<Transceiver> {
 
 /// Works out a port's values from the request, the old row (on update) and
 /// the defaults for the device type.
-async fn resolve_values(
+pub(crate) async fn resolve_values(
     conn: &mut SqliteConnection,
     project_id: i64,
     f: PortFields,
@@ -486,9 +506,7 @@ async fn resolve_values(
         })?),
         None => None,
     };
-    if requested == Some(Medium::Power) {
-        return Err(AppError::bad("Power ports arrive with power documentation"));
-    }
+
     let medium = match connector {
         Some(Connector::Cage(_)) => {
             let m = transceiver.map(|t| t.medium()).unwrap_or(Medium::Other);
@@ -573,6 +591,19 @@ async fn resolve_values(
             .and_then(|o| o.wlan_id)
             .filter(|_| medium == Medium::Wireless),
     };
+    if medium == Medium::Power && role == Role::Passive {
+        return Err(AppError::bad("Power outlets and inlets are active ports"));
+    }
+    let outlet_group = apply_nullable(f.outlet_group, old.and_then(|o| o.outlet_group))
+        .filter(|_| medium == Medium::Power || f.outlet_group.is_some());
+    if let Some(g) = outlet_group {
+        if medium != Medium::Power {
+            return Err(AppError::bad("outlet_group is for power ports only"));
+        }
+        if !(1..=99).contains(&g) {
+            return Err(AppError::bad("outlet_group runs from 1 to 99"));
+        }
+    }
     let interface_name = merge_text(f.interface_name, old.and_then(|o| o.interface_name.clone()));
     check_len("interface_name", &interface_name, 64)?;
     let description = merge_text(f.description, old.and_then(|o| o.description.clone()));
@@ -592,6 +623,7 @@ async fn resolve_values(
         description,
         mac,
         wlan_id,
+        outlet_group,
         notes: merge_text(f.notes, old.and_then(|o| o.notes.clone())),
     })
 }
@@ -613,17 +645,19 @@ async fn device_for_ports(
     Ok((placed.project_id, type_key, placed.path))
 }
 
-async fn insert_port(
+pub(crate) async fn insert_port(
     conn: &mut SqliteConnection,
     device_id: i64,
     code: &str,
     v: &PortValues,
+    from_template: bool,
 ) -> AppResult<i64> {
     let now = now_ts();
     let id = sqlx::query(
         "INSERT INTO ports (device_id, code, face, role, requires_permanent, medium, connector, transceiver, fiber_mode,
-         sort_order, interface_name, speed, poe, description, mac, wlan_id, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         sort_order, interface_name, speed, poe, description, mac, wlan_id, outlet_group, from_template, notes,
+         created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(device_id)
     .bind(code)
@@ -639,8 +673,10 @@ async fn insert_port(
     .bind(v.speed)
     .bind(&v.poe)
     .bind(&v.description)
-    .bind(&v.mac)
+        .bind(&v.mac)
     .bind(v.wlan_id)
+    .bind(v.outlet_group)
+    .bind(from_template)
     .bind(&v.notes)
     .bind(&now)
     .bind(&now)
@@ -686,7 +722,7 @@ pub async fn create(
         body.sort_order = Some(next_sort_order(&mut tx, device_id).await?);
     }
     let values = resolve_values(&mut tx, project_id, body, None, &type_key).await?;
-    let id = insert_port(&mut tx, device_id, &code, &values).await?;
+    let id = insert_port(&mut tx, device_id, &code, &values, false).await?;
     let port = load_port(&mut tx, id).await?;
     audit::record(
         &mut tx,
@@ -757,7 +793,7 @@ pub async fn create_bulk(
         v.sort_order = order;
         v.interface_name = None;
         v.mac = None;
-        ids.push(insert_port(&mut tx, device_id, code, &v).await?);
+        ids.push(insert_port(&mut tx, device_id, code, &v, false).await?);
         order += 1;
     }
     audit::record(
@@ -845,6 +881,11 @@ pub async fn update(
         Some(c) => port_code(c)?,
         None => old.code.clone(),
     };
+    if old.from_template && code != old.code {
+        return Err(AppError::bad(
+            "This port comes from the device's template; rename it in the template",
+        ));
+    }
     let values = resolve_values(&mut tx, project_id, body, Some(&old), &type_key).await?;
 
     // The cables already plugged in must still fit.
@@ -896,7 +937,7 @@ pub async fn update(
     sqlx::query(
         "UPDATE ports SET code = ?, face = ?, role = ?, requires_permanent = ?, medium = ?, connector = ?, transceiver = ?,
          fiber_mode = ?, sort_order = ?, interface_name = ?, speed = ?, poe = ?, description = ?, mac = ?, wlan_id = ?,
-         notes = ?, updated_at = ? WHERE id = ?",
+         outlet_group = ?, notes = ?, updated_at = ? WHERE id = ?",
     )
     .bind(&code)
     .bind(values.face)
@@ -912,7 +953,8 @@ pub async fn update(
     .bind(&values.poe)
     .bind(&values.description)
     .bind(&values.mac)
-    .bind(values.wlan_id)
+        .bind(values.wlan_id)
+    .bind(values.outlet_group)
     .bind(&values.notes)
     .bind(now_ts())
     .bind(id)

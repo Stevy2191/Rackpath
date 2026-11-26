@@ -8,5 +8,7 @@ pub mod media;
 pub mod naming;
 pub mod password;
 pub mod permissions;
+pub mod power;
 pub mod rack;
+pub mod templates;
 pub mod totp;

@@ -60,9 +60,11 @@ pub async fn ensure_owner(pool: &SqlitePool) -> Result<Option<String>, error::Ap
 }
 
 /// Startup data work after migrations: built-in device types for every
-/// project (covers projects created before a release added new built-ins).
+/// project (covers projects created before a release added new built-ins)
+/// and the built-in device templates.
 pub async fn prepare(pool: &SqlitePool) -> Result<(), error::AppError> {
-    routes::device_types::seed_all(pool).await
+    routes::device_types::seed_all(pool).await?;
+    routes::templates::seed_builtins(pool).await
 }
 
 /// Sets a new temporary password for `username` and signs out its sessions.

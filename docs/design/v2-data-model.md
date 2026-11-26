@@ -846,9 +846,20 @@ All resolved by the project owner.
 - **No CHECK ties `port_id` to `device_id`** on addresses: when a device is deleted, SQLite applies the two `SET NULL` actions one at a time, and the CHECK would fail half-way. The API keeps them consistent.
 - **Search:** prefixes and addresses are in the search index with their own text (CIDR, DNS names and aliases, MAC, description). Where an address is plugged in is looked up live at search time (`detail`), so renaming a device or project never leaves stale results. A project code change re-indexes everything except IPAM entries, which don't contain it.
 - **Not yet:** `source_integration_id` and DHCP lease snapshots arrive with integrations in phase 6 (adding a column with a foreign key later is a plain `ALTER TABLE`).
-- **Measured** (release build, a /16 with 5,000 addresses and 202 prefixes): next-free allocation about 4 ms, prefix tree 9 ms, prefix page 45 ms (it shows the first 1,000 addresses; the address list pages through the rest), warnings 5 ms, search 2 ms, memory 58 MB.
+- **Measured (phase 4)** (release build, a /16 with 5,000 addresses and 202 prefixes): next-free allocation about 4 ms, prefix tree 9 ms, prefix page 45 ms (it shows the first 1,000 addresses; the address list pages through the rest), warnings 5 ms, search 2 ms, memory 58 MB.
 
 
+
+### Phase 5 notes (as built)
+
+- **Templates reference the device type by key**, not id, so built-ins (project NULL) work in every project. A custom type can't be deleted while a template uses it.
+- **Built-ins** are defined in code and seeded once each by key at start. Changing a built-in in a later release never touches existing devices; new built-ins simply appear. There are 15 generic ones (v1's catalogue was generic types, not vendor models).
+- **Ports remember whether a template made them** (`from_template`). Only those take part in template updates, so ports added by hand are never deleted by a template change; template ports can't be renamed on the device (rename them in the template).
+- **Template updates run in one transaction, and the dry run is the same code rolled back**, so the preview can't drift from what applying does. Destructive changes need `confirm_name`. Template-controlled port attributes are face, role, connector, medium, fibre mode, outlet group and order; transceiver, speed, PoE and description are starting values only, so per-port choices (which optic is fitted) survive edits. Manufacturer, model and power figures follow the template only where the device still has the template's old value.
+- **Power is computed on demand** from the cord graph (no stored power tree): demand flows upstream, split evenly across a device's connected inlets; the failover figure assumes every other feed of its loads has failed (the "B side down" case). The maths is pure (`src/domain/power.rs`) with unit tests, and is loop-safe.
+- **Runtime** uses v1's linear interpolation of the UPS curve, plus each connected battery module's added-runtime curve at the same load. A UPS is recognised by having a runtime curve; battery links are `power` connections between `Battery` ports.
+- **No images yet:** template faceplate photos arrive with attachments.
+- **Measured** (release build): 200 devices made from a 50-port template in 5.8 s (about 29 ms each); adding 4 ports to that template updates all 200 devices (800 new ports) in about 1.1 s, and the dry run takes the same; memory 35 MB.
 
 ---
 

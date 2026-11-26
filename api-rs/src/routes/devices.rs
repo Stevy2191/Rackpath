@@ -75,6 +75,8 @@ pub struct DeviceRow {
     pub icon_color: Option<String>,
     pub text_color: Option<String>,
     pub notes: Option<String>,
+    pub template_id: Option<i64>,
+    pub template_version: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
     pub path: String,
@@ -89,7 +91,7 @@ macro_rules! device_select {
          d.rack_pos_half, d.rack_face, d.rack_mount, d.parent_device_id, d.u_height_half, d.depth, d.manufacturer, d.model, \
          d.serial_number, d.asset_tag, d.purchase_date, d.warranty_expiry, d.in_service_date, d.responsible_user_id, \
          d.status, d.hostname, d.mac, d.os, d.firmware, d.source, d.external_id, d.icon_color, d.text_color, d.notes, \
-         d.created_at, d.updated_at, s.path, s.location_id, s.floor_id \
+         d.template_id, d.template_version, d.created_at, d.updated_at, s.path, s.location_id, s.floor_id \
          FROM devices d JOIN device_types dt ON dt.id = d.device_type_id \
          JOIN search_entries s ON s.kind = 'device' AND s.ref_id = d.id "
     };
@@ -122,7 +124,8 @@ impl DeviceRow {
             "in_service_date": self.in_service_date, "responsible_user_id": self.responsible_user_id,
             "status": self.status, "hostname": self.hostname, "mac": self.mac, "os": self.os, "firmware": self.firmware,
             "source": self.source, "external_id": self.external_id, "icon_color": self.icon_color,
-            "text_color": self.text_color, "notes": self.notes, "created_at": self.created_at, "updated_at": self.updated_at,
+            "text_color": self.text_color, "notes": self.notes,
+            "template_id": self.template_id, "template_version": self.template_version, "created_at": self.created_at, "updated_at": self.updated_at,
         })
     }
 
@@ -279,6 +282,7 @@ pub async fn get_one(
         .await?;
         v["on_tray"] = json!(children.iter().map(DeviceRow::to_json).collect::<Vec<_>>());
     }
+    v["power"] = json!(super::power::load_device_power(&mut conn, id).await?);
     v["can_edit"] = json!(current.principal.can(Action::Write, &placed.chain));
     Ok(Json(v))
 }
@@ -543,6 +547,9 @@ async fn choose_code(
 
 #[derive(Deserialize, Default)]
 pub struct DeviceFields {
+    /// Create from this template (create only): type, height, power and
+    /// ports come from it unless given.
+    template_id: Option<i64>,
     device_type_id: Option<i64>,
     /// Alternative to device_type_id: the type's key, e.g. "switch".
     device_type: Option<String>,
@@ -660,22 +667,60 @@ pub async fn create(
         .fetch_optional(&mut *tx)
         .await?;
     exists.ok_or(AppError::NotFound)?;
+    let template = match body.template_id {
+        None => None,
+        Some(t) => {
+            let (row, p) =
+                super::templates::load_prepared(&mut tx, t)
+                    .await
+                    .map_err(|e| match e {
+                        AppError::NotFound => AppError::bad("Template not found"),
+                        other => other,
+                    })?;
+            if row.project_id.is_some_and(|p| p != project_id) {
+                return Err(AppError::bad("That template belongs to another project"));
+            }
+            Some((row, p))
+        }
+    };
+    let template_type = template.as_ref().map(|(_, p)| p.t.device_type.clone());
     let (type_id, type_key, prefix, type_placement) = device_type(
         &mut tx,
         project_id,
         body.device_type_id,
-        body.device_type.as_deref(),
+        body.device_type.as_deref().or(template_type.as_deref()),
     )
     .await?
     .ok_or_else(|| AppError::bad("device_type_id or device_type is required"))?;
-    let placement = body.placement.clone().unwrap_or(PlacementIn::Unplaced);
+    if template_type.as_ref().is_some_and(|t| *t != type_key) {
+        return Err(AppError::bad(
+            "The device type comes from the template; leave it out",
+        ));
+    }
+    let mut placement = body.placement.clone().unwrap_or(PlacementIn::Unplaced);
+    // Zero-U and half-width templates choose their mount unless given.
+    if let (Some((_, p)), PlacementIn::Rack { mount, u, .. }) = (&template, &mut placement) {
+        if mount.is_none() {
+            if p.u_half == Some(0) {
+                *mount = Some("zero_u_left".into());
+                *u = None;
+            } else if p.t.half_width {
+                *mount = Some("half_left".into());
+            }
+        }
+    }
     let target = resolve(&mut tx, project_id, &placement).await?;
     require(&current, Action::Write, &target.chain)?;
     if !can_place(&type_key, type_placement, target.target) {
         return Err(AppError::bad(format!("A {type_key} can't be placed there")));
     }
+    let template_height = template
+        .as_ref()
+        .and_then(|(_, p)| p.u_half)
+        .filter(|h| *h > 0);
     let height_half = match body.u_height {
         Some(h) => Some(height_to_half(h).map_err(AppError::bad)?),
+        None if template_height.is_some() => template_height,
         None if target.rack.is_some() => Some(2),
         None => None,
     };
@@ -737,8 +782,8 @@ pub async fn create(
     .bind(target.tray_id)
     .bind(height_half)
     .bind(&depth)
-    .bind(text(body.manufacturer))
-    .bind(text(body.model))
+        .bind(text(body.manufacturer).or(template.as_ref().and_then(|(_, p)| p.t.manufacturer.clone())))
+    .bind(text(body.model).or(template.as_ref().and_then(|(_, p)| p.t.model.clone())))
     .bind(text(body.serial_number))
     .bind(text(body.asset_tag))
     .bind(&purchase)
@@ -759,6 +804,16 @@ pub async fn create(
     .await?
     .last_insert_rowid();
     hierarchy::reindex(&mut tx, Subtree::Device(id)).await?;
+    let mut ports_made = 0;
+    if let Some((row, p)) = &template {
+        sqlx::query("UPDATE devices SET template_id = ?, template_version = ? WHERE id = ?")
+            .bind(row.id)
+            .bind(row.version)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        ports_made = super::templates::instantiate(&mut tx, id, p).await?;
+    }
     let device = load_device(&mut tx, id).await?;
     audit::record(
         &mut tx,
@@ -768,7 +823,8 @@ pub async fn create(
             .path(device.path.clone())
             .project(Some(project_id))
             .changes(
-                json!({ "code": device.code, "type": type_key, "placement": device.placement() }),
+                json!({ "code": device.code, "type": type_key, "placement": device.placement(),
+                        "template_id": device.template_id, "ports": ports_made }),
             ),
     )
     .await?;
@@ -783,6 +839,11 @@ pub async fn update(
     Path(id): Path<i64>,
     JsonBody(body): JsonBody<DeviceFields>,
 ) -> AppResult<Json<Value>> {
+    if body.template_id.is_some() {
+        return Err(AppError::bad(
+            "A device's template is chosen when it's created",
+        ));
+    }
     let mut tx = state.pool.begin().await?;
     let placed = hierarchy::get(&mut tx, ScopeType::Device, id).await?;
     require(&current, Action::Write, &placed.chain)?;

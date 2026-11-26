@@ -5,7 +5,7 @@ SQLite file. It is being built in phases (see
 [`docs/design/v2-data-model.md`](../docs/design/v2-data-model.md), section 21).
 The v1 Node API in `api/` keeps serving the current frontend until phase 7.
 
-**Status: phases 1 to 4 complete.**
+**Status: phases 1 to 5 complete.**
 
 - **Phase 1, security core:** users, roles and scoped permissions,
   server-side sessions, two-factor login, invitations, projects, account
@@ -24,7 +24,12 @@ The v1 Node API in `api/` keeps serving the current frontend until phase 7.
   ports, next free address, the address grid, plan warnings, and search by
   address or DNS name.
 
-Templates and power follow in phase 5; integrations and imports in phase 6.
+- **Phase 5, library and power:** device templates (built-in and your
+  own) with port layouts on a faceplate grid; devices made from them; safe
+  template edits with a dry run; power cords, loads, A/B failover, UPS
+  runtime and outlet use.
+
+Integrations and imports follow in phase 6.
 
 ## Running it
 
@@ -187,6 +192,36 @@ rackpath version
 - **Warnings** (on save and in the warnings list): an address outside every prefix; a static address inside a DHCP pool; the same MAC on two DHCP reservations; a port's address in a prefix whose VLAN isn't on that port; a users/servers/voice/printers/IoT prefix without a VLAN; records missing from their import source.
 - **Deleting** a device or port keeps its addresses, unassigned. Deleting a prefix removes its ranges and keeps the addresses.
 - **Permissions:** prefixes on a location need edit rights on that location (otherwise on the project); ranges follow their prefix; an address on a device needs edit rights on that device (otherwise on the project). Reading is project-wide.
+
+## API overview (phase 5)
+
+| Area | Endpoints |
+|---|---|
+| Templates | `GET/POST /api/projects/{id}/templates`, `GET/PUT/DELETE /api/templates/{id}` (`PUT ?dry_run=true`), `POST /api/templates/{id}/duplicate` |
+| Devices from templates | `POST /api/projects/{id}/devices` with `"template_id"` |
+| Power figures | `GET/PUT /api/devices/{id}/power` |
+| Power summary | `GET /api/racks/{id}/power` |
+| Power cords | `POST /api/connections` with `"kind": "power"` |
+
+**Templates:**
+- **Built-ins** ship with Rackpath: 24/48-port switches, 24/48-port patch panels, a 24-port fibre panel, 1U/2U servers, a firewall, 1500 VA and 3000 VA UPSes, a battery module, horizontal and vertical PDUs, a wall outlet and an access point. They can't be edited; duplicate one into your project to change it.
+- **Port groups** are rectangles of ports on the front or rear face: two port rows per U and 48 columns (a vertical PDU is a 120 × 4 strip). Each group has a prefix (up to 4 characters), a numbering order (`column_major`: 1 above 2, the usual switch layout; or `row_major`) and the port settings (connector, role, speed, PoE, outlet group…). Groups with the same prefix share one numbering sequence, left to right, front before rear. Individual ports can be renamed (`port_overrides`). Overlapping groups, groups off the face, more than 99 ports in a group and duplicate names are refused.
+- **A device made from a template** gets its type, height, manufacturer, model, power figures and ports. Zero-U templates mount on the side automatically.
+- **Editing a template** (`PUT`, which replaces the whole template) updates every device made from it in the same transaction:
+  - ports are matched by code; ports that stay keep their cables, VLANs and addresses;
+  - ports that disappear are deleted, with their cables;
+  - a cable that no longer fits a changed port is removed;
+  - a device that no longer fits its rack after growing moves to Unplaced;
+  - manufacturer, model and each power figure follow the template unless the device's own value was changed;
+  - an optic in a cage port stays as long as the cage type does.
+  `?dry_run=true` returns exactly what would happen, per device, without changing anything. If anything would be removed or unplaced, the save needs `"confirm_name"` set to the template's name. Ports added by hand to a device never take part.
+- **Deleting a template** leaves its devices and their ports in place, as ordinary ports.
+
+**Power:**
+- **Power ports** are ports with a power connector: outlets (C13, C15, C19, NEMA 5-15R/5-20R/L5-20R/L5-30R/L6-20R/L6-30R, Schuko socket, BS 1363 socket) or inlets and plugs (C14, C16, C20, the matching NEMA plugs, Schuko plug, BS 1363 plug), plus `Battery` and `DC`. Outlets can be numbered into `outlet_group` banks.
+- **A power cord** is a `power` connection from an outlet to an inlet. Two outlets or two inlets are refused; different families (a C19 outlet to a C14 inlet) are allowed with a warning to check the cord. `Battery` ports connect only to each other (UPS to battery module).
+- **Power figures** per device: `typical_w` and `max_w` (draw), `capacity_va`, `capacity_w`, `input_voltage`, and for UPSes a `runtime_curve` and for battery modules an `ebm_runtime_curve` (points of `load_w` and `minutes`), plus `max_ebm_slots`.
+- **The power summary** for a rack lists every device with power: its draw, what it delivers through its outlets (a device with two connected inlets splits its draw between them), the **failover load** if its partner feed fails (it then carries everything it feeds in full), load percentages, UPS runtime at the current and failover load (battery modules add their curves), outlets used per bank, and warnings: overloaded, above 80%, can't carry its redundant loads alone, no cord on any inlet, only one of several inlets connected, too many battery modules, draw not recorded. Feeds from other racks count. Rack totals include UPS capacity and what's left if the largest UPS fails (N+1).
 
 ## Development
 

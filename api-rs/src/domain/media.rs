@@ -102,9 +102,42 @@ pub enum FiberConn {
     Mpo,
 }
 
+/// Power connector families: an outlet of a family takes the matching
+/// inlet or plug (C13 takes C14; NEMA 5-15R takes 5-15P).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlugFamily {
+    C13,
+    C15,
+    C19,
+    Nema515,
+    Nema520,
+    NemaL520,
+    NemaL530,
+    NemaL620,
+    NemaL630,
+    Schuko,
+    Bs1363,
+    Dc,
+    /// UPS to external battery module.
+    Battery,
+}
+
+/// A power connector: its family and whether it's the outlet (supplies
+/// power) or the inlet/plug (draws it). DC and battery links have no sides.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Plug {
+    pub family: PlugFamily,
+    pub outlet: bool,
+}
+
+const fn plug(family: PlugFamily, outlet: bool) -> Connector {
+    Connector::Power(Plug { family, outlet })
+}
+
 /// What a port physically has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Connector {
+    Power(Plug),
     Rj45,
     Rj11,
     Cage(Cage),
@@ -133,14 +166,45 @@ pub const CONNECTORS: &[(&str, Connector)] = &[
     ("USB", Connector::Usb),
     ("F", Connector::F),
     ("BNC", Connector::Bnc),
+    ("C13", plug(PlugFamily::C13, true)),
+    ("C14", plug(PlugFamily::C13, false)),
+    ("C15", plug(PlugFamily::C15, true)),
+    ("C16", plug(PlugFamily::C15, false)),
+    ("C19", plug(PlugFamily::C19, true)),
+    ("C20", plug(PlugFamily::C19, false)),
+    ("NEMA 5-15R", plug(PlugFamily::Nema515, true)),
+    ("NEMA 5-15P", plug(PlugFamily::Nema515, false)),
+    ("NEMA 5-20R", plug(PlugFamily::Nema520, true)),
+    ("NEMA 5-20P", plug(PlugFamily::Nema520, false)),
+    ("NEMA L5-20R", plug(PlugFamily::NemaL520, true)),
+    ("NEMA L5-20P", plug(PlugFamily::NemaL520, false)),
+    ("NEMA L5-30R", plug(PlugFamily::NemaL530, true)),
+    ("NEMA L5-30P", plug(PlugFamily::NemaL530, false)),
+    ("NEMA L6-20R", plug(PlugFamily::NemaL620, true)),
+    ("NEMA L6-20P", plug(PlugFamily::NemaL620, false)),
+    ("NEMA L6-30R", plug(PlugFamily::NemaL630, true)),
+    ("NEMA L6-30P", plug(PlugFamily::NemaL630, false)),
+    ("Schuko socket", plug(PlugFamily::Schuko, true)),
+    ("Schuko plug", plug(PlugFamily::Schuko, false)),
+    ("BS 1363 socket", plug(PlugFamily::Bs1363, true)),
+    ("BS 1363 plug", plug(PlugFamily::Bs1363, false)),
+    ("DC", plug(PlugFamily::Dc, false)),
+    ("Battery", plug(PlugFamily::Battery, false)),
     ("Other", Connector::Other),
 ];
 
 impl Connector {
     pub fn parse(s: &str) -> Option<Connector> {
+        let s = s.trim();
+        // v1 wrote "IEC C13".
+        let s = match s.get(..4) {
+            Some(p) if p.eq_ignore_ascii_case("IEC ") => &s[4..],
+            _ => s,
+        };
+        let wanted: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
         CONNECTORS
             .iter()
-            .find(|(n, _)| n.eq_ignore_ascii_case(s.trim()))
+            .find(|(n, _)| n.eq_ignore_ascii_case(&wanted))
             .map(|(_, c)| *c)
     }
     pub fn name(self) -> &'static str {
@@ -161,6 +225,7 @@ impl Connector {
             Connector::Fiber(_) => &[Medium::Fiber],
             Connector::Db9 | Connector::Usb => &[Medium::Console, Medium::Other],
             Connector::F | Connector::Bnc => &[Medium::Coax],
+            Connector::Power(_) => &[Medium::Power],
             Connector::Other => &[
                 Medium::Other,
                 Medium::Copper,
@@ -320,6 +385,8 @@ pub enum CableType {
     Console,
     Usb,
     Coax,
+    PowerCord,
+    BatteryCable,
     Other,
 }
 
@@ -373,6 +440,8 @@ pub const CABLE_TYPES: &[(&str, CableType)] = &[
     ("Console", CableType::Console),
     ("USB", CableType::Usb),
     ("Coax", CableType::Coax),
+    ("Power cord", CableType::PowerCord),
+    ("Battery cable", CableType::BatteryCable),
     ("Other", CableType::Other),
 ];
 
@@ -398,6 +467,7 @@ impl CableType {
             CableType::Fiber(_) => Some(Medium::Fiber),
             CableType::Coax => Some(Medium::Coax),
             CableType::Console | CableType::Usb => Some(Medium::Console),
+            CableType::PowerCord | CableType::BatteryCable => Some(Medium::Power),
             CableType::Direct(..) | CableType::Other => None,
         }
     }
@@ -433,6 +503,7 @@ enum Socket {
     EmptyCage(Cage),
     Console,
     Coax,
+    Power(Plug),
     /// Rear side of a passive port: medium only.
     Termination(Medium),
     Wireless,
@@ -447,6 +518,7 @@ fn socket(p: &PortMedia) -> Socket {
         return Socket::Termination(p.medium);
     }
     match p.connector {
+        Some(Connector::Power(plug)) => Socket::Power(plug),
         None | Some(Connector::Other) => Socket::Unknown,
         Some(Connector::Rj45) if p.medium == Medium::Console => Socket::Console,
         Some(Connector::Rj45) => Socket::Rj45,
@@ -473,6 +545,11 @@ fn describe(s: Socket) -> String {
         Socket::Console => "a console port".into(),
         Socket::Coax => "a coax port".into(),
         Socket::Termination(m) => format!("a {} termination", m.as_str()),
+        Socket::Power(p) => format!(
+            "a {} {}",
+            Connector::Power(p).name(),
+            if p.outlet { "outlet" } else { "inlet" }
+        ),
         Socket::Wireless => "a wireless port".into(),
         Socket::Unknown => "a port".into(),
     }
@@ -487,6 +564,7 @@ enum Family {
     Direct,
     Console,
     Coax,
+    Power,
     Any,
 }
 
@@ -497,7 +575,9 @@ fn family(s: Socket) -> Option<Family> {
         Socket::EmptyCage(_) => Family::Direct,
         Socket::Console => Family::Console,
         Socket::Coax => Family::Coax,
+        Socket::Power(_) => Family::Power,
         Socket::Termination(m) => match m {
+            Medium::Power => Family::Power,
             Medium::Copper => Family::TwistedPair,
             Medium::Fiber => Family::Fiber,
             Medium::Coax => Family::Coax,
@@ -558,6 +638,9 @@ pub fn check_cable(
             }
         )));
     }
+    if let (Socket::Power(x), Socket::Power(y)) = (sa, sb) {
+        check_power(x, y, &mut v)?;
+    }
     if let Some(cable) = cable {
         for s in [sa, sb] {
             cable_fits(cable, s, &mut v)?;
@@ -585,6 +668,46 @@ pub fn check_cable(
         }
     }
     Ok(v)
+}
+
+/// A power cord runs from an outlet to an inlet; battery and DC links join
+/// their own kind.
+fn check_power(a: Plug, b: Plug, v: &mut Verdict) -> Result<(), Incompatible> {
+    for special in [PlugFamily::Battery, PlugFamily::Dc] {
+        if (a.family == special) != (b.family == special) {
+            return Err(Incompatible(format!(
+                "A {} port only connects to another {} port",
+                Connector::Power(Plug {
+                    family: special,
+                    outlet: false
+                })
+                .name(),
+                Connector::Power(Plug {
+                    family: special,
+                    outlet: false
+                })
+                .name()
+            )));
+        }
+        if a.family == special {
+            return Ok(());
+        }
+    }
+    if a.outlet == b.outlet {
+        return Err(Incompatible(format!(
+            "A power cord runs from an outlet to an inlet; these are both {}s",
+            if a.outlet { "outlet" } else { "inlet" }
+        )));
+    }
+    if a.family != b.family {
+        let (o, i) = if a.outlet { (a, b) } else { (b, a) };
+        v.warnings.push(format!(
+            "A {} outlet feeding a {} inlet needs a cord with those two ends; check its rating",
+            Connector::Power(o).name(),
+            Connector::Power(i).name()
+        ));
+    }
+    Ok(())
 }
 
 fn cable_fits(cable: CableType, s: Socket, v: &mut Verdict) -> Result<(), Incompatible> {
@@ -642,6 +765,8 @@ fn cable_fits(cable: CableType, s: Socket, v: &mut Verdict) -> Result<(), Incomp
             Ok(())
         }
         (CableType::Coax, Socket::Coax) => Ok(()),
+        (CableType::PowerCord, Socket::Power(p)) if p.family != PlugFamily::Battery => Ok(()),
+        (CableType::BatteryCable, Socket::Power(p)) if p.family == PlugFamily::Battery => Ok(()),
         _ => wrong(),
     }
 }
@@ -971,5 +1096,34 @@ mod tests {
         let mut q = port("RJ45");
         q.speed = Some(1_000);
         assert_eq!(q.speed(), Some(1_000));
+    }
+
+    #[test]
+    fn power_cords_run_outlet_to_inlet() {
+        let ok =
+            |a: &str, b: &str, c: Option<CableType>| check_cable(&port(a), &port(b), c, None, None);
+        assert_eq!(port("C13").medium, Medium::Power);
+        assert_eq!(Connector::parse("IEC C13"), Connector::parse("C13"));
+        assert_eq!(
+            Connector::parse("nema  5-15r").map(Connector::name),
+            Some("NEMA 5-15R")
+        );
+        assert!(ok("C13", "C14", cable("Power cord"))
+            .unwrap()
+            .warnings
+            .is_empty());
+        assert!(
+            ok("C14", "C13", None).unwrap().warnings.is_empty(),
+            "either order"
+        );
+        // C19 outlet to a C14 inlet: a C20-C13 cord, common but worth a look.
+        assert_eq!(ok("C19", "C14", None).unwrap().warnings.len(), 1);
+        assert!(ok("C13", "C13", None).is_err(), "two outlets");
+        assert!(ok("C14", "NEMA 5-15P", None).is_err(), "two inlets");
+        assert!(ok("Battery", "Battery", cable("Battery cable")).is_ok());
+        assert!(ok("Battery", "C14", None).is_err());
+        assert!(ok("C13", "C14", cable("Battery cable")).is_err());
+        assert!(ok("C13", "RJ45", None).is_err());
+        assert!(ok("RJ45", "RJ45", cable("Power cord")).is_err());
     }
 }

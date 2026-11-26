@@ -231,7 +231,7 @@ pub async fn create(
     let kind = match body.kind.as_deref() {
         None => Kind::Patch,
         Some(k) => {
-            Kind::parse(k).ok_or_else(|| AppError::bad("kind must be patch or permanent"))?
+            Kind::parse(k).ok_or_else(|| AppError::bad("kind must be patch, permanent or power"))?
         }
     };
     let side_of = |e: &EndIn| -> AppResult<Side> {
@@ -272,6 +272,18 @@ pub async fn create(
     }
     let ea = end_info(&mut tx, &pa, sa).await?;
     let eb = end_info(&mut tx, &pb, sb).await?;
+    let power_ends = [&pa, &pb].iter().filter(|p| p.medium == "power").count();
+    match (kind, power_ends) {
+        (Kind::Power, 2) | (Kind::Patch | Kind::Permanent, 0) => {}
+        (Kind::Power, _) => {
+            return Err(AppError::bad("A power cord joins two power ports"));
+        }
+        _ => {
+            return Err(AppError::bad(
+                "Power ports take power cords: use \"kind\": \"power\"",
+            ))
+        }
+    }
     check_sides(kind, &ea, &eb).map_err(AppError::bad)?;
     let warnings = check_media(&pa, sa, &pb, sb, cable_type.as_deref(), length_m)?;
 

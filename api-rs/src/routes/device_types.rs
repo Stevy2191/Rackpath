@@ -249,6 +249,18 @@ pub async fn remove(
             t.device_count
         )));
     }
+    let templates: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM device_templates WHERE project_id = ? AND device_type_key = ?",
+    )
+    .bind(t.project_id)
+    .bind(&t.key)
+    .fetch_one(&mut *tx)
+    .await?;
+    if templates > 0 {
+        return Err(AppError::Conflict(format!(
+            "{templates} template(s) still use this type"
+        )));
+    }
     sqlx::query("DELETE FROM device_types WHERE id = ?")
         .bind(id)
         .execute(&mut *tx)

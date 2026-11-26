@@ -116,8 +116,8 @@ pub fn check_sides(kind: Kind, a: &EndInfo, b: &EndInfo) -> Result<(), String> {
     if a.port_id == b.port_id {
         return Err("A cable can't connect a port to itself".into());
     }
-    if kind == Kind::Power {
-        return Err("Power cabling arrives with power documentation".into());
+    if kind == Kind::Power && (a.role != Role::Active || b.role != Role::Active) {
+        return Err("Power cords join outlets and inlets, which are active ports".into());
     }
     for e in [a, b] {
         if e.side != kind.side() {
@@ -628,8 +628,9 @@ mod tests {
         // ... unless the port doesn't need one (coupler)
         empty.requires_permanent = false;
         assert!(check_sides(Kind::Patch, &end(1, Active, Front), &empty).is_ok());
-        // Power waits for phase 5
-        assert!(check_sides(Kind::Power, &end(1, Active, Front), &end(2, Active, Front)).is_err());
+        // Power cords: front sides of active ports.
+        assert!(check_sides(Kind::Power, &end(1, Active, Front), &end(2, Active, Front)).is_ok());
+        assert!(check_sides(Kind::Power, &end(1, Active, Front), &end(2, Passive, Front)).is_err());
     }
 
     #[test]

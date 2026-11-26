@@ -11,10 +11,14 @@ pub mod devices;
 pub mod invitations;
 pub mod ipam;
 pub mod places;
+pub mod power;
+
 pub mod ports;
 pub mod projects;
 pub mod racks;
 pub mod search;
+pub mod templates;
+
 pub mod users;
 pub mod vlans;
 
@@ -214,6 +218,23 @@ pub fn router(state: AppState) -> Router {
             "/api/wlans/{id}",
             patch(vlans::update_wlan).delete(vlans::delete_wlan),
         )
+        // Device templates and power
+        .route(
+            "/api/projects/{id}/templates",
+            get(templates::list).post(templates::create),
+        )
+        .route(
+            "/api/templates/{id}",
+            get(templates::get_one)
+                .put(templates::update)
+                .delete(templates::remove),
+        )
+        .route("/api/templates/{id}/duplicate", post(templates::duplicate))
+        .route(
+            "/api/devices/{id}/power",
+            get(power::device_power).put(power::put_device_power),
+        )
+        .route("/api/racks/{id}/power", get(power::rack_power))
         // IP address management
         .route(
             "/api/projects/{id}/spaces",
