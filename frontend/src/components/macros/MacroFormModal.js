@@ -70,8 +70,11 @@ function PasswordField({ label, value, onChange, placeholder }) {
 }
 
 export default function MacroFormModal({ initial, onSave, onClose }) {
-  const [draft, setDraft] = useState(initial || emptyMacro);
+  // Stored secrets never come back from the API, only has_<field> flags; an
+  // empty secret field on edit means "keep the stored value".
+  const [draft, setDraft] = useState(initial ? { ...emptyMacro, ...initial } : emptyMacro);
   const [error, setError] = useState(null);
+  const storedHint = (field, fallback) => (initial?.[`has_${field}`] ? '(unchanged)' : fallback);
 
   const handleTypeChange = (type) => {
     setDraft((prev) => ({ ...prev, type, port: DEFAULT_PORTS[type] }));
@@ -129,7 +132,7 @@ export default function MacroFormModal({ initial, onSave, onClose }) {
               label="Community String"
               value={draft.community_string || ''}
               onChange={(e) => setDraft({ ...draft, community_string: e.target.value })}
-              placeholder="public"
+              placeholder={storedHint('community_string', 'public')}
             />
           )}
 
@@ -148,6 +151,7 @@ export default function MacroFormModal({ initial, onSave, onClose }) {
               label="Password"
               value={draft.password || ''}
               onChange={(e) => setDraft({ ...draft, password: e.target.value })}
+              placeholder={storedHint('password')}
             />
           )}
 
@@ -167,6 +171,7 @@ export default function MacroFormModal({ initial, onSave, onClose }) {
                 label="Auth Password"
                 value={draft.auth_password || ''}
                 onChange={(e) => setDraft({ ...draft, auth_password: e.target.value })}
+                placeholder={storedHint('auth_password')}
               />
               <label>
                 Priv Protocol
@@ -182,6 +187,7 @@ export default function MacroFormModal({ initial, onSave, onClose }) {
                 label="Priv Password"
                 value={draft.priv_password || ''}
                 onChange={(e) => setDraft({ ...draft, priv_password: e.target.value })}
+                placeholder={storedHint('priv_password')}
               />
             </>
           )}

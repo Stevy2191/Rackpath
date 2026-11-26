@@ -198,7 +198,7 @@ router.post('/:id/apply-template', async (req, res, next) => {
       `SELECT n.id, n.device_id, n.label, n.type AS node_type,
               n.icon_color AS node_icon_color, n.text_color AS node_text_color,
               n.x, n.y, n.width, n.height,
-              d.hostname, d.ip, d.mac, d.type AS device_type, d.snmp_community, d.notes,
+              d.hostname, d.ip, d.mac, d.type AS device_type, d.notes,
               d.icon_color AS device_icon_color, d.text_color AS device_text_color, d.updated_at
        FROM topology_nodes n
        LEFT JOIN devices d ON d.id = n.device_id

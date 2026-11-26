@@ -4,19 +4,15 @@
 const pool = require('../db/pool');
 const adapters = require('./index');
 
-const SECRET = process.env.RACKPATH_JWT_SECRET;
+const { decryptSecret } = require('../utils/secrets');
 
-// Fetches an integration row with its credentials decrypted via the
-// server-side AES secret. Returns undefined if the row doesn't exist.
+// Fetches an integration row with its credentials decrypted (in the API, not
+// the database). Returns undefined if the row doesn't exist.
 async function getDecrypted(integrationId) {
-  const [rows] = await pool.query(
-    `SELECT *,
-            CAST(AES_DECRYPT(FROM_BASE64(password), ?) AS CHAR) AS password_plain,
-            CAST(AES_DECRYPT(FROM_BASE64(api_key), ?) AS CHAR) AS api_key_plain
-     FROM project_integrations WHERE id = ?`,
-    [SECRET, SECRET, integrationId]
-  );
-  return rows[0];
+  const [rows] = await pool.query('SELECT * FROM project_integrations WHERE id = ?', [integrationId]);
+  const row = rows[0];
+  if (!row) return row;
+  return { ...row, password_plain: decryptSecret(row.password), api_key_plain: decryptSecret(row.api_key) };
 }
 
 function buildConfig(row) {

@@ -1,6 +1,7 @@
 const express = require('express');
 const snmp = require('net-snmp');
 const pool = require('../db/pool');
+const { decryptMacro } = require('../utils/credentialMacros');
 const { scanDevice } = require('../services/snmpScan');
 const { translateInterfaceName } = require('../services/interfaceNames');
 const { logActivity } = require('../services/activityLog');
@@ -414,17 +415,16 @@ router.get('/:id/rack-location', async (req, res, next) => {
 // POST /api/devices - create device
 router.post('/', async (req, res, next) => {
   try {
-    const { hostname, ip, mac, type, snmp_community, notes, location, make, model, serial_number, purchase_date, warranty_expiry } = req.body;
+    const { hostname, ip, mac, type, notes, location, make, model, serial_number, purchase_date, warranty_expiry } = req.body;
     const [result] = await pool.query(
-      `INSERT INTO devices (project_id, hostname, ip, mac, type, snmp_community, notes, location, make, model, serial_number, purchase_date, warranty_expiry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO devices (project_id, hostname, ip, mac, type, notes, location, make, model, serial_number, purchase_date, warranty_expiry)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.projectId,
         hostname || null,
         ip || null,
         mac || null,
         type || null,
-        snmp_community || null,
         notes || null,
         location || null,
         make || null,
@@ -445,10 +445,10 @@ router.post('/', async (req, res, next) => {
 // PUT /api/devices/:id - update device
 router.put('/:id', async (req, res, next) => {
   try {
-    const { hostname, ip, mac, type, snmp_community, notes, location, make, model, serial_number, purchase_date, warranty_expiry, location_id, room_id } = req.body;
+    const { hostname, ip, mac, type, notes, location, make, model, serial_number, purchase_date, warranty_expiry, location_id, room_id } = req.body;
     const [result] = await pool.query(
       `UPDATE devices
-       SET hostname = ?, ip = ?, mac = ?, type = ?, snmp_community = ?, notes = ?, location = ?,
+       SET hostname = ?, ip = ?, mac = ?, type = ?, notes = ?, location = ?,
            make = ?, model = ?, serial_number = ?, purchase_date = ?, warranty_expiry = ?,
            location_id = ?, room_id = ?
        WHERE id = ? AND project_id = ?`,
@@ -457,7 +457,6 @@ router.put('/:id', async (req, res, next) => {
         ip || null,
         mac || null,
         type || null,
-        snmp_community || null,
         notes || null,
         location || null,
         make || null,
@@ -489,7 +488,6 @@ router.patch('/:id', async (req, res, next) => {
       'ip',
       'mac',
       'type',
-      'snmp_community',
       'notes',
       'location',
       'icon_color',
@@ -645,7 +643,7 @@ router.post('/:id/scan', async (req, res, next) => {
       [device.credential_macro_id, req.projectId]
     );
     if (macroRows.length === 0) return res.status(400).json({ error: 'Assigned credential macro not found' });
-    const macro = macroRows[0];
+    const macro = decryptMacro(macroRows[0]);
 
     if (!macro.type.startsWith('snmp')) {
       return res.status(400).json({ error: 'Assigned credential macro is not an SNMP profile' });

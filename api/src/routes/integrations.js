@@ -2,9 +2,9 @@ const express = require('express');
 const pool = require('../db/pool');
 const { getDecrypted, testIntegration, syncIntegration } = require('../integrations/service');
 
-const router = express.Router();
+const { encryptSecret } = require('../utils/secrets');
 
-const SECRET = process.env.RACKPATH_JWT_SECRET;
+const router = express.Router();
 
 const PLATFORMS = ['unifi', 'unifi-protect', 'unifi-access', 'zabbix', 'librenms', 'netbox', 'snmp', 'custom'];
 
@@ -42,17 +42,15 @@ router.post('/projects/:projectId/integrations', async (req, res, next) => {
     const [result] = await pool.query(
       `INSERT INTO project_integrations
          (project_id, name, platform, base_url, username, password, api_key, verify_ssl, auto_sync, sync_interval_minutes, config)
-       VALUES (?, ?, ?, ?, ?, TO_BASE64(AES_ENCRYPT(?, ?)), TO_BASE64(AES_ENCRYPT(?, ?)), ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.params.projectId,
         name.trim(),
         platform,
         base_url.trim(),
         username || null,
-        password || null,
-        SECRET,
-        api_key || null,
-        SECRET,
+        encryptSecret(password),
+        encryptSecret(api_key),
         verify_ssl !== false,
         !!auto_sync,
         sync_interval_minutes || 60,
@@ -120,16 +118,16 @@ router.put('/integrations/:id', async (req, res, next) => {
     }
     if (password !== undefined) {
       if (password) {
-        updates.push('password = TO_BASE64(AES_ENCRYPT(?, ?))');
-        values.push(password, SECRET);
+        updates.push('password = ?');
+        values.push(encryptSecret(password));
       } else {
         updates.push('password = NULL');
       }
     }
     if (api_key !== undefined) {
       if (api_key) {
-        updates.push('api_key = TO_BASE64(AES_ENCRYPT(?, ?))');
-        values.push(api_key, SECRET);
+        updates.push('api_key = ?');
+        values.push(encryptSecret(api_key));
       } else {
         updates.push('api_key = NULL');
       }

@@ -16,7 +16,6 @@ const emptyDevice = {
   ip: '',
   mac: '',
   type: '',
-  snmp_community: '',
   notes: '',
   location: '',
   make: '',
@@ -738,11 +737,6 @@ export default function DevicesPage() {
             placeholder="Location"
             value={newDevice.location}
             onChange={(e) => setNewDevice({ ...newDevice, location: e.target.value })}
-          />
-          <input
-            placeholder="SNMP Community"
-            value={newDevice.snmp_community}
-            onChange={(e) => setNewDevice({ ...newDevice, snmp_community: e.target.value })}
           />
           <input
             placeholder="Make"

@@ -629,7 +629,6 @@ export default function ScanPage() {
       mac: r.mac,
       hostname: r.hostname,
       device_type: r.device_type,
-      snmp_community: r.raw?.snmp_community || undefined,
       snmp_macro_id: r.snmp_macro_id || undefined,
       ports: Array.isArray(r.raw?.ports) ? r.raw.ports : undefined,
     }));

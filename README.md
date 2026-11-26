@@ -140,13 +140,13 @@ During setup you'll be prompted for:
   rather than afterwards.
 - **JWT signing secret** - leave blank to auto-generate a secure random value (recommended)
 
-On a fresh install it also generates random database passwords and a
-scanner token (`SCANNER_TOKEN`), and restricts `.env` to owner-only
-permissions.
+On a fresh install it also generates random database passwords, a scanner
+token (`SCANNER_TOKEN`) and a credential encryption key
+(`RACKPATH_ENCRYPTION_KEY`), and restricts `.env` to owner-only permissions.
 
 Re-running the script is safe: it offers your current ports as the defaults
-and keeps the existing JWT secret, database passwords and scanner token
-rather than resetting them.
+and keeps the existing JWT secret, database passwords, scanner token and
+encryption key rather than resetting them.
 
 To install without a terminal — a `curl ... | bash` pipe has none, and
 neither does a provisioning script — set any of these first and the matching
@@ -177,8 +177,9 @@ file:
    cp .env.example .env
    ```
 
-   At minimum, set `RACKPATH_JWT_SECRET` and `SCANNER_TOKEN` to long random
-   values (`openssl rand -hex 32`), and replace the `changeme_*` database
+   At minimum, set `RACKPATH_JWT_SECRET`, `SCANNER_TOKEN` and
+   `RACKPATH_ENCRYPTION_KEY` to random values (`openssl rand -hex 32` for
+   each), and replace the `changeme_*` database
    passwords **before the first start** (MariaDB only reads them when it
    creates its data volume). Then restrict the file: `chmod 600 .env`.
    See the comments in `.env.example` for what every variable controls.
@@ -267,8 +268,13 @@ want scans to run on (default `eth0`).
 
 - **Scanner token.** The scanner listens on the host network, so it only
   accepts requests carrying `SCANNER_TOKEN`, and the API only accepts scan
-  results carrying it. Both containers read the same value from `.env`; if
-  it's unset, the JWT secret is used instead.
+  results carrying it. Both containers read the same value from `.env` and
+  refuse to start without it.
+- **Stored credentials** (SNMP communities, device, camera and integration
+  passwords, API keys) are encrypted with AES-256-GCM using
+  `RACKPATH_ENCRYPTION_KEY`, and are never sent back to the browser. Back up
+  `.env` along with the database: if the key is lost or changed, those
+  credentials have to be re-entered.
 - **First login.** Until the default `admin` password is changed, the API
   refuses every request except changing the password.
 - **Logins** are limited to 10 failed attempts per username (and 50 per IP)
@@ -281,9 +287,9 @@ want scans to run on (default `eth0`).
 
 ### Changing the database passwords
 
-Installs made before random passwords were generated still use the
-`changeme_*` defaults. Since MariaDB stores them in its data volume, change
-them in the database first, then in `.env`:
+To change the database passwords after install (for example on an install
+still using the `changeme_*` defaults), change them in the database first,
+then in `.env`:
 
 ```bash
 docker compose exec rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD"'

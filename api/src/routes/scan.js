@@ -5,6 +5,12 @@ const sse = require('../sse/hub');
 const { getSystemInfo } = require('../services/snmpScan');
 const { scannerHeaders } = require('../utils/scannerAuth');
 const { validateScanTarget, isIpInTarget } = require('../utils/scanTargets');
+const { encryptSecret, decryptSecret, redactSecrets } = require('../utils/secrets');
+const { decryptMacro } = require('../utils/credentialMacros');
+
+// A scan job as sent to the browser: the per-scan SNMP community is replaced
+// by has_snmp_community.
+const publicJob = (row) => redactSecrets(row, ['snmp_community']);
 
 const router = express.Router();
 
@@ -46,7 +52,8 @@ async function enrichResultWithSnmp(jobId, resultId, ip) {
 
   let info = null;
   let macro = null;
-  for (const candidate of macros) {
+  for (const stored of macros) {
+    const candidate = decryptMacro(stored);
     // eslint-disable-next-line no-await-in-loop
     const result = await getSystemInfo(ip, candidate);
     if (result) {
@@ -133,7 +140,7 @@ function mapResultRow(row) {
 router.get('/', async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT j.id, j.name, j.target_subnet, j.target_type, j.scan_profile, j.options, j.snmp_community,
+      `SELECT j.id, j.name, j.target_subnet, j.target_type, j.scan_profile, j.options, j.snmp_community IS NOT NULL AS has_snmp_community,
               j.status, j.progress_current, j.progress_total,
               j.started_at, j.completed_at, j.created_at, j.updated_at,
               COUNT(r.id) AS host_count
@@ -158,7 +165,7 @@ router.get('/:id', async (req, res, next) => {
       req.projectId,
     ]);
     if (rows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
-    res.json(rows[0]);
+    res.json(publicJob(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -290,7 +297,7 @@ router.post('/:id/rescan', async (req, res, next) => {
       await axios.post(`${SCANNER_URL}/scan`, {
         job_id: jobId,
         target_subnet: job.target_subnet,
-        snmp_community: job.snmp_community || process.env.SNMP_COMMUNITY || 'public',
+        snmp_community: decryptSecret(job.snmp_community) || process.env.SNMP_COMMUNITY || 'public',
         options: opts || undefined,
       }, { headers: scannerHeaders() });
       await pool.query("UPDATE scan_jobs SET status = 'running' WHERE id = ?", [jobId]);
@@ -302,7 +309,7 @@ router.post('/:id/rescan', async (req, res, next) => {
     }
 
     const [rows] = await pool.query('SELECT * FROM scan_jobs WHERE id = ?', [jobId]);
-    res.json(rows[0]);
+    res.json(publicJob(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -327,7 +334,7 @@ router.post('/', async (req, res, next) => {
     const [result] = await pool.query(
       `INSERT INTO scan_jobs (project_id, name, target_subnet, target_type, scan_profile, snmp_enrichment, options, snmp_community, status, started_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
-      [req.projectId, scanName, target_subnet, targetType, scanProfile, snmpEnrichment ? 1 : 0, options ? JSON.stringify(options) : null, snmp_community || null]
+      [req.projectId, scanName, target_subnet, targetType, scanProfile, snmpEnrichment ? 1 : 0, options ? JSON.stringify(options) : null, encryptSecret(snmp_community)]
     );
     const jobId = result.insertId;
 
@@ -351,7 +358,7 @@ router.post('/', async (req, res, next) => {
     }
 
     const [rows] = await pool.query('SELECT * FROM scan_jobs WHERE id = ?', [jobId]);
-    res.status(201).json(rows[0]);
+    res.status(201).json(publicJob(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -488,7 +495,7 @@ router.post('/:id/import', async (req, res, next) => {
     const added = [];
     const skipped = [];
     for (const device of devices) {
-      const { ip, mac, hostname, type, device_type, snmp_community, ports, snmp_macro_id } = device;
+      const { ip, mac, hostname, type, device_type, ports, snmp_macro_id } = device;
       const deviceType = type || device_type || null;
 
       // Duplicate detection is scoped to the current project so the same IP
@@ -507,25 +514,21 @@ router.post('/:id/import', async (req, res, next) => {
       }
 
       // If SNMP responded during the scan, pre-select that credential macro on
-      // the device (and seed its community string) so a later device-page scan
-      // uses the right one without the user picking it again.
+      // the device so a later device-page scan uses the right one without the
+      // user picking it again.
       let credentialMacroId = null;
-      let snmpCommunity = snmp_community || null;
       if (snmp_macro_id) {
         const [macroRows] = await conn.query(
-          'SELECT id, community_string FROM project_credential_macros WHERE id = ? AND project_id = ?',
+          'SELECT id FROM project_credential_macros WHERE id = ? AND project_id = ?',
           [snmp_macro_id, req.projectId]
         );
-        if (macroRows.length > 0) {
-          credentialMacroId = macroRows[0].id;
-          if (!snmpCommunity && macroRows[0].community_string) snmpCommunity = macroRows[0].community_string;
-        }
+        if (macroRows.length > 0) credentialMacroId = macroRows[0].id;
       }
 
       const [insertResult] = await conn.query(
-        `INSERT INTO devices (project_id, hostname, ip, mac, type, snmp_community, credential_macro_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [req.projectId, hostname || null, ip || null, mac || null, deviceType, snmpCommunity, credentialMacroId]
+        `INSERT INTO devices (project_id, hostname, ip, mac, type, credential_macro_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [req.projectId, hostname || null, ip || null, mac || null, deviceType, credentialMacroId]
       );
       const deviceId = insertResult.insertId;
 

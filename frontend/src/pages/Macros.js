@@ -55,10 +55,10 @@ export default function MacrosPage() {
     }
   };
 
-  const secretFor = (macro) => {
-    if (macro.type === 'snmp_v1' || macro.type === 'snmp_v2c') return macro.community_string || '';
-    return macro.username || '';
-  };
+  // Community strings are write-only (the API returns has_community_string,
+  // never the value), so SNMP v1/v2c rows only show whether one is stored.
+  const isCommunityType = (macro) => macro.type === 'snmp_v1' || macro.type === 'snmp_v2c';
+  const secretFor = (macro) => (isCommunityType(macro) ? '' : macro.username || '');
 
   return (
     <div className="macros-page">
@@ -91,7 +91,11 @@ export default function MacrosPage() {
                 <td>{macro.name}</td>
                 <td>{MACRO_TYPE_LABELS[macro.type] || macro.type}</td>
                 <td className="macros-secret-cell">
-                  <span className="macros-secret-value">{revealed ? secret || '—' : secret ? '••••••••' : '—'}</span>
+                  <span className="macros-secret-value">
+                    {isCommunityType(macro)
+                      ? macro.has_community_string ? '•••••••• (stored)' : '—'
+                      : revealed ? secret || '—' : secret ? '••••••••' : '—'}
+                  </span>
                   {secret && (
                     <button
                       type="button"

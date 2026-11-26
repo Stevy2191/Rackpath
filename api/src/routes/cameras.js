@@ -1,6 +1,21 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { logActivity } = require('../services/activityLog');
+const { encryptSecret, redactSecrets } = require('../utils/secrets');
+
+const SECRET_FIELDS = ['stream_password'];
+const redact = (row) => redactSecrets(row, SECRET_FIELDS);
+
+// Value to store for a field. stream_password is encrypted; on update an
+// omitted or empty value keeps the stored one and an explicit null clears it.
+function fieldValue(field, body, { isUpdate }) {
+  const value = body[field];
+  if (SECRET_FIELDS.includes(field)) {
+    if (isUpdate && (value === undefined || value === '')) return undefined;
+    return encryptSecret(value);
+  }
+  return value !== undefined && value !== '' ? value : null;
+}
 
 const router = express.Router();
 
@@ -26,7 +41,7 @@ router.get('/projects/:projectId/cameras', async (req, res, next) => {
     const [rows] = await pool.query('SELECT * FROM project_cameras WHERE project_id = ? ORDER BY name ASC', [
       req.params.projectId,
     ]);
-    res.json(rows);
+    res.json(rows.map(redact));
   } catch (err) {
     next(err);
   }
@@ -41,7 +56,7 @@ router.post('/projects/:projectId/cameras', async (req, res, next) => {
     const values = FIELDS.map((field) => {
       if (field === 'name') return name.trim();
       if (field === 'status') return req.body.status || 'unknown';
-      return req.body[field] !== undefined && req.body[field] !== '' ? req.body[field] : null;
+      return fieldValue(field, req.body, { isUpdate: false });
     });
 
     const [result] = await pool.query(
@@ -50,7 +65,7 @@ router.post('/projects/:projectId/cameras', async (req, res, next) => {
     );
     const [rows] = await pool.query('SELECT * FROM project_cameras WHERE id = ?', [result.insertId]);
     logActivity(req.params.projectId, req.user.id, 'camera.created', rows[0].name);
-    res.status(201).json(rows[0]);
+    res.status(201).json(redact(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -62,20 +77,26 @@ router.put('/cameras/:id', async (req, res, next) => {
     const { name } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
 
-    const values = FIELDS.map((field) => {
-      if (field === 'name') return name.trim();
-      if (field === 'status') return req.body.status || 'unknown';
-      return req.body[field] !== undefined && req.body[field] !== '' ? req.body[field] : null;
-    });
+    const assignments = [];
+    const values = [];
+    for (const field of FIELDS) {
+      let value;
+      if (field === 'name') value = name.trim();
+      else if (field === 'status') value = req.body.status || 'unknown';
+      else value = fieldValue(field, req.body, { isUpdate: true });
+      if (value === undefined) continue; // secret left unchanged
+      assignments.push(`${field} = ?`);
+      values.push(value);
+    }
 
     const [result] = await pool.query(
-      `UPDATE project_cameras SET ${FIELDS.map((f) => `${f} = ?`).join(', ')} WHERE id = ? AND project_id = ?`,
+      `UPDATE project_cameras SET ${assignments.join(', ')} WHERE id = ? AND project_id = ?`,
       [...values, req.params.id, req.projectId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Camera not found' });
 
     const [rows] = await pool.query('SELECT * FROM project_cameras WHERE id = ?', [req.params.id]);
-    res.json(rows[0]);
+    res.json(redact(rows[0]));
   } catch (err) {
     next(err);
   }

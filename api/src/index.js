@@ -28,6 +28,7 @@ const locationsRouter = require('./routes/locations');
 const { requireAuth } = require('./auth/middleware');
 const { projectScope } = require('./middleware/projectScope');
 const { migrate } = require('./db/migrate');
+const { encryptStoredSecrets } = require('./db/encryptSecrets');
 const { startAutoSync } = require('./integrations/autoSync');
 
 const app = express();
@@ -100,7 +101,10 @@ app.use((err, req, res, next) => {
 });
 
 migrate()
-  .catch((err) => console.error('Migration failed:', err))
+  // Encrypt any credentials still stored in plain text (or the old
+  // integration format). Only runs once migrations have succeeded.
+  .then(() => encryptStoredSecrets())
+  .catch((err) => console.error('Database startup step failed:', err))
   .finally(() => {
     app.listen(PORT, () => {
       console.log(`Rackpath API listening on port ${PORT}`);

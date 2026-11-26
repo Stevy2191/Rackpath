@@ -47,7 +47,6 @@ CREATE TABLE IF NOT EXISTS devices (
     ip              VARCHAR(45)         NULL,
     mac             VARCHAR(17)         NULL,
     type            VARCHAR(64)         NULL,
-    snmp_community  VARCHAR(128)        NULL,
     notes           TEXT                NULL,
     icon_color      VARCHAR(16)         NULL,
     text_color      VARCHAR(16)         NULL,

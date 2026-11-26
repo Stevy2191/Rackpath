@@ -51,7 +51,6 @@ function buildDeviceNodeData(node) {
     ip: linked ? node.ip : null,
     mac: linked ? node.mac : null,
     type: linked ? node.device_type : node.node_type,
-    snmp_community: linked ? node.snmp_community : null,
     notes: linked ? node.notes : null,
     icon_color: linked ? node.device_icon_color : node.node_icon_color,
     text_color: linked ? node.device_text_color : node.node_text_color,

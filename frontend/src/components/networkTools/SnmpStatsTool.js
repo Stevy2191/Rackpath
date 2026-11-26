@@ -69,19 +69,21 @@ export default function SnmpStatsTool() {
     if (!macroId) return;
     const macro = macros.find((m) => String(m.id) === macroId);
     if (!macro) return;
+    // The macro's secrets stay on the server: the request carries macro_id
+    // and the API fills in the community string / v3 passwords.
     if (macro.type === 'snmp_v1') {
       setVersion('1');
-      setCommunity(macro.community_string || 'public');
+      setCommunity('');
     } else if (macro.type === 'snmp_v2c') {
       setVersion('2c');
-      setCommunity(macro.community_string || 'public');
+      setCommunity('');
     } else if (macro.type === 'snmp_v3') {
       setVersion('v3');
       setV3User(macro.username || '');
       setV3AuthProto(macro.auth_protocol || 'MD5');
-      setV3AuthPass(macro.auth_password || '');
+      setV3AuthPass('');
       setV3PrivProto(macro.priv_protocol || 'AES');
-      setV3PrivPass(macro.priv_password || '');
+      setV3PrivPass('');
     }
   };
 
@@ -116,6 +118,7 @@ export default function SnmpStatsTool() {
         v3_priv_protocol: version === 'v3' ? v3PrivProto : undefined,
         v3_priv_password: version === 'v3' ? v3PrivPass : undefined,
         stats: selectedStats,
+        macro_id: selectedMacro || undefined,
       };
       const res = await client.post('/tools/snmp-stats', payload);
       setResult(res.data);
@@ -195,7 +198,7 @@ export default function SnmpStatsTool() {
               className="nt-input"
               value={community}
               onChange={(e) => { setCommunity(e.target.value); setSelectedMacro(''); }}
-              placeholder="public"
+              placeholder={selectedMacro ? '(from macro)' : 'public'}
               spellCheck={false}
             />
           </div>
@@ -234,7 +237,7 @@ export default function SnmpStatsTool() {
                   className="nt-input"
                   value={v3AuthPass}
                   onChange={(e) => { setV3AuthPass(e.target.value); setSelectedMacro(''); }}
-                  placeholder="Auth password"
+                  placeholder={selectedMacro ? '(from macro)' : 'Auth password'}
                 />
               </div>
             </div>
@@ -258,7 +261,7 @@ export default function SnmpStatsTool() {
                   className="nt-input"
                   value={v3PrivPass}
                   onChange={(e) => { setV3PrivPass(e.target.value); setSelectedMacro(''); }}
-                  placeholder="Privacy password"
+                  placeholder={selectedMacro ? '(from macro)' : 'Privacy password'}
                 />
               </div>
             </div>

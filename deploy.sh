@@ -297,6 +297,13 @@ if [ -z "$(env_value SCANNER_TOKEN)" ]; then
   echo "Generated a scanner token."
 fi
 
+# Key for credentials stored in the database. Generated once and never
+# replaced: changing it makes every stored password unreadable.
+if [ -z "$(env_value RACKPATH_ENCRYPTION_KEY)" ]; then
+  set_env_value RACKPATH_ENCRYPTION_KEY "$(generate_secret)"
+  echo "Generated a credential encryption key. Back up .env: without this key, stored credentials can't be recovered."
+fi
+
 set_env_value RACKPATH_JWT_SECRET "$jwt_secret"
 set_env_value FRONTEND_PORT "$frontend_port"
 set_env_value API_PORT "$api_port"

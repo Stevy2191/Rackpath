@@ -39,9 +39,14 @@ PING_WORKERS = int(os.environ.get('SCAN_PING_WORKERS', 128))
 ENRICH_WORKERS = int(os.environ.get('SCAN_ENRICH_WORKERS', 16))
 
 # Shared secret the API sends in X-Scanner-Token. The scanner listens on the
-# host network, so every request except /health must carry it. If it is unset
-# the scanner refuses all work rather than running unauthenticated.
+# host network, so every request except /health must carry it. The scanner
+# refuses to start without one.
 SCANNER_TOKEN = os.environ.get('SCANNER_TOKEN', '')
+if len(SCANNER_TOKEN) < 32:
+    raise SystemExit(
+        'SCANNER_TOKEN must be set (at least 32 characters). '
+        'Generate one with: openssl rand -hex 32'
+    )
 
 # Base URL for result callbacks. Built here rather than taken from the request
 # so a caller can't make the scanner POST to arbitrary hosts.
@@ -59,16 +64,13 @@ _HOSTNAME_RE = re.compile(
 # In-memory job status tracking, keyed by job_id (as provided by the API).
 jobs = {}
 
-if not SCANNER_TOKEN:
-    app.logger.warning('SCANNER_TOKEN is not set: all requests will be rejected.')
-
 
 @app.before_request
 def require_scanner_token():
     if request.path == '/health':
         return None
     supplied = request.headers.get('X-Scanner-Token', '')
-    if not SCANNER_TOKEN or not hmac.compare_digest(supplied.encode(), SCANNER_TOKEN.encode()):
+    if not hmac.compare_digest(supplied.encode(), SCANNER_TOKEN.encode()):
         return jsonify({"error": "unauthorized"}), 401
     return None
 
@@ -336,7 +338,6 @@ def _enrich_host(ip, snmp_community, local_arp, mdns_map, opts):
         "netbios_name": nb.get("netbios_name"),
         "raw": {
             "snmp_descr": snmp_info.get("sysDescr") if snmp_info else None,
-            "snmp_community": snmp_community if snmp_info else None,
             "workgroup": nb.get("workgroup"),
             "mdns_services": mdns_services,
             "neighbors": neighbors,
