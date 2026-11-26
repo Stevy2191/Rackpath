@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 
@@ -32,11 +33,29 @@ const { startAutoSync } = require('./integrations/autoSync');
 const app = express();
 const PORT = process.env.API_PORT || 3000;
 
-// `origin: true` reflects the request's Origin header back, which (combined
-// with `credentials: true`) is required for browsers to send/receive the
-// httpOnly session cookie on cross-origin requests (e.g. local dev where the
-// frontend and API run on different ports).
-app.use(cors({ origin: true, credentials: true }));
+// Requests arrive through the frontend's nginx on the compose network, so
+// trust X-Forwarded-For from private addresses to get the real client IP
+// (used by the login rate limiter).
+app.set('trust proxy', 'loopback, uniquelocal');
+app.disable('x-powered-by');
+
+app.use(helmet({
+  // The API serves JSON and uploaded images, never pages, so lock it down.
+  contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+  // Uploaded images are loaded by the UI with <img>; keep them same-site.
+  crossOriginResourcePolicy: { policy: 'same-site' },
+}));
+
+// The UI is served same-origin by rackpath-frontend, so CORS is off unless
+// CORS_ORIGINS lists specific origins (e.g. http://localhost:3000 for frontend
+// development). Never reflect arbitrary origins with credentials.
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+if (corsOrigins.length > 0) {
+  app.use(cors({ origin: corsOrigins, credentials: true }));
+}
 app.use(cookieParser());
 app.use(express.json());
 app.use(morgan('combined'));
@@ -69,9 +88,15 @@ app.use('/api/tools', toolsRouter);
 app.use('/api', locationsRouter);
 
 // Fallback error handler
+// Client errors (4xx) keep their message; server errors are logged but not
+// echoed back, since they can carry SQL or internal details.
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) {
+    return res.status(status).json({ error: 'Internal server error' });
+  }
+  return res.status(status).json({ error: err.expose === false ? 'Bad request' : err.message || 'Bad request' });
 });
 
 migrate()

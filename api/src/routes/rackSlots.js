@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const multer = require('multer');
+const { imageUpload, serveUploadedImage } = require('../utils/uploadedImages');
 const pool = require('../db/pool');
 const { logActivity } = require('../services/activityLog');
 const { parseRowOutletGroups, parseRowsOutletGroups, sumOutletGroups, parseRowRuntimeCurves, parseRowsRuntimeCurves } = require('../utils/outletGroups');
@@ -46,24 +46,7 @@ function resolveSlotWidthAndPosition(slotWidth, slotPosition) {
 const SLOT_IMAGE_DIR = path.join('/uploads', 'rack-slots');
 fs.mkdirSync(SLOT_IMAGE_DIR, { recursive: true });
 
-const slotImageStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, SLOT_IMAGE_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-  },
-});
-const slotImageUpload = multer({
-  storage: slotImageStorage,
-  limits: { fileSize: 2 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PNG, JPEG, WEBP, and SVG files are allowed'));
-    }
-  },
-});
+const slotImageUpload = imageUpload(SLOT_IMAGE_DIR, ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'], 'Only PNG, JPEG, WEBP, and SVG files are allowed');
 
 // Map mounted_face to the legacy side/front_back values for collision compat.
 function mountedFaceToLegacy(mounted_face) {
@@ -230,12 +213,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // GET /api/rack-slots/images/file/:filename - unauthenticated (see auth middleware)
-router.get('/images/file/:filename', (req, res) => {
-  const filename = path.basename(req.params.filename);
-  res.sendFile(path.join(SLOT_IMAGE_DIR, filename), (err) => {
-    if (err) res.status(404).end();
-  });
-});
+router.get('/images/file/:filename', serveUploadedImage(SLOT_IMAGE_DIR));
 
 // POST /api/rack-slots
 router.post('/', async (req, res, next) => {

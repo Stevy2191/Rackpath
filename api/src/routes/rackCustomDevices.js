@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const multer = require('multer');
+const { imageUpload: createImageUpload, serveUploadedImage } = require('../utils/uploadedImages');
 const pool = require('../db/pool');
 
 const router = express.Router();
@@ -9,25 +9,7 @@ const router = express.Router();
 const IMAGE_UPLOAD_DIR = path.join('/uploads', 'rack-devices');
 fs.mkdirSync(IMAGE_UPLOAD_DIR, { recursive: true });
 
-const imageStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, IMAGE_UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-  },
-});
-
-const imageUpload = multer({
-  storage: imageStorage,
-  limits: { fileSize: 2 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PNG, JPEG, WEBP, and SVG files are allowed'));
-    }
-  },
-});
+const imageUpload = createImageUpload(IMAGE_UPLOAD_DIR, ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'], 'Only PNG, JPEG, WEBP, and SVG files are allowed');
 
 // GET /api/rack-custom-devices - list custom catalog devices for the project
 router.get('/', async (req, res, next) => {
@@ -78,12 +60,7 @@ router.post('/', (req, res, next) => {
 // GET /api/rack-custom-devices/images/file/:filename - serve an uploaded
 // faceplate image. Left unauthenticated (see auth middleware) since <img>
 // tags can't send a Bearer token.
-router.get('/images/file/:filename', (req, res) => {
-  const filename = path.basename(req.params.filename);
-  res.sendFile(path.join(IMAGE_UPLOAD_DIR, filename), (err) => {
-    if (err) res.status(404).end();
-  });
-});
+router.get('/images/file/:filename', serveUploadedImage(IMAGE_UPLOAD_DIR));
 
 // DELETE /api/rack-custom-devices/:id - remove a custom catalog device
 router.delete('/:id', async (req, res, next) => {

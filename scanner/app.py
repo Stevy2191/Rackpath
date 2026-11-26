@@ -10,6 +10,7 @@ frontend can stream rows over SSE in real time.
 """
 
 import concurrent.futures
+import hmac
 import ipaddress
 import os
 import re
@@ -37,8 +38,39 @@ DEFAULT_SNMP_COMMUNITY = os.environ.get('SNMP_COMMUNITY', 'public')
 PING_WORKERS = int(os.environ.get('SCAN_PING_WORKERS', 128))
 ENRICH_WORKERS = int(os.environ.get('SCAN_ENRICH_WORKERS', 16))
 
+# Shared secret the API sends in X-Scanner-Token. The scanner listens on the
+# host network, so every request except /health must carry it. If it is unset
+# the scanner refuses all work rather than running unauthenticated.
+SCANNER_TOKEN = os.environ.get('SCANNER_TOKEN', '')
+
+# Base URL for result callbacks. Built here rather than taken from the request
+# so a caller can't make the scanner POST to arbitrary hosts.
+API_PUBLIC_URL = os.environ.get('API_PUBLIC_URL', 'http://localhost:3010').rstrip('/')
+
+# Largest number of addresses one scan may expand to (a /16).
+MAX_SCAN_HOSTS = 65536
+
+# Hostnames only; never starting with '-' so nmap can't read a target as a flag.
+_HOSTNAME_RE = re.compile(
+    r'^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
+    r'(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$'
+)
+
 # In-memory job status tracking, keyed by job_id (as provided by the API).
 jobs = {}
+
+if not SCANNER_TOKEN:
+    app.logger.warning('SCANNER_TOKEN is not set: all requests will be rejected.')
+
+
+@app.before_request
+def require_scanner_token():
+    if request.path == '/health':
+        return None
+    supplied = request.headers.get('X-Scanner-Token', '')
+    if not SCANNER_TOKEN or not hmac.compare_digest(supplied.encode(), SCANNER_TOKEN.encode()):
+        return jsonify({"error": "unauthorized"}), 401
+    return None
 
 
 @app.route('/health', methods=['GET'])
@@ -80,13 +112,23 @@ def start_scan():
     job_id = data.get('job_id')
     target_subnet = data.get('target_subnet')
     snmp_community = data.get('snmp_community') or DEFAULT_SNMP_COMMUNITY
-    callback_url = data.get('callback_url')
-    host_callback_url = data.get('host_callback_url')
-    progress_callback_url = data.get('progress_callback_url')
     options = _resolve_options(data.get('options'))
 
-    if not target_subnet:
+    if not target_subnet or not isinstance(target_subnet, str):
         return jsonify({"error": "target_subnet is required"}), 400
+    try:
+        job_id = int(job_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "job_id must be an integer"}), 400
+    try:
+        _expand_targets(target_subnet)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    base = f"{API_PUBLIC_URL}/api/scans/{job_id}"
+    callback_url = f"{base}/results"
+    host_callback_url = f"{base}/host"
+    progress_callback_url = f"{base}/progress"
 
     jobs[job_id] = {"status": "running", "target_subnet": target_subnet}
 
@@ -310,21 +352,36 @@ def _expand_targets(target_subnet):
 
     Accepts a single address, a CIDR, or a comma/whitespace/newline-separated
     list of addresses and CIDRs (the "Multiple IPs" target type). Each CIDR is
-    expanded to its hosts; duplicates are removed while preserving order."""
+    expanded to its hosts; duplicates are removed while preserving order.
+
+    Raises ValueError for anything that isn't an IP, CIDR or hostname, or when
+    the targets expand to more than MAX_SCAN_HOSTS addresses."""
     tokens = re.split(r'[\s,]+', target_subnet.strip())
     hosts = []
     seen = set()
+    total = 0
     for token in tokens:
         if not token:
             continue
         if '/' in token:
             try:
                 network = ipaddress.ip_network(token, strict=False)
-                expanded = [str(ip) for ip in network.hosts()]
             except ValueError:
-                expanded = []
+                raise ValueError(f"Invalid CIDR: {token}") from None
+            total += network.num_addresses
+            if total > MAX_SCAN_HOSTS:
+                raise ValueError(f"Scan targets expand to more than {MAX_SCAN_HOSTS} addresses")
+            expanded = [str(ip) for ip in network.hosts()]
         else:
-            expanded = [token]
+            try:
+                expanded = [str(ipaddress.ip_address(token))]
+            except ValueError:
+                if not _HOSTNAME_RE.match(token):
+                    raise ValueError(f"Invalid target: {token}") from None
+                expanded = [token]
+            total += 1
+            if total > MAX_SCAN_HOSTS:
+                raise ValueError(f"Scan targets expand to more than {MAX_SCAN_HOSTS} addresses")
         for ip in expanded:
             if ip not in seen:
                 seen.add(ip)
@@ -450,7 +507,8 @@ def _post_callback(callback_url, payload):
     if not callback_url:
         return
     try:
-        requests.post(callback_url, json=payload, timeout=30)
+        requests.post(callback_url, json=payload, timeout=30,
+                      headers={'X-Scanner-Token': SCANNER_TOKEN})
     except requests.RequestException:
         pass
 

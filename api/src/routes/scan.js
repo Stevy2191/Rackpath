@@ -3,6 +3,8 @@ const axios = require('axios');
 const pool = require('../db/pool');
 const sse = require('../sse/hub');
 const { getSystemInfo } = require('../services/snmpScan');
+const { scannerHeaders } = require('../utils/scannerAuth');
+const { validateScanTarget, isIpInTarget } = require('../utils/scanTargets');
 
 const router = express.Router();
 
@@ -87,7 +89,8 @@ async function enrichResultWithSnmp(jobId, resultId, ip) {
 }
 
 const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:5001';
-const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://rackpath-api:${process.env.API_PORT || 3000}`;
+// Callback URLs are built by the scanner itself from its own API_PUBLIC_URL,
+// never taken from a request, so the scanner can't be pointed at other hosts.
 
 // MariaDB stores JSON columns as LONGTEXT, so the mysql2 driver hands them
 // back as raw strings rather than parsed values. Parse defensively so callers
@@ -269,6 +272,8 @@ router.post('/:id/rescan', async (req, res, next) => {
     if (job.status === 'pending' || job.status === 'running') {
       return res.status(409).json({ error: 'Scan already running' });
     }
+    const targetError = validateScanTarget(job.target_subnet);
+    if (targetError) return res.status(400).json({ error: targetError });
 
     await pool.query('DELETE FROM scan_results WHERE scan_job_id = ?', [jobId]);
     await pool.query(
@@ -287,10 +292,7 @@ router.post('/:id/rescan', async (req, res, next) => {
         target_subnet: job.target_subnet,
         snmp_community: job.snmp_community || process.env.SNMP_COMMUNITY || 'public',
         options: opts || undefined,
-        callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/results`,
-        host_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/host`,
-        progress_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/progress`,
-      });
+      }, { headers: scannerHeaders() });
       await pool.query("UPDATE scan_jobs SET status = 'running' WHERE id = ?", [jobId]);
     } catch (scanErr) {
       await pool.query(
@@ -311,6 +313,8 @@ router.post('/', async (req, res, next) => {
   try {
     const { target_subnet, name, snmp_community, options } = req.body;
     if (!target_subnet) return res.status(400).json({ error: 'target_subnet is required' });
+    const targetError = validateScanTarget(target_subnet);
+    if (targetError) return res.status(400).json({ error: targetError });
 
     const targetType = (options && options.target_type) || null;
     const scanProfile = (options && options.profile) || null;
@@ -336,10 +340,7 @@ router.post('/', async (req, res, next) => {
         target_subnet,
         snmp_community: snmp_community || process.env.SNMP_COMMUNITY || 'public',
         options: options || undefined,
-        callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/results`,
-        host_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/host`,
-        progress_callback_url: `${API_PUBLIC_URL}/api/scans/${jobId}/progress`,
-      });
+      }, { headers: scannerHeaders() });
 
       await pool.query("UPDATE scan_jobs SET status = 'running' WHERE id = ?", [jobId]);
     } catch (scanErr) {
@@ -364,7 +365,7 @@ router.post('/:id/host', async (req, res, next) => {
     const jobId = req.params.id;
     const host = req.body || {};
 
-    const [jobRows] = await pool.query('SELECT id FROM scan_jobs WHERE id = ?', [jobId]);
+    const [jobRows] = await pool.query('SELECT id, target_subnet FROM scan_jobs WHERE id = ?', [jobId]);
     if (jobRows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
 
     const openPorts = host.open_ports != null ? JSON.stringify(host.open_ports) : null;
@@ -395,7 +396,9 @@ router.post('/:id/host', async (req, res, next) => {
 
     // Kick off SNMP enrichment in the background (when the job requested it) so
     // the row gets accurate OS/device-type data without blocking scan progress.
-    if ((host.status || 'up') !== 'down' && host.ip) {
+    // Only for addresses the job actually targeted, so credentials are never
+    // sent to a host the scan wasn't pointed at.
+    if ((host.status || 'up') !== 'down' && host.ip && isIpInTarget(host.ip, jobRows[0].target_subnet)) {
       enrichResultWithSnmp(jobId, result.insertId, host.ip).catch((enrichErr) =>
         console.error(`SNMP enrichment failed for ${host.ip}:`, enrichErr.message)
       );

@@ -77,6 +77,26 @@ router.put('/integrations/:id', async (req, res, next) => {
       return res.status(400).json({ error: `platform must be one of: ${PLATFORMS.join(', ')}` });
     }
 
+    // Pointing an integration at a new host must not reuse the stored
+    // credentials, or anyone who can edit the URL could send them to a server
+    // they control. Require them to be entered again.
+    if (base_url !== undefined) {
+      const [current] = await pool.query(
+        `SELECT base_url, password IS NOT NULL AS has_password, api_key IS NOT NULL AS has_api_key
+         FROM project_integrations WHERE id = ? AND project_id = ?`,
+        [req.params.id, req.projectId]
+      );
+      if (current.length === 0) return res.status(404).json({ error: 'Integration not found' });
+      const urlChanged = String(base_url).trim() !== (current[0].base_url || '');
+      const keepsPassword = current[0].has_password && password === undefined;
+      const keepsApiKey = current[0].has_api_key && api_key === undefined;
+      if (urlChanged && (keepsPassword || keepsApiKey)) {
+        return res.status(400).json({
+          error: 'Re-enter the password or API key when changing the URL.',
+        });
+      }
+    }
+
     const updates = [];
     const values = [];
 

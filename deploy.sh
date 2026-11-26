@@ -266,11 +266,35 @@ fi
 # doesn't discard passwords or anything else hand-edited.
 # ---------------------------------------------------------------------------
 
+fresh_env=false
 if [ -f .env ]; then
   log "Updating .env"
 else
   log "Writing .env"
-  cp .env.example .env || die "Failed to create .env from .env.example"
+  # Created owner-only before any secret goes into it.
+  (umask 077 && cp .env.example .env) || die "Failed to create .env from .env.example"
+  fresh_env=true
+fi
+chmod 600 .env 2>/dev/null || warn "Could not restrict .env permissions to owner-only (chmod 600)."
+
+# Database passwords: a fresh install gets random ones instead of the
+# changeme_* placeholders. An existing install keeps its values, because
+# MariaDB only reads them when the data volume is first created, so changing
+# them here would lock the API out of its own database.
+if [ "$fresh_env" = true ]; then
+  db_app_password=$(generate_secret)
+  set_env_value MYSQL_ROOT_PASSWORD "$(generate_secret)"
+  set_env_value MYSQL_PASSWORD "$db_app_password"
+  set_env_value DB_PASSWORD "$db_app_password"
+  echo "Generated random database passwords."
+elif env_value MYSQL_ROOT_PASSWORD | grep -q '^changeme' || env_value MYSQL_PASSWORD | grep -q '^changeme'; then
+  warn "Your .env still uses the default changeme_* database passwords. The database is only published on 127.0.0.1, but you should change them (see README: Changing the database passwords)."
+fi
+
+# Shared secret between the API and the scanner. Generated once and kept.
+if [ -z "$(env_value SCANNER_TOKEN)" ]; then
+  set_env_value SCANNER_TOKEN "$(generate_secret)"
+  echo "Generated a scanner token."
 fi
 
 set_env_value RACKPATH_JWT_SECRET "$jwt_secret"

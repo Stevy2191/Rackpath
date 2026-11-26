@@ -1,12 +1,16 @@
 # ---- Build stage ----
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+# npm ci installs exactly the locked (audited) dependency versions.
+RUN npm ci
 
 COPY . .
+# Emit the webpack runtime as a file instead of an inline <script>, so the
+# Content-Security-Policy in nginx.conf can forbid inline scripts.
+ENV INLINE_RUNTIME_CHUNK=false
 RUN npm run build
 
 # ---- Serve stage ----

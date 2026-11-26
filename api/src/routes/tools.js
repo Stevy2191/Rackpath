@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const { scannerHeaders } = require('../utils/scannerAuth');
 
 const router = express.Router();
 
@@ -9,7 +10,7 @@ const SCANNER_URL = process.env.SCANNER_URL || 'http://rackpath-scanner:5001';
 // involved, just forward the body and relay the scanner's response/error.
 async function proxyToScanner(req, res, scannerPath, timeout = 60000) {
   try {
-    const response = await axios.post(`${SCANNER_URL}${scannerPath}`, req.body, { timeout });
+    const response = await axios.post(`${SCANNER_URL}${scannerPath}`, req.body, { timeout, headers: scannerHeaders() });
     res.json(response.data);
   } catch (err) {
     if (err.response) {

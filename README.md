@@ -140,9 +140,13 @@ During setup you'll be prompted for:
   rather than afterwards.
 - **JWT signing secret** - leave blank to auto-generate a secure random value (recommended)
 
+On a fresh install it also generates random database passwords and a
+scanner token (`SCANNER_TOKEN`), and restricts `.env` to owner-only
+permissions.
+
 Re-running the script is safe: it offers your current ports as the defaults
-and keeps the existing JWT secret and database password rather than
-resetting them.
+and keeps the existing JWT secret, database passwords and scanner token
+rather than resetting them.
 
 To install without a terminal — a `curl ... | bash` pipe has none, and
 neither does a provisioning script — set any of these first and the matching
@@ -173,8 +177,10 @@ file:
    cp .env.example .env
    ```
 
-   At minimum, set `RACKPATH_JWT_SECRET` to a long random value
-   (`openssl rand -hex 32`).
+   At minimum, set `RACKPATH_JWT_SECRET` and `SCANNER_TOKEN` to long random
+   values (`openssl rand -hex 32`), and replace the `changeme_*` database
+   passwords **before the first start** (MariaDB only reads them when it
+   creates its data volume). Then restrict the file: `chmod 600 .env`.
    See the comments in `.env.example` for what every variable controls.
 
 3. Start the stack (pulls pre-built images from GHCR by default):
@@ -245,9 +251,10 @@ compose network are fixed: the API always listens on 3010 there, because
 the frontend image bakes in an nginx config that proxies to
 `rackpath-api:3010`.
 
-`DB_PORT` only matters if you want to reach MariaDB from outside Docker (a
-GUI client, a backup job); the API talks to it over the compose network
-either way. To stop publishing it at all, delete the `ports:` block from
+`DB_PORT` is published on `127.0.0.1` only, so MariaDB is reachable from
+the Docker host itself (a GUI client over an SSH tunnel, a backup job) but
+not from the network. The API talks to it over the compose network either
+way. To stop publishing it at all, delete the `ports:` block from
 `rackpath-db` in `docker-compose.yml`.
 
 `rackpath-scanner` runs with `network_mode: host` so it can perform ping
@@ -255,6 +262,41 @@ sweeps, ARP probes, and SNMP/LLDP discovery directly on your LAN. Because of
 that, `SCANNER_PORT` is a real port on the host rather than a published
 mapping. `SCAN_INTERFACE` should be set to the host network interface you
 want scans to run on (default `eth0`).
+
+## 🔒 Security
+
+- **Scanner token.** The scanner listens on the host network, so it only
+  accepts requests carrying `SCANNER_TOKEN`, and the API only accepts scan
+  results carrying it. Both containers read the same value from `.env`; if
+  it's unset, the JWT secret is used instead.
+- **First login.** Until the default `admin` password is changed, the API
+  refuses every request except changing the password.
+- **Logins** are limited to 10 failed attempts per username (and 50 per IP)
+  every 15 minutes. Changing a password signs out every other session.
+- **HTTPS.** If you put Rackpath behind a TLS reverse proxy, set
+  `COOKIE_SECURE=true` so the session cookie is only sent over HTTPS.
+- **Cross-origin access** to the API is off by default. Set `CORS_ORIGINS`
+  only if you run the frontend from a different origin (e.g.
+  `http://localhost:3000` during frontend development).
+
+### Changing the database passwords
+
+Installs made before random passwords were generated still use the
+`changeme_*` defaults. Since MariaDB stores them in its data volume, change
+them in the database first, then in `.env`:
+
+```bash
+docker compose exec rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD"'
+```
+
+```sql
+ALTER USER 'root'@'%' IDENTIFIED BY 'new-root-password';
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'new-root-password';
+ALTER USER 'rackpath'@'%' IDENTIFIED BY 'new-app-password';
+```
+
+Then set `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` and `DB_PASSWORD` to the new
+values in `.env` and run `docker compose up -d`.
 
 ## 📖 Usage
 
@@ -293,7 +335,8 @@ between projects, create new ones, and rename or delete existing ones. The
 ### Subnet scanner
 
 Each scan can target a whole subnet (CIDR), a single IP, or a list of
-multiple IPs, using one of these scan types:
+multiple IPs (up to 65,536 addresses in total, i.e. a /16), using one of
+these scan types:
 
 - **Discovery** (default) — ping sweep, hostname, and MAC vendor lookup
 - **SNMP Scan** — discovery plus SNMP system info (optionally with a

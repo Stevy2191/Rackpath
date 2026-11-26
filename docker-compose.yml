@@ -9,7 +9,10 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "${DB_PORT:-3306}:3306"
+      # Published on localhost only, so the database isn't reachable from the
+      # network. Change to "${DB_PORT:-3306}:3306" only if you really need
+      # remote access, and change the default passwords first.
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
     volumes:
       - rackpath-db-data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -45,6 +48,15 @@ services:
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:${API_PORT:-3010}}
       SNMP_COMMUNITY: ${SNMP_COMMUNITY}
       RACKPATH_JWT_SECRET: ${RACKPATH_JWT_SECRET}
+      # Shared secret for API <-> scanner calls. Falls back to the JWT secret
+      # for older .env files that predate SCANNER_TOKEN.
+      SCANNER_TOKEN: ${SCANNER_TOKEN:-${RACKPATH_JWT_SECRET}}
+      # Comma-separated browser origins allowed to call the API cross-origin.
+      # Empty (the default) is right when the UI is served by rackpath-frontend.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Set to true when Rackpath is served over HTTPS so the session cookie
+      # is marked Secure.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports:
       # Host port is configurable; container port is not (see API_PORT above).
       - "${API_PORT:-3010}:3010"
@@ -65,6 +77,9 @@ services:
       - NET_RAW
     environment:
       SCANNER_PORT: ${SCANNER_PORT:-5001}
+      SCANNER_TOKEN: ${SCANNER_TOKEN:-${RACKPATH_JWT_SECRET}}
+      # Where the scanner posts results back to; must carry API_PORT.
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:${API_PORT:-3010}}
       SNMP_COMMUNITY: ${SNMP_COMMUNITY}
       SCAN_INTERFACE: ${SCAN_INTERFACE}
 

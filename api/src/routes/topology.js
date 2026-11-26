@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const multer = require('multer');
+const { imageUpload, serveUploadedImage } = require('../utils/uploadedImages');
 const pool = require('../db/pool');
 const { logActivity } = require('../services/activityLog');
 
@@ -37,25 +37,7 @@ function isTableMissing(err) {
 const ICON_UPLOAD_DIR = path.join('/uploads', 'topology-icons');
 fs.mkdirSync(ICON_UPLOAD_DIR, { recursive: true });
 
-const iconStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, ICON_UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-  },
-});
-
-const iconUpload = multer({
-  storage: iconStorage,
-  limits: { fileSize: 2 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'image/png' || file.mimetype === 'image/svg+xml') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PNG and SVG files are allowed'));
-    }
-  },
-});
+const iconUpload = imageUpload(ICON_UPLOAD_DIR, ['image/png', 'image/svg+xml'], 'Only PNG and SVG files are allowed');
 
 // GET /api/topology - canvas nodes (device-linked or standalone), with position
 router.get('/', async (req, res, next) => {
@@ -882,12 +864,7 @@ router.post('/icons', (req, res, next) => {
 // GET /api/topology/icons/file/:filename - serve a custom icon's image data.
 // Left unauthenticated (see auth middleware) since <img> tags can't send a
 // Bearer token.
-router.get('/icons/file/:filename', (req, res) => {
-  const filename = path.basename(req.params.filename);
-  res.sendFile(path.join(ICON_UPLOAD_DIR, filename), (err) => {
-    if (err) res.status(404).end();
-  });
-});
+router.get('/icons/file/:filename', serveUploadedImage(ICON_UPLOAD_DIR));
 
 // DELETE /api/topology/icons/:id
 router.delete('/icons/:id', async (req, res, next) => {

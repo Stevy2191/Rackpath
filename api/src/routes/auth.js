@@ -1,34 +1,38 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../db/pool');
-const { signToken, COOKIE_NAME, TOKEN_TTL_MS } = require('../auth/jwt');
+const { signToken, COOKIE_NAME, COOKIE_OPTIONS, TOKEN_TTL_MS } = require('../auth/jwt');
+const loginRateLimit = require('../auth/loginRateLimit');
 
 const router = express.Router();
 
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  sameSite: 'strict',
-  path: '/',
-};
+// Compared against when the username doesn't exist, so a login for an
+// unknown user takes as long as one with a wrong password.
+const DUMMY_HASH = bcrypt.hashSync('rackpath-timing-equaliser', 12);
 
 // POST /api/auth/login - verify credentials and issue a JWT
 router.post('/login', async (req, res, next) => {
   try {
     const { username, password } = req.body || {};
-    if (!username || !password) {
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
       return res.status(400).json({ error: 'username and password are required' });
+    }
+
+    const wait = loginRateLimit.retryAfterSeconds(username, req.ip);
+    if (wait > 0) {
+      res.set('Retry-After', String(wait));
+      return res.status(429).json({ error: 'Too many failed login attempts. Try again later.' });
     }
 
     const [rows] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
     const user = rows[0];
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
 
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
+    const valid = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
+    if (!user || !valid) {
+      loginRateLimit.recordFailure(username, req.ip);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
+    loginRateLimit.recordSuccess(username);
 
     const token = signToken(user);
     res.cookie(COOKIE_NAME, token, { ...COOKIE_OPTIONS, maxAge: TOKEN_TTL_MS });
@@ -69,8 +73,11 @@ router.get('/me', async (req, res, next) => {
 router.post('/change-password', async (req, res, next) => {
   try {
     const { current_password, new_password } = req.body || {};
-    if (!current_password || !new_password) {
+    if (typeof current_password !== 'string' || typeof new_password !== 'string' || !current_password || !new_password) {
       return res.status(400).json({ error: 'current_password and new_password are required' });
+    }
+    if (new_password === current_password) {
+      return res.status(400).json({ error: 'new_password must be different from the current password' });
     }
     if (new_password.length < 8) {
       return res.status(400).json({ error: 'new_password must be at least 8 characters' });
@@ -91,6 +98,10 @@ router.post('/change-password', async (req, res, next) => {
       [passwordHash, user.id]
     );
 
+    // Changing the password invalidates every existing token (see requireAuth),
+    // so issue this session a fresh one.
+    const token = signToken({ ...user, password_hash: passwordHash });
+    res.cookie(COOKIE_NAME, token, { ...COOKIE_OPTIONS, maxAge: TOKEN_TTL_MS });
     res.status(204).send();
   } catch (err) {
     next(err);
