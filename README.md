@@ -24,7 +24,7 @@ managing a business network or a homelab.
 
 Rackpath documents your network; it doesn't probe or monitor it. It never
 scans your LAN, polls devices, or stores device logins. Inventory comes from
-you and from the systems you already run (UniFi, NetBox, LibreNMS, Zabbix).
+you and from the systems you already run (UniFi and Zabbix).
 
 Everything runs in your own environment via Docker Compose: your data never
 leaves your infrastructure.
@@ -37,7 +37,7 @@ leaves your infrastructure.
   support
 - 📋 **Device Inventory** — tags, locations, bulk editing, ports and cabling
 - 🔗 **Integrations** — import inventory from UniFi, UniFi Protect, UniFi
-  Access, Zabbix, LibreNMS and NetBox
+  Access and Zabbix
 - 🌐 **VLAN Planning** — subnet management and zone visualization
 - 📊 **Project Dashboard** — site overview with warnings and activity log
 - 📦 **Project Templates** — starter topologies for common setups
@@ -58,7 +58,7 @@ leaves your infrastructure.
 | Integrations |
 |---|
 | ![Integrations](docs/screenshots/integrations.png) |
-| Connect UniFi, Zabbix, LibreNMS, NetBox, and more |
+| Import inventory from UniFi and Zabbix |
 
 *Don't see images above? Add screenshots to [`docs/screenshots/`](docs/screenshots/) — see that folder's README for filenames.*
 
@@ -296,8 +296,8 @@ values in `.env` and run `docker compose up -d`.
   cameras (`/devices/cameras`), and access-control devices (`/devices/access`)
 - `/vlans` — VLAN and subnet planning
 - `/locations` — Locations and rooms that racks and devices are assigned to
-- `/integrations` — Import inventory from UniFi, UniFi Protect, UniFi Access,
-  Zabbix, LibreNMS and NetBox. Integrations import what exists (names,
+- `/integrations` — Import inventory from UniFi, UniFi Protect, UniFi Access
+  and Zabbix. Integrations import what exists (names,
   models, serial numbers, MAC and IP addresses), not live state such as
   online status or door locks
 

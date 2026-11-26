@@ -3,6 +3,4 @@ module.exports = {
   'unifi-protect': require('./unifi-protect'),
   'unifi-access': require('./unifi-access'),
   zabbix: require('./zabbix'),
-  librenms: require('./librenms'),
-  netbox: require('./netbox'),
 };

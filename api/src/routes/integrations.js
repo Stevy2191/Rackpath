@@ -6,7 +6,7 @@ const { encryptSecret } = require('../utils/secrets');
 
 const router = express.Router();
 
-const PLATFORMS = ['unifi', 'unifi-protect', 'unifi-access', 'zabbix', 'librenms', 'netbox'];
+const PLATFORMS = ['unifi', 'unifi-protect', 'unifi-access', 'zabbix'];
 
 // Strip encrypted credential columns from a row before sending it to the
 // frontend, replacing them with booleans indicating whether a value is set.

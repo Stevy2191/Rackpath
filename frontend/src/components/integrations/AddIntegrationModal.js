@@ -361,32 +361,6 @@ export default function AddIntegrationModal({ integration, projectId, onClose, o
             </>
           )}
 
-          {platform === 'librenms' && (
-            <>
-              <label>
-                URL
-                <input value={form.base_url} onChange={set('base_url')} placeholder="https://librenms.example.com" required />
-              </label>
-              <label>
-                API Token
-                <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
-              </label>
-            </>
-          )}
-
-          {platform === 'netbox' && (
-            <>
-              <label>
-                URL
-                <input value={form.base_url} onChange={set('base_url')} placeholder="https://netbox.example.com" required />
-              </label>
-              <label>
-                API Token
-                <input type="password" value={form.api_key} onChange={set('api_key')} placeholder={apiKeyPlaceholder} />
-              </label>
-            </>
-          )}
-
           <label className="integration-checkbox-label">
             <input type="checkbox" checked={form.auto_sync} onChange={set('auto_sync')} />
             Auto-sync
