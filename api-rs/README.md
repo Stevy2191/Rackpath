@@ -5,7 +5,7 @@ SQLite file. It is being built in phases (see
 [`docs/design/v2-data-model.md`](../docs/design/v2-data-model.md), section 21).
 The v1 Node API in `api/` keeps serving the current frontend until phase 7.
 
-**Status: phases 1, 2 and 3 complete.**
+**Status: phases 1 to 4 complete.**
 
 - **Phase 1, security core:** users, roles and scoped permissions,
   server-side sessions, two-factor login, invitations, projects, account
@@ -19,7 +19,12 @@ The v1 Node API in `api/` keeps serving the current frontend until phase 7.
   chain tracing with complete/incomplete states; checks for cables that
   can't fit or probably won't work; chain colours; VLANs and WLANs.
 
-IPAM, templates and power follow in later phases.
+- **Phase 4, IP address management:** address spaces, prefixes (nested
+  automatically), DHCP pools and other ranges, addresses on devices and
+  ports, next free address, the address grid, plan warnings, and search by
+  address or DNS name.
+
+Templates and power follow in phase 5; integrations and imports in phase 6.
 
 ## Running it
 
@@ -158,6 +163,30 @@ rackpath version
 - **Moving devices:** cables stay when a device or rack moves within its floor. Moving to another floor removes the cables to anything that isn't moving with it. Unplaced devices can't be cabled, so unplacing one removes its cables. Every removed cable is listed in the change history.
 - **Permissions:** anyone who can edit either end of a cable can add, change or remove it. Ports need edit rights on their device; VLANs and WLANs on the project.
 - **WLANs never store a passphrase**; a request that includes one is refused.
+
+## API overview (phase 4)
+
+| Area | Endpoints |
+|---|---|
+| Address spaces | `GET/POST /api/projects/{id}/spaces`, `PATCH/DELETE /api/spaces/{id}` |
+| Prefixes | `GET/POST /api/projects/{id}/prefixes`, `GET/PATCH/DELETE /api/prefixes/{id}` |
+| Next free, grid | `GET /api/prefixes/{id}/next-free?count=&range_id=`, `GET /api/prefixes/{id}/grid` |
+| Ranges | `POST /api/prefixes/{id}/ranges`, `PATCH/DELETE /api/ranges/{id}` |
+| Addresses | `GET/POST /api/projects/{id}/addresses`, `GET/PATCH/DELETE /api/addresses/{id}` |
+| Warnings | `GET /api/projects/{id}/ipam/warnings` |
+| Search | `GET /api/search?q=10.20.30` (also `kind=prefix` or `kind=address`) |
+
+**How it behaves:**
+- **IPAM records the plan; it never pings or scans.** IPv4 and IPv6 throughout.
+- **Spaces:** every project has `Default`. Add another only when the same private range really exists twice (separate routing domains).
+- **Prefixes** are written as CIDR (`10.20.30.0/24`); host bits must be zero (`10.20.30.7/24` is refused with "did you mean 10.20.30.0/24?"). Nesting is computed: a prefix's parent is the smallest prefix containing it. Each has a role, status, optional VLAN, location, gateway, DNS servers and domain.
+- **Ranges** (`dhcp_pool`, `reserved`, `static`) sit inside one prefix and don't overlap.
+- **Addresses** belong to the smallest prefix containing them. Give `port_id` (the device follows) or `device_id`, or neither for a documented spare. Omit `address` and give `prefix_id` to take the next free one. The network and broadcast addresses are refused.
+- **Next free** skips documented addresses, DHCP pools, reserved ranges, the gateway, and the network and broadcast addresses. `range_id` looks inside one range, e.g. your static range.
+- **The grid** (IPv4 up to /22) returns offsets for the network, broadcast, gateway, ranges and addresses, for drawing one cell per address.
+- **Warnings** (on save and in the warnings list): an address outside every prefix; a static address inside a DHCP pool; the same MAC on two DHCP reservations; a port's address in a prefix whose VLAN isn't on that port; a users/servers/voice/printers/IoT prefix without a VLAN; records missing from their import source.
+- **Deleting** a device or port keeps its addresses, unassigned. Deleting a prefix removes its ranges and keeps the addresses.
+- **Permissions:** prefixes on a location need edit rights on that location (otherwise on the project); ranges follow their prefix; an address on a device needs edit rights on that device (otherwise on the project). Reading is project-wide.
 
 ## Development
 

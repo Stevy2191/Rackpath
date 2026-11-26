@@ -1006,6 +1006,12 @@ pub async fn remove(
     let (count, moved) =
         hierarchy::clear_contents(&mut tx, Subtree::Device(id), body.devices).await?;
     let cables = crate::cabling::count_for_device(&mut tx, id).await?;
+    // Its IP addresses stay documented, unassigned.
+    let addresses: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM ip_addresses WHERE device_id = ?")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
     audit::record(
         &mut tx,
         &ctx,
@@ -1013,7 +1019,7 @@ pub async fn remove(
         Entry::new("delete", "device", Some(id))
             .path(placed.path.clone())
             .project(Some(placed.project_id))
-            .changes(json!({ "devices_on_tray": count, "cables_removed": cables })),
+            .changes(json!({ "devices_on_tray": count, "cables_removed": cables, "addresses_unassigned": addresses })),
     )
     .await?;
     sqlx::query("DELETE FROM devices WHERE id = ?")

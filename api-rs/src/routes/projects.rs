@@ -108,6 +108,7 @@ pub async fn create(
         .await?
         .last_insert_rowid();
     super::device_types::seed_builtins(&mut tx, id).await?;
+    super::ipam::create_default_space(&mut tx, id).await?;
     audit::record(
         &mut tx,
         &ctx,

@@ -3,6 +3,7 @@
 pub mod cabling;
 pub mod crypto;
 pub mod device_types;
+pub mod ip;
 pub mod media;
 pub mod naming;
 pub mod password;

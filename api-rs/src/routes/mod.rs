@@ -9,6 +9,7 @@ pub mod connections;
 pub mod device_types;
 pub mod devices;
 pub mod invitations;
+pub mod ipam;
 pub mod places;
 pub mod ports;
 pub mod projects;
@@ -213,6 +214,43 @@ pub fn router(state: AppState) -> Router {
             "/api/wlans/{id}",
             patch(vlans::update_wlan).delete(vlans::delete_wlan),
         )
+        // IP address management
+        .route(
+            "/api/projects/{id}/spaces",
+            get(ipam::list_spaces).post(ipam::create_space),
+        )
+        .route(
+            "/api/spaces/{id}",
+            patch(ipam::update_space).delete(ipam::delete_space),
+        )
+        .route(
+            "/api/projects/{id}/prefixes",
+            get(ipam::list_prefixes).post(ipam::create_prefix),
+        )
+        .route(
+            "/api/prefixes/{id}",
+            get(ipam::get_prefix)
+                .patch(ipam::update_prefix)
+                .delete(ipam::delete_prefix),
+        )
+        .route("/api/prefixes/{id}/next-free", get(ipam::next_free))
+        .route("/api/prefixes/{id}/grid", get(ipam::grid))
+        .route("/api/prefixes/{id}/ranges", post(ipam::create_range))
+        .route(
+            "/api/ranges/{id}",
+            patch(ipam::update_range).delete(ipam::delete_range),
+        )
+        .route(
+            "/api/projects/{id}/addresses",
+            get(ipam::list_addresses).post(ipam::create_address),
+        )
+        .route(
+            "/api/addresses/{id}",
+            get(ipam::get_address)
+                .patch(ipam::update_address)
+                .delete(ipam::delete_address),
+        )
+        .route("/api/projects/{id}/ipam/warnings", get(ipam::warnings))
         // Search
         .route("/api/search", get(search::search))
         // Change history

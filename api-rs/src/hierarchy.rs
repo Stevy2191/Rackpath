@@ -135,6 +135,10 @@ pub enum Subtree {
     Device(i64),
     /// One port.
     Port(i64),
+    /// One IP prefix (search only; prefixes aren't in the hierarchy).
+    Prefix(i64),
+    /// One IP address (search only).
+    Address(i64),
 }
 
 macro_rules! reindex_sql {
@@ -155,6 +159,37 @@ macro_rules! reindex_sql {
 /// Recomputes paths and search text for everything in `subtree`.
 pub async fn reindex(conn: &mut SqliteConnection, subtree: Subtree) -> AppResult<()> {
     let ((delete, insert), id) = match subtree {
+        // IPAM entries have no place in the hierarchy (their paths don't
+        // contain project or location codes), so a project rename leaves them.
+        Subtree::Project(id) => (
+            (
+                "DELETE FROM search_entries WHERE project_id = ? AND kind NOT IN ('prefix', 'address')",
+                "INSERT INTO search_entries (kind, ref_id, project_id, location_id, floor_id, room_id, rack_id, device_id, path, text)
+                 SELECT kind, ref_id, project_id, location_id, floor_id, room_id, rack_id, device_id, path, text
+                 FROM v_entities WHERE project_id = ?",
+            ),
+            id,
+        ),
+        Subtree::Prefix(id) => (
+            (
+                "DELETE FROM search_entries WHERE kind = 'prefix' AND ref_id = ?",
+                "INSERT INTO search_entries (kind, ref_id, project_id, path, text)
+                 SELECT 'prefix', id, project_id, cidr, concat_ws(' ', cidr, description, role, domain_name, gateway)
+                 FROM prefixes WHERE id = ?",
+            ),
+            id,
+        ),
+        Subtree::Address(id) => (
+            (
+                "DELETE FROM search_entries WHERE kind = 'address' AND ref_id = ?",
+                "INSERT INTO search_entries (kind, ref_id, project_id, path, text)
+                 SELECT 'address', id, project_id, address,
+                        concat_ws(' ', address, dns_name, mac, description,
+                                  (SELECT group_concat(value, ' ') FROM json_each(dns_aliases)))
+                 FROM ip_addresses WHERE id = ?",
+            ),
+            id,
+        ),
         Subtree::Port(id) => (
             (
                 "DELETE FROM search_entries WHERE kind = 'port' AND ref_id = ?",
@@ -164,7 +199,6 @@ pub async fn reindex(conn: &mut SqliteConnection, subtree: Subtree) -> AppResult
             ),
             id,
         ),
-        Subtree::Project(id) => (reindex_sql!("project_id"), id),
         Subtree::Location(id) => (reindex_sql!("location_id"), id),
         Subtree::Floor(id) => (reindex_sql!("floor_id"), id),
         Subtree::Room(id) => (reindex_sql!("room_id"), id),
@@ -216,7 +250,7 @@ pub async fn devices_in(conn: &mut SqliteConnection, subtree: Subtree) -> AppRes
             "SELECT ref_id FROM search_entries WHERE kind = 'device' AND rack_id = ?"
         }
         Subtree::Device(_) => "SELECT id FROM devices WHERE parent_device_id = ?",
-        Subtree::Port(_) => return Ok(vec![]),
+        Subtree::Port(_) | Subtree::Prefix(_) | Subtree::Address(_) => return Ok(vec![]),
     };
     let id = match subtree {
         Subtree::Project(i)
@@ -225,7 +259,9 @@ pub async fn devices_in(conn: &mut SqliteConnection, subtree: Subtree) -> AppRes
         | Subtree::Room(i)
         | Subtree::Rack(i)
         | Subtree::Device(i)
-        | Subtree::Port(i) => i,
+        | Subtree::Port(i)
+        | Subtree::Prefix(i)
+        | Subtree::Address(i) => i,
     };
     Ok(sqlx::query_scalar(sql).bind(id).fetch_all(conn).await?)
 }

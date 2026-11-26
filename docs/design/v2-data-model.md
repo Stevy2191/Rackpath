@@ -838,6 +838,17 @@ All resolved by the project owner.
 - **WLAN requests** reject unknown fields, so a passphrase can't be stored by accident.
 - **MPO breakout** stays one port, as in section 20.
 
+### Phase 4 notes (as built)
+
+- **Binary form:** a 16-byte big-endian BLOB, IPv4 in mapped form. SQLite compares BLOBs bytewise, so `BETWEEN net_start AND net_end` works directly with an index; every query also matches the family, since `::/0` numerically covers the mapped IPv4 block. The maths (parsing, canonical text, containment, usable range, next free) is in `src/domain/ip.rs` with unit tests, including the top of the IPv6 space.
+- **Permissions** (D3 applied to IPAM): prefixes with a location need edit rights there, otherwise on the project; ranges follow their prefix; an address on a device needs edit rights on that device, otherwise on the project.
+- **Next free with `prefix_id`** picks the address in the same transaction as the insert, and the unique index on `(space_id, addr_bin)` makes a simultaneous second claim fail with 409 instead of creating a duplicate.
+- **No CHECK ties `port_id` to `device_id`** on addresses: when a device is deleted, SQLite applies the two `SET NULL` actions one at a time, and the CHECK would fail half-way. The API keeps them consistent.
+- **Search:** prefixes and addresses are in the search index with their own text (CIDR, DNS names and aliases, MAC, description). Where an address is plugged in is looked up live at search time (`detail`), so renaming a device or project never leaves stale results. A project code change re-indexes everything except IPAM entries, which don't contain it.
+- **Not yet:** `source_integration_id` and DHCP lease snapshots arrive with integrations in phase 6 (adding a column with a foreign key later is a plain `ALTER TABLE`).
+- **Measured** (release build, a /16 with 5,000 addresses and 202 prefixes): next-free allocation about 4 ms, prefix tree 9 ms, prefix page 45 ms (it shows the first 1,000 addresses; the address list pages through the rest), warnings 5 ms, search 2 ms, memory 58 MB.
+
+
 
 ---
 

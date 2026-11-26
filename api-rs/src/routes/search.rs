@@ -25,6 +25,9 @@ pub struct Hit {
     id: i64,
     project_id: i64,
     path: String,
+    /// For an IP address: the port or device it's assigned to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
 }
 
 /// Turns free text into a safe FTS5 query: every word must match, as a
@@ -59,7 +62,13 @@ pub async fn search(
     };
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let mut b: QueryBuilder<Sqlite> = QueryBuilder::new(
-        "SELECT e.kind, e.ref_id AS id, e.project_id, e.path FROM search_fts f JOIN search_entries e ON e.id = f.rowid
+        "SELECT e.kind, e.ref_id AS id, e.project_id, e.path,
+                CASE e.kind WHEN 'address' THEN (
+                    SELECT COALESCE(ps.path, ds.path) FROM ip_addresses a
+                    LEFT JOIN search_entries ps ON ps.kind = 'port' AND ps.ref_id = a.port_id
+                    LEFT JOIN search_entries ds ON ds.kind = 'device' AND ds.ref_id = a.device_id
+                    WHERE a.id = e.ref_id) END AS detail
+         FROM search_fts f JOIN search_entries e ON e.id = f.rowid
          WHERE search_fts MATCH ",
     );
     b.push_bind(fts);
@@ -82,9 +91,13 @@ pub async fn search(
     }
     match q.kind {
         Some(kind) => {
-            if !["location", "floor", "room", "rack", "device", "port"].contains(&kind.as_str()) {
+            if ![
+                "location", "floor", "room", "rack", "device", "port", "prefix", "address",
+            ]
+            .contains(&kind.as_str())
+            {
                 return Err(AppError::bad(
-                    "kind must be location, floor, room, rack, device or port",
+                    "kind must be location, floor, room, rack, device, port, prefix or address",
                 ));
             }
             b.push(" AND e.kind = ").push_bind(kind);
