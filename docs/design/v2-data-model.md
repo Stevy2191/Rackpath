@@ -805,6 +805,18 @@ All resolved by the project owner.
 
 ---
 
+### Phase 1 notes (as built)
+
+- **Queries** use sqlx's runtime API, not the `query!` macros: sqlx 0.9 only accepts compile-time literal SQL strings (dynamic filters go through `QueryBuilder`), which gives the injection protection without needing a database at build time. End-to-end tests cover every query.
+- **First start** creates the owner `admin` with a random 20-character temporary password printed once to the console (not a fixed default). `rackpath reset-password <user>` recovers access.
+- **Requiring 2FA** is account-wide for now; per-project requirement is deferred until projects carry real data.
+- **Two-factor codes** have replay protection (a code's time step can only be used once) and their own rate limit.
+- **Invitations** re-check the inviter's rights at acceptance, so a link from someone who has since lost admin rights stops working.
+- **The audit log** is append-only at the database level (an update trigger), and keeps the username after a user is deleted.
+- **Measured** (release build): 6.1 MB binary, about 8 MB of memory idle.
+
+---
+
 ## 20. Open questions (not blocking)
 
 - **MPO/MTP breakout cassettes:** model as one port for now. Per-strand tracing would need "sub-ports".
