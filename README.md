@@ -85,7 +85,7 @@ password immediately on first login.
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: React + React Flow (topology diagram), custom rack builder UI, served via nginx
+- **Frontend**: React + AntV X6 (topology diagram), custom rack builder UI, served via nginx
 - **Backend**: Node.js + Express, JWT-based authentication
 - **Database**: MariaDB
 - **Scanner**: Python (nmap, SNMP, mDNS, NetBIOS, MAC OUI lookup) for network discovery
@@ -94,7 +94,7 @@ password immediately on first login.
 ```
 Rackpath/
 ├── deploy.sh   # Automated fresh-install script
-├── frontend/   # React app (React Flow topology, rack builder, device & scan pages)
+├── frontend/   # React app (AntV X6 topology, rack builder, device & scan pages)
 ├── api/        # Express API + MariaDB access layer
 ├── scanner/    # Python discovery service (nmap/snmp/lldp/arp), exposes a REST API
 ├── db/         # MariaDB schema init scripts
@@ -113,8 +113,8 @@ Rackpath/
 
 The fastest way to stand up a fresh instance is the included deploy script.
 It creates a deployment directory, downloads the compose config, prompts for
-a JWT secret and admin password, starts the stack, applies the database
-schema, and creates the default admin user.
+ports and a JWT secret, starts the stack, applies the database schema, and
+creates the default admin user (`admin` / `rackpath`, changed on first login).
 
 Run it directly from the repo:
 
@@ -260,33 +260,52 @@ want scans to run on (default `eth0`).
 
 ### Pages
 
-- `/topology` — React Flow canvas of discovered devices and links
-- `/racks` — Rack builder: create racks and place devices into U slots
-- `/devices` — Device list with an editable detail form and per-port editor (cabling/connections)
+- `/dashboard` — Project overview: site elevation, warnings, and recent activity
+- `/topology` — AntV X6 canvas for network diagrams (devices, zones, shapes,
+  labels, and links with interface/VLAN details); a project can hold
+  multiple topologies
+- `/racks` — Rack builder: front/back views, vendor catalog, U-slot
+  placement, and PDU/UPS power planning
+- `/devices` — Device inventory with tags, bulk edit, SNMP scan, and a
+  per-port editor; sub-pages for network devices (`/devices/network`),
+  cameras (`/devices/cameras`), and access-control devices (`/devices/access`)
+- `/vlans` — VLAN and subnet planning
+- `/locations` — Locations and rooms that racks and devices are assigned to
 - `/scan` — Configure and start subnet scans, watch results stream in live,
   sort/export them, and select hosts to import into inventory
+- `/network-tools` — Ping, traceroute, DNS resolver, MAC lookup, subnet
+  calculator, and SNMP stats
+- `/macros` — Reusable credential macros (e.g. SNMP communities)
+- `/integrations` — Connect UniFi, UniFi Protect, UniFi Access, Zabbix,
+  LibreNMS, NetBox, and SNMP sources
 
-A light/dark theme toggle is available in the navbar; the choice is
-remembered per-browser.
+A light/dark theme toggle is at the bottom of the side navigation rail; the
+choice is remembered per-browser.
 
 ### Projects (multi-site)
 
 Rackpath data is organized into **projects** — each project has its own
-isolated set of devices, ports, racks, topology, and scans. A project
-switcher in the nav bar shows the current project and lets you switch
+isolated set of devices, ports, racks, topologies, and scans. A project
+switcher in the side navigation rail shows the current project and lets you switch
 between projects, create new ones, and rename or delete existing ones. The
 **Default Project** is created automatically and cannot be deleted.
 
 ### Subnet scanner
 
 Each scan can target a whole subnet (CIDR), a single IP, or a list of
-multiple IPs, with selectable profiles:
+multiple IPs, using one of these scan types:
 
-- **Quick** — ping sweep only (fast, no port scan)
-- **Standard** (default) — ping + top 1000 ports + OS detection + NetBIOS + SNMP
-- **Deep** — ping + all 65535 ports + OS + service-version detection + NetBIOS + SNMP + mDNS
-- **Port Scan Only** — port scan up hosts, skip the other discovery steps
-- **Custom** — individually toggle each discovery step
+- **Discovery** (default) — ping sweep, hostname, and MAC vendor lookup
+- **SNMP Scan** — discovery plus SNMP system info (optionally with a
+  scan-specific community string)
+- **Port Scan** — discovery plus a TCP port scan (top 1000 ports by default;
+  UDP optional)
+- **Custom** — individually toggle each step (ICMP/TCP/UDP ping, TCP/UDP
+  port scan and port range, service detection, OS detection, NetBIOS, mDNS,
+  SNMP, MAC vendor)
+
+OS detection, NetBIOS, and mDNS can also be layered onto any scan type as
+optional enrichment checkboxes.
 
 Results stream into the `/scan` page row-by-row over Server-Sent Events.
 Discovered devices are **not** added to inventory automatically — review and
