@@ -204,6 +204,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/ports/{id}/chain-color", post(ports::chain_color))
         .route("/api/ports/{id}/vlans", put(ports::set_vlans))
         .route("/api/media", get(media::catalog))
+        .route("/api/import/csv/columns", get(csv_import::columns_list))
         .route("/api/connections", post(connections::create))
         .route(
             "/api/connections/{id}",

@@ -116,6 +116,30 @@ fn columns(kind: &str) -> Option<&'static [&'static str]> {
     })
 }
 
+pub const KINDS: [&str; 6] = [
+    "devices",
+    "ports",
+    "connections",
+    "prefixes",
+    "ranges",
+    "addresses",
+];
+
+/// The columns each kind of CSV file takes, for the import page and its
+/// downloadable header row.
+pub async fn columns_list(_current: CurrentUser) -> Json<Value> {
+    Json(columns_json())
+}
+
+fn columns_json() -> Value {
+    Value::Object(
+        KINDS
+            .iter()
+            .map(|k| ((*k).to_string(), json!(columns(k).unwrap_or(&[]))))
+            .collect(),
+    )
+}
+
 #[derive(Deserialize)]
 pub struct CsvQuery {
     kind: String,
@@ -590,4 +614,22 @@ pub async fn import(
         "ok": done.len(), "errors": errors,
         "created": done.iter().take(1000).collect::<Vec<_>>(),
     })))
+}
+
+#[cfg(test)]
+mod column_tests {
+    use super::*;
+
+    #[test]
+    fn every_kind_lists_its_columns() {
+        let v = columns_json();
+        for k in KINDS {
+            assert!(!v[k].as_array().unwrap().is_empty(), "{k}");
+        }
+        assert!(v["connections"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("cable_type")));
+        assert_eq!(v.as_object().unwrap().len(), KINDS.len());
+    }
 }

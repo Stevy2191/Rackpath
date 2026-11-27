@@ -243,6 +243,7 @@ rackpath version
 | Held imports | `POST /api/integrations/{id}/runs/{run}/approve`, `.../reject` |
 | Windows DHCP/DNS | `POST /api/imports/windows-dhcp` (import token), `POST /api/integrations/{id}/upload` (XML export), `POST /api/integrations/{id}/rotate-token` |
 | CSV | `POST /api/projects/{id}/import/csv?kind=devices\|ports\|connections\|prefixes\|ranges\|addresses&dry_run=true` |
+| CSV columns | `GET /api/import/csv/columns`: the columns each kind of file takes |
 | Tags | `GET/POST /api/projects/{id}/tags`, `PATCH/DELETE /api/tags/{id}`, `PUT /api/devices/{id}/tags`, `?tag=` on device lists |
 | Diagrams | `GET/POST /api/projects/{id}/topologies`, `GET/PUT/DELETE /api/topologies/{id}` |
 

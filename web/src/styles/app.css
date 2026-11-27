@@ -343,3 +343,27 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .changes { padding: 0 0.75rem 0.75rem 2.2rem; }
 .changes del { color: var(--color-danger); }
 .changes ins { color: var(--color-success); text-decoration: none; }
+
+/* ---------------------------------------------------------------- integrations and diagrams */
+
+.integration-card:hover { text-decoration: none; border-color: var(--color-accent); }
+.runs > li { display: grid; gap: 0.35rem; }
+.changes-list { max-height: 16rem; overflow: auto; margin: 0.25rem 0 0; }
+.col-name { padding: 0.1rem 0.35rem; border-radius: 4px; background: var(--color-code-bg); color: var(--color-code-text); }
+.toolbar { margin-bottom: 0.75rem; }
+.diagram-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem; align-items: start; }
+.diagram-wrap { overflow: auto; max-height: 75vh; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-elevated); background-image: radial-gradient(var(--color-canvas-grid) 1px, transparent 1px); background-size: 20px 20px; }
+.diagram { display: block; touch-action: none; user-select: none; }
+.d-node { cursor: grab; }
+.d-node rect { fill: var(--color-bg-elevated); stroke: var(--color-border-strong); stroke-width: 1.5; }
+.d-node.text rect { fill: var(--color-bg-subtle); stroke-dasharray: 4 3; }
+.d-node.selected rect, .d-node.linking rect { stroke: var(--color-accent); stroke-width: 3; }
+.d-node .code { font-family: var(--font-mono); font-size: 13px; font-weight: 600; fill: var(--color-text); }
+.d-node .sub { font-size: 11px; fill: var(--color-text-muted); }
+.d-edge line { stroke: var(--color-text-faint); stroke-width: 2; }
+.d-edge line.hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
+.d-edge.s-complete line:not(.hit) { stroke: var(--color-success); stroke-width: 3; }
+.d-edge.s-incomplete line:not(.hit) { stroke: var(--color-warning); stroke-width: 3; stroke-dasharray: 6 4; }
+.d-edge.selected line:not(.hit) { stroke: var(--color-accent); }
+.d-edge text { font-size: 11px; fill: var(--color-text-muted); text-anchor: middle; }
+@media (max-width: 1000px) { .diagram-layout { grid-template-columns: 1fr; } }

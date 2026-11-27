@@ -9,6 +9,9 @@ import { VlansPage } from './pages/network/Vlans';
 import { TemplatePage } from './pages/templates/Designer';
 import { TemplatesPage } from './pages/templates/Templates';
 import { ProjectSettingsPage } from './pages/ProjectSettings';
+import { CsvImportPage } from './pages/integrations/CsvImport';
+import { IntegrationPage, IntegrationsPage } from './pages/integrations/Integrations';
+import { DiagramPage, DiagramsPage } from './pages/diagrams/Diagrams';
 import { DevicePage, DevicesPage } from './pages/devices/Devices';
 import { FloorPage } from './pages/places/Floor';
 import { LocationPage, LocationsPage } from './pages/places/Locations';
@@ -31,6 +34,11 @@ export const projectRoutes: ReactNode = (
     <Route path="vlans" element={<VlansPage />} />
     <Route path="templates" element={<TemplatesPage />} />
     <Route path="templates/:id" element={<TemplatePage />} />
+    <Route path="integrations" element={<IntegrationsPage />} />
+    <Route path="integrations/:id" element={<IntegrationPage />} />
+    <Route path="import" element={<CsvImportPage />} />
+    <Route path="diagrams" element={<DiagramsPage />} />
+    <Route path="diagrams/:id" element={<DiagramPage />} />
     <Route path="settings" element={<ProjectSettingsPage />} />
   </>
 );
