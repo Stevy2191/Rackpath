@@ -5,7 +5,7 @@ SQLite file. It is being built in phases (see
 [`docs/design/v2-data-model.md`](../docs/design/v2-data-model.md), section 21).
 The v1 Node API in `api/` keeps serving the current frontend until phase 7.
 
-**Status: phases 1 to 5 complete.**
+**Status: phases 1 to 6 complete.**
 
 - **Phase 1, security core:** users, roles and scoped permissions,
   server-side sessions, two-factor login, invitations, projects, account
@@ -29,7 +29,13 @@ The v1 Node API in `api/` keeps serving the current frontend until phase 7.
   template edits with a dry run; power cords, loads, A/B failover, UPS
   runtime and outlet use.
 
-Integrations and imports follow in phase 6.
+- **Phase 6, integrations and imports:** Windows DHCP/DNS (pushed by a
+  PowerShell script, or an uploaded export file), UniFi Network (including
+  its DHCP), UniFi Protect and Access, Zabbix, and CSV files; with
+  ownership rules, missing-record tracking and held imports. Also device
+  tags and topology diagrams.
+
+The new frontend follows in phase 7.
 
 ## Running it
 
@@ -52,7 +58,7 @@ docker run -p 8080:8080 -v rackpath-data:/data -e RACKPATH_ENCRYPTION_KEY=... ra
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `RACKPATH_ENCRYPTION_KEY` | **required** | 64 hex characters. Encrypts stored credentials (two-factor secrets now; integration logins later). Same format and key as the v1 API. **Back it up with the database**: without it, two-factor secrets can't be read and users must re-enrol |
+| `RACKPATH_ENCRYPTION_KEY` | **required** | 64 hex characters. Encrypts stored credentials (two-factor secrets and integration API keys, tokens and passwords). Same format and key as the v1 API. **Back it up with the database**: without it, two-factor secrets and integration credentials can't be read (users re-enrol; credentials are entered again) |
 | `RACKPATH_DATA_DIR` | `./data` | Holds `rackpath.db` (and uploads in later phases) |
 | `RACKPATH_DATABASE` | `<data dir>/rackpath.db` | Database file |
 | `RACKPATH_BIND` | `0.0.0.0:8080` | Listen address |
@@ -222,6 +228,43 @@ rackpath version
 - **A power cord** is a `power` connection from an outlet to an inlet. Two outlets or two inlets are refused; different families (a C19 outlet to a C14 inlet) are allowed with a warning to check the cord. `Battery` ports connect only to each other (UPS to battery module).
 - **Power figures** per device: `typical_w` and `max_w` (draw), `capacity_va`, `capacity_w`, `input_voltage`, and for UPSes a `runtime_curve` and for battery modules an `ebm_runtime_curve` (points of `load_w` and `minutes`), plus `max_ebm_slots`.
 - **The power summary** for a rack lists every device with power: its draw, what it delivers through its outlets (a device with two connected inlets splits its draw between them), the **failover load** if its partner feed fails (it then carries everything it feeds in full), load percentages, UPS runtime at the current and failover load (battery modules add their curves), outlets used per bank, and warnings: overloaded, above 80%, can't carry its redundant loads alone, no cord on any inlet, only one of several inlets connected, too many battery modules, draw not recorded. Feeds from other racks count. Rack totals include UPS capacity and what's left if the largest UPS fails (N+1).
+
+## API overview (phase 6)
+
+| Area | Endpoints |
+|---|---|
+| Integrations | `GET/POST /api/projects/{id}/integrations`, `GET/PATCH/DELETE /api/integrations/{id}` |
+| Running them | `POST /api/integrations/{id}/test`, `POST /api/integrations/{id}/sync` (`?dry_run=true`), `GET /api/integrations/{id}/runs` |
+| Held imports | `POST /api/integrations/{id}/runs/{run}/approve`, `.../reject` |
+| Windows DHCP/DNS | `POST /api/imports/windows-dhcp` (import token), `POST /api/integrations/{id}/upload` (XML export), `POST /api/integrations/{id}/rotate-token` |
+| CSV | `POST /api/projects/{id}/import/csv?kind=devices\|ports\|connections\|prefixes\|ranges\|addresses&dry_run=true` |
+| Tags | `GET/POST /api/projects/{id}/tags`, `PATCH/DELETE /api/tags/{id}`, `PUT /api/devices/{id}/tags`, `?tag=` on device lists |
+| Diagrams | `GET/POST /api/projects/{id}/topologies`, `GET/PUT/DELETE /api/topologies/{id}` |
+
+**Integrations read; they never contact devices or change anything at the source.**
+
+| Source | How | What comes in |
+|---|---|---|
+| **Windows DHCP/DNS** | `tools/windows/Push-RackpathDhcp.ps1` pushes hourly (see [its README](../tools/windows/README.md)), or upload `Export-DhcpServer` XML | Scopes → prefixes (gateway, DNS servers, domain); DHCP range → DHCP pool split around exclusions; exclusions → reserved ranges; reservations → reserved addresses linked to the device with that MAC; static DNS A/AAAA/PTR → DNS names and aliases; optionally leases |
+| **UniFi Network** | API key (local console address) or local username/password | Gateways, switches and access points with their IPs; networks → VLANs and prefixes with gateway; unless `import_dhcp` is off, each network's DHCP range and DNS servers, and clients with a fixed IP as reservations; optionally connected clients as the lease layer |
+| **UniFi Protect / Access** | Same | Cameras; Access hubs and readers |
+| **Zabbix** | API token (recommended) or username/password | Hosts → devices with their interface IPs, inventory vendor/model/serial/MAC, and an "Open in Zabbix" link. No monitoring data |
+| **CSV** | Upload | Devices (by room/rack path, optional template), ports, connections, prefixes, ranges, addresses |
+
+**Ownership rules:**
+- **An import owns only the facts it brings** (for a device: hostname, MAC, manufacturer, model, serial, firmware; for an address: MAC, DNS names, reservation flag). Codes, names you gave, placement, notes, roles and links are yours and never overwritten.
+- **Matching:** by integration and external id, so syncs update rather than duplicate. A hand-made device with the same MAC, a prefix with the same CIDR or an address already documented is adopted, not duplicated.
+- **Gone at the source:** marked `missing_from_source_at` and listed in the IPAM warnings. Nothing is deleted automatically.
+- **Held imports:** if a sync would change more than `hold_threshold_pct` (default 50%) of the records the integration owns (and it owns at least 10), it's held; an admin approves or rejects it.
+- **Every sync** is one transaction and one grouped `sync` entry in the change history. `?dry_run=true` shows the result without saving.
+- **Leases** are a separate layer, replaced on every import, shown on the address grid, and never turned into documentation automatically.
+- **Secrets** (API keys, tokens, passwords) are encrypted with `RACKPATH_ENCRYPTION_KEY` and never returned. The Windows import token is shown once and stored as a hash; one push per minute per token; bodies up to 20 MB (gzip accepted).
+- **Automatic syncs:** UniFi and Zabbix integrations with `auto_sync` run every `sync_interval_minutes` (default 60).
+- **Permissions:** project admins manage integrations; anyone who can read the project sees them (without secrets). CSV rows need the same rights as the API calls they make.
+
+**CSV import** checks every row with the same rules as the API, in one transaction: if any row fails, nothing is saved and the errors are listed by row number. Paths are relative to the project (`HQ/2/MDF/RK01/SW01/24`; the project code in front is optional). Unknown columns are refused.
+
+**Diagrams** are saved whole (`PUT`), with `expected_version` to stop two people overwriting each other. Nodes can stand for devices; an edge can be backed by a cable, and then shows the cable's ends and chain state.
 
 ## Development
 

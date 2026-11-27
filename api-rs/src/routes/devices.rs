@@ -77,6 +77,10 @@ pub struct DeviceRow {
     pub notes: Option<String>,
     pub template_id: Option<i64>,
     pub template_version: Option<i64>,
+    pub source_integration_id: Option<i64>,
+    pub missing_from_source_at: Option<String>,
+    pub external_url: Option<String>,
+    pub tags: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub path: String,
@@ -91,7 +95,9 @@ macro_rules! device_select {
          d.rack_pos_half, d.rack_face, d.rack_mount, d.parent_device_id, d.u_height_half, d.depth, d.manufacturer, d.model, \
          d.serial_number, d.asset_tag, d.purchase_date, d.warranty_expiry, d.in_service_date, d.responsible_user_id, \
          d.status, d.hostname, d.mac, d.os, d.firmware, d.source, d.external_id, d.icon_color, d.text_color, d.notes, \
-         d.template_id, d.template_version, d.created_at, d.updated_at, s.path, s.location_id, s.floor_id \
+         d.template_id, d.template_version, d.source_integration_id, d.missing_from_source_at, d.external_url, \
+         (SELECT json_group_array(json_object('id', t.id, 'name', t.name, 'color', t.color)) FROM device_tags x \
+          JOIN tags t ON t.id = x.tag_id WHERE x.device_id = d.id) AS tags, d.created_at, d.updated_at, s.path, s.location_id, s.floor_id \
          FROM devices d JOIN device_types dt ON dt.id = d.device_type_id \
          JOIN search_entries s ON s.kind = 'device' AND s.ref_id = d.id "
     };
@@ -125,7 +131,10 @@ impl DeviceRow {
             "status": self.status, "hostname": self.hostname, "mac": self.mac, "os": self.os, "firmware": self.firmware,
             "source": self.source, "external_id": self.external_id, "icon_color": self.icon_color,
             "text_color": self.text_color, "notes": self.notes,
-            "template_id": self.template_id, "template_version": self.template_version, "created_at": self.created_at, "updated_at": self.updated_at,
+            "template_id": self.template_id, "template_version": self.template_version,
+            "source_integration_id": self.source_integration_id, "missing_from_source_at": self.missing_from_source_at,
+            "external_url": self.external_url,
+            "tags": self.tags.as_deref().and_then(|t| serde_json::from_str::<Value>(t).ok()).unwrap_or(json!([])), "created_at": self.created_at, "updated_at": self.updated_at,
         })
     }
 
@@ -196,6 +205,8 @@ pub struct ListFilters {
     unplaced: Option<bool>,
     device_type: Option<String>,
     status: Option<String>,
+    /// Tag name.
+    tag: Option<String>,
     q: Option<String>,
     after_id: Option<i64>,
     limit: Option<i64>,
@@ -231,6 +242,11 @@ pub async fn list(
     }
     if let Some(v) = f.status {
         q.push(" AND d.status = ").push_bind(v);
+    }
+    if let Some(v) = f.tag {
+        q.push(" AND d.id IN (SELECT x.device_id FROM device_tags x JOIN tags t ON t.id = x.tag_id WHERE t.name = ")
+            .push_bind(v)
+            .push(" COLLATE NOCASE)");
     }
     if let Some(text) = f.q.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()) {
         let like = format!(
@@ -662,6 +678,20 @@ pub async fn create(
     JsonBody(body): JsonBody<DeviceFields>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let mut tx = state.pool.begin().await?;
+    let v = create_in(&mut tx, &ctx, &current, project_id, body).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(v)))
+}
+
+/// The work of `create`, inside the caller's transaction (also used by
+/// the CSV importer).
+pub async fn create_in(
+    tx: &mut SqliteConnection,
+    ctx: &RequestCtx,
+    current: &CurrentUser,
+    project_id: i64,
+    body: DeviceFields,
+) -> AppResult<Value> {
     let exists: Option<i64> = sqlx::query_scalar("SELECT id FROM projects WHERE id = ?")
         .bind(project_id)
         .fetch_optional(&mut *tx)
@@ -671,7 +701,7 @@ pub async fn create(
         None => None,
         Some(t) => {
             let (row, p) =
-                super::templates::load_prepared(&mut tx, t)
+                super::templates::load_prepared(&mut *tx, t)
                     .await
                     .map_err(|e| match e {
                         AppError::NotFound => AppError::bad("Template not found"),
@@ -685,7 +715,7 @@ pub async fn create(
     };
     let template_type = template.as_ref().map(|(_, p)| p.t.device_type.clone());
     let (type_id, type_key, prefix, type_placement) = device_type(
-        &mut tx,
+        &mut *tx,
         project_id,
         body.device_type_id,
         body.device_type.as_deref().or(template_type.as_deref()),
@@ -709,8 +739,8 @@ pub async fn create(
             }
         }
     }
-    let target = resolve(&mut tx, project_id, &placement).await?;
-    require(&current, Action::Write, &target.chain)?;
+    let target = resolve(&mut *tx, project_id, &placement).await?;
+    require(current, Action::Write, &target.chain)?;
     if !can_place(&type_key, type_placement, target.target) {
         return Err(AppError::bad(format!("A {type_key} can't be placed there")));
     }
@@ -725,7 +755,7 @@ pub async fn create(
         None => None,
     };
     let code = choose_code(
-        &mut tx,
+        &mut *tx,
         &target.parent_key,
         body.code.as_deref(),
         &prefix,
@@ -733,7 +763,7 @@ pub async fn create(
         None,
     )
     .await?;
-    check_rack_fit(&mut tx, &target, -1, height_half.unwrap_or(2)).await?;
+    check_rack_fit(&mut *tx, &target, -1, height_half.unwrap_or(2)).await?;
 
     let status = body.status.as_deref().unwrap_or("active");
     if !STATUSES.contains(&status) {
@@ -757,7 +787,7 @@ pub async fn create(
     let name = text(body.name);
     check_len("Name", &name, 255)?;
     let responsible = body.responsible_user_id.flatten();
-    check_user_exists(&mut tx, responsible).await?;
+    check_user_exists(&mut *tx, responsible).await?;
 
     let now = now_ts();
     let id = sqlx::query(
@@ -803,7 +833,7 @@ pub async fn create(
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
-    hierarchy::reindex(&mut tx, Subtree::Device(id)).await?;
+    hierarchy::reindex(&mut *tx, Subtree::Device(id)).await?;
     let mut ports_made = 0;
     if let Some((row, p)) = &template {
         sqlx::query("UPDATE devices SET template_id = ?, template_version = ? WHERE id = ?")
@@ -812,12 +842,12 @@ pub async fn create(
             .bind(id)
             .execute(&mut *tx)
             .await?;
-        ports_made = super::templates::instantiate(&mut tx, id, p).await?;
+        ports_made = super::templates::instantiate(&mut *tx, id, p).await?;
     }
-    let device = load_device(&mut tx, id).await?;
+    let device = load_device(&mut *tx, id).await?;
     audit::record(
-        &mut tx,
-        &ctx,
+        &mut *tx,
+        ctx,
         Some(current.actor_ref()),
         Entry::new("create", "device", Some(id))
             .path(device.path.clone())
@@ -828,8 +858,7 @@ pub async fn create(
             ),
     )
     .await?;
-    tx.commit().await?;
-    Ok((StatusCode::CREATED, Json(device.to_json())))
+    Ok(device.to_json())
 }
 
 pub async fn update(

@@ -141,6 +141,8 @@ async fn serve(config: Config, pool: sqlx::SqlitePool) -> ExitCode {
     };
     tracing::info!(address = %config.bind, "Rackpath listening");
     let state = AppState::new(pool, config);
+    // Scheduled syncs of UniFi and Zabbix integrations, checked every minute.
+    rackpath::routes::integrations::start_auto_sync(state.clone());
     let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
     };

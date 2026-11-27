@@ -6,8 +6,10 @@ pub mod account;
 pub mod audit_log;
 pub mod auth;
 pub mod connections;
+pub mod csv_import;
 pub mod device_types;
 pub mod devices;
+pub mod integrations;
 pub mod invitations;
 pub mod ipam;
 pub mod places;
@@ -17,7 +19,10 @@ pub mod ports;
 pub mod projects;
 pub mod racks;
 pub mod search;
+pub mod tags;
+
 pub mod templates;
+pub mod topologies;
 
 pub mod users;
 pub mod vlans;
@@ -276,22 +281,79 @@ pub fn router(state: AppState) -> Router {
         .route("/api/search", get(search::search))
         // Change history
         .route("/api/audit", get(audit_log::list))
-        .fallback(|| async { AppError::NotFound });
+        // Tags and diagrams
+        .route(
+            "/api/projects/{id}/tags",
+            get(tags::list).post(tags::create),
+        )
+        .route("/api/tags/{id}", patch(tags::update).delete(tags::remove))
+        .route("/api/devices/{id}/tags", put(tags::set_device_tags))
+        .route(
+            "/api/projects/{id}/topologies",
+            get(topologies::list).post(topologies::create),
+        )
+        .route(
+            "/api/topologies/{id}",
+            get(topologies::get_one)
+                .put(topologies::save)
+                .delete(topologies::remove),
+        )
+        // Integrations
+        .route(
+            "/api/projects/{id}/integrations",
+            get(integrations::list).post(integrations::create),
+        )
+        .route(
+            "/api/integrations/{id}",
+            get(integrations::get_one)
+                .patch(integrations::update)
+                .delete(integrations::remove),
+        )
+        .route("/api/integrations/{id}/test", post(integrations::test))
+        .route("/api/integrations/{id}/sync", post(integrations::sync))
+        .route("/api/integrations/{id}/runs", get(integrations::runs))
+        .route(
+            "/api/integrations/{id}/runs/{run_id}/approve",
+            post(integrations::approve),
+        )
+        .route(
+            "/api/integrations/{id}/runs/{run_id}/reject",
+            post(integrations::reject),
+        )
+        .route(
+            "/api/integrations/{id}/rotate-token",
+            post(integrations::rotate_token),
+        )
+        .fallback(|| async { AppError::NotFound })
+        .layer(RequestBodyLimitLayer::new(1024 * 1024));
+
+    // Imports take bigger bodies (20 MB, before decompression).
+    let uploads = Router::new()
+        .route(
+            "/api/imports/windows-dhcp",
+            post(integrations::windows_push),
+        )
+        .route(
+            "/api/integrations/{id}/upload",
+            post(integrations::windows_upload),
+        )
+        .route("/api/projects/{id}/import/csv", post(csv_import::import))
+        .layer(RequestBodyLimitLayer::new(20 * 1024 * 1024));
+    app = app.merge(uploads);
 
     for (name, value) in middleware::security_headers() {
         app = app.layer(SetResponseHeaderLayer::if_not_present(name, value));
     }
-    app.layer(RequestBodyLimitLayer::new(1024 * 1024))
-        .layer(axum_mw::from_fn_with_state(
-            state.clone(),
-            middleware::same_origin,
-        ))
-        .layer(axum_mw::from_fn_with_state(
-            state.clone(),
-            middleware::request_context,
-        ))
-        .layer(tower_http::trace::TraceLayer::new_for_http())
-        .with_state(state)
+    app.layer(axum_mw::from_fn_with_state(
+        state.clone(),
+        middleware::same_origin,
+    ))
+    .layer(axum_mw::from_fn_with_state(
+        state.clone(),
+        middleware::request_context,
+    ))
+    .layer(tower_http::trace::TraceLayer::new_for_http())
+    .with_state(state)
 }
 
 /// Where a grant points: the chain used for permission checks, the project

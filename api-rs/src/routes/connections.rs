@@ -228,6 +228,20 @@ pub async fn create(
     current: CurrentUser,
     JsonBody(body): JsonBody<NewConnection>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    let mut tx = state.pool.begin().await?;
+    let v = create_in(&mut tx, &ctx, &current, body).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(v)))
+}
+
+/// The work of `create`, inside the caller's transaction (also used by
+/// the CSV importer).
+pub async fn create_in(
+    tx: &mut SqliteConnection,
+    ctx: &RequestCtx,
+    current: &CurrentUser,
+    body: NewConnection,
+) -> AppResult<Value> {
     let kind = match body.kind.as_deref() {
         None => Kind::Patch,
         Some(k) => {
@@ -247,13 +261,12 @@ pub async fn create(
     let label = merge_text(body.label, None);
     check_len("label", &label, 100)?;
 
-    let mut tx = state.pool.begin().await?;
-    let pa = load_port(&mut tx, body.a.port_id).await?;
-    let pb = load_port(&mut tx, body.b.port_id).await?;
-    let ca = device_chain(&mut tx, pa.device_id).await?;
-    let cb = device_chain(&mut tx, pb.device_id).await?;
-    require(&current, Action::Read, &ca)?;
-    require(&current, Action::Read, &cb)?;
+    let pa = load_port(&mut *tx, body.a.port_id).await?;
+    let pb = load_port(&mut *tx, body.b.port_id).await?;
+    let ca = device_chain(&mut *tx, pa.device_id).await?;
+    let cb = device_chain(&mut *tx, pb.device_id).await?;
+    require(current, Action::Read, &ca)?;
+    require(current, Action::Read, &cb)?;
     if pa.project_id != pb.project_id {
         return Err(AppError::bad("Both ends must be in the same project"));
     }
@@ -270,8 +283,8 @@ pub async fn create(
             )));
         }
     }
-    let ea = end_info(&mut tx, &pa, sa).await?;
-    let eb = end_info(&mut tx, &pb, sb).await?;
+    let ea = end_info(&mut *tx, &pa, sa).await?;
+    let eb = end_info(&mut *tx, &pb, sb).await?;
     let power_ends = [&pa, &pb].iter().filter(|p| p.medium == "power").count();
     match (kind, power_ends) {
         (Kind::Power, 2) | (Kind::Patch | Kind::Permanent, 0) => {}
@@ -319,10 +332,10 @@ pub async fn create(
                 _ => e.into(),
             })?;
     }
-    let (c, ends) = load(&mut tx, id).await?;
+    let (c, ends) = load(&mut *tx, id).await?;
     audit::record(
-        &mut tx,
-        &ctx,
+        &mut *tx,
+        ctx,
         Some(current.actor_ref()),
         Entry::new("connect", "connection", Some(id))
             .path(format!("{} ↔ {}", ends[0].path, ends[1].path))
@@ -330,10 +343,9 @@ pub async fn create(
             .changes(audit_view(&c)),
     )
     .await?;
-    tx.commit().await?;
     let mut v = to_json(&c, &ends);
     v["warnings"] = json!(warnings);
-    Ok((StatusCode::CREATED, Json(v)))
+    Ok(v)
 }
 
 #[derive(Deserialize)]

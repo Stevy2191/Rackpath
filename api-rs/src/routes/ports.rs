@@ -709,24 +709,38 @@ pub async fn create(
     Extension(ctx): Extension<RequestCtx>,
     current: CurrentUser,
     Path(device_id): Path<i64>,
-    JsonBody(mut body): JsonBody<PortFields>,
+    JsonBody(body): JsonBody<PortFields>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let mut tx = state.pool.begin().await?;
-    let (project_id, type_key, _) = device_for_ports(&mut tx, &current, device_id).await?;
+    let v = create_in(&mut tx, &ctx, &current, device_id, body).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(v)))
+}
+
+/// The work of `create`, inside the caller's transaction (also used by
+/// the CSV importer).
+pub async fn create_in(
+    tx: &mut SqliteConnection,
+    ctx: &RequestCtx,
+    current: &CurrentUser,
+    device_id: i64,
+    mut body: PortFields,
+) -> AppResult<Value> {
+    let (project_id, type_key, _) = device_for_ports(&mut *tx, current, device_id).await?;
     let code = port_code(
         body.code
             .as_deref()
             .ok_or_else(|| AppError::bad("code is required"))?,
     )?;
     if body.sort_order.is_none() {
-        body.sort_order = Some(next_sort_order(&mut tx, device_id).await?);
+        body.sort_order = Some(next_sort_order(&mut *tx, device_id).await?);
     }
-    let values = resolve_values(&mut tx, project_id, body, None, &type_key).await?;
-    let id = insert_port(&mut tx, device_id, &code, &values, false).await?;
-    let port = load_port(&mut tx, id).await?;
+    let values = resolve_values(&mut *tx, project_id, body, None, &type_key).await?;
+    let id = insert_port(&mut *tx, device_id, &code, &values, false).await?;
+    let port = load_port(&mut *tx, id).await?;
     audit::record(
-        &mut tx,
-        &ctx,
+        &mut *tx,
+        ctx,
         Some(current.actor_ref()),
         Entry::new("create", "port", Some(id))
             .path(port.path.clone())
@@ -734,8 +748,7 @@ pub async fn create(
             .changes(port.audit_view()),
     )
     .await?;
-    tx.commit().await?;
-    Ok((StatusCode::CREATED, Json(port.to_json())))
+    Ok(port.to_json())
 }
 
 #[derive(Deserialize)]

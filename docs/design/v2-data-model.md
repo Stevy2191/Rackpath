@@ -654,7 +654,7 @@ All automation follows one rule: **Rackpath reads from systems that already hold
 |---|---|---|
 | **Windows DHCP and DNS** (Active Directory) | **Pushed to Rackpath** by a PowerShell script, or an uploaded export file | Prefixes, DHCP pools, exclusions, reservations, static DNS names, optional lease snapshot |
 | **Zabbix** (the network monitor) | Rackpath pulls through the Zabbix API, read-only API token | Devices (hosts), their interface IPs, inventory fields (model, serial), and the Zabbix host ID for an "Open in Zabbix" link. **No monitoring data** (problems, availability, graphs) |
-| **UniFi Network / Protect / Access** | Rackpath pulls through the UniFi API | Devices, management IPs, and configured networks (VLAN ID and subnet). UniFi DHCP settings are ignored, since DHCP runs on Windows |
+| **UniFi Network / Protect / Access** | Rackpath pulls through the UniFi API | Devices, management IPs, and configured networks (VLAN ID and subnet). Where UniFi runs DHCP (a home or small site), its DHCP range, DNS servers and fixed-IP clients (as reservations) too, plus an optional lease layer; switch this off per integration where Windows runs DHCP |
 | **CSV** | Uploaded | Locations, racks, devices, ports, connections, prefixes, ranges and addresses, using the same column names as the CSV exports |
 
 ### Windows DHCP and DNS
@@ -860,6 +860,20 @@ All resolved by the project owner.
 - **Runtime** uses v1's linear interpolation of the UPS curve, plus each connected battery module's added-runtime curve at the same load. A UPS is recognised by having a runtime curve; battery links are `power` connections between `Battery` ports.
 - **No images yet:** template faceplate photos arrive with attachments.
 - **Measured** (release build): 200 devices made from a 50-port template in 5.8 s (about 29 ms each); adding 4 ports to that template updates all 200 devices (800 new ports) in about 1.1 s, and the dry run takes the same; memory 35 MB.
+
+### Phase 6 notes (as built)
+
+- **One import engine.** Every source produces the same snapshot (devices, networks, reservations, DNS records, leases), and one function applies it with the ownership rules. Adapters are thin: they fetch and map, and their mapping is unit-tested against real response shapes. The HTTP side is contract-tested against mock UniFi and Zabbix servers.
+- **Dry run and hold reuse the transaction:** the import runs, is measured, and is rolled back when it's a dry run or must be held. A held import stores its snapshot and is applied as received on approval. A newer import supersedes a held one.
+- **External ids don't include the Windows server name**, so DHCP failover partners pushing the same scopes don't create duplicates (section 20's open question). Addresses use one id per IP (`addr:<ip>`), so a reservation, a DNS name and a device IP for the same address meet on one record.
+- **Windows exclusions sit inside the scope range**, but Rackpath ranges never overlap, so the DHCP pool is stored split around the exclusions. When the source moves a range, the old overlapping range it owned is replaced rather than left as a duplicate.
+- **XML uploads never mark addresses missing**, since an export file has no DNS.
+- **The DPAPI token is machine-scoped and locked down by its access list**, not user-scoped as first designed: the installer can't encrypt as a gMSA. The effect is the same (only that account and admins can read it).
+- **The XML reader** accepts only the predefined entities and refuses DTDs, so entity expansion attacks don't apply; it's also bounded in size and depth.
+- **UniFi DHCP** is folded in, as decided for home use: per integration, `import_dhcp` (default on) and `lease_snapshot` (default off).
+- **Not yet:** device extension tables for camera and access-control details (cameras and readers import as plain devices); the PowerShell scripts haven't been run on Windows from this build environment and need a first check on a real DHCP server.
+- **Topology diagrams** are stored as nodes, edges and items saved together; v1's uploaded diagram icons arrive with attachments.
+- **Measured:** the release binary grew to 12.5 MB with the HTTPS client (rustls) for UniFi and Zabbix; about 13 MB of memory at idle.
 
 ---
 

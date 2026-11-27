@@ -33,6 +33,11 @@ subtle = "2"
 totp-rs = { version = "5", features = ["otpauth"] }
 ulid = "1"
 data-encoding = "2"
+# Outbound calls to UniFi and Zabbix (integrations only).
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+flate2 = "1"
+quick-xml = "0.41"
+csv = "1"
 
 [dev-dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "rustls-tls"] }

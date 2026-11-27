@@ -605,11 +605,25 @@ pub async fn create_prefix(
     JsonBody(body): JsonBody<PrefixFields>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let mut tx = state.pool.begin().await?;
-    project_exists(&mut tx, project_id).await?;
-    let space_id = space_for(&mut tx, project_id, body.space_id).await?;
-    let (v, warnings) = prefix_values(&mut tx, project_id, body, None).await?;
-    let chain = prefix_chain(&mut tx, project_id, v.location_id).await?;
-    require(&current, Action::Write, &chain)?;
+    let v = create_prefix_in(&mut tx, &ctx, &current, project_id, body).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(v)))
+}
+
+/// The work of `create_prefix`, inside the caller's transaction (also used by
+/// the CSV importer).
+pub async fn create_prefix_in(
+    tx: &mut SqliteConnection,
+    ctx: &RequestCtx,
+    current: &CurrentUser,
+    project_id: i64,
+    body: PrefixFields,
+) -> AppResult<Value> {
+    project_exists(&mut *tx, project_id).await?;
+    let space_id = space_for(&mut *tx, project_id, body.space_id).await?;
+    let (v, warnings) = prefix_values(&mut *tx, project_id, body, None).await?;
+    let chain = prefix_chain(&mut *tx, project_id, v.location_id).await?;
+    require(current, Action::Write, &chain)?;
     let now = now_ts();
     let id = sqlx::query(
         "INSERT INTO prefixes (project_id, space_id, cidr, family, prefix_len, net_start, net_end, vlan_id, location_id,
@@ -638,11 +652,11 @@ pub async fn create_prefix(
     .await
     .map_err(|e| unique(e, format!("{} already exists in this space", v.cidr)))?
     .last_insert_rowid();
-    hierarchy::reindex(&mut tx, Subtree::Prefix(id)).await?;
-    let p = load_prefix(&mut tx, id).await?;
+    hierarchy::reindex(&mut *tx, Subtree::Prefix(id)).await?;
+    let p = load_prefix(&mut *tx, id).await?;
     audit::record(
-        &mut tx,
-        &ctx,
+        &mut *tx,
+        ctx,
         Some(current.actor_ref()),
         Entry::new("create", "prefix", Some(id))
             .path(p.cidr.clone())
@@ -650,10 +664,9 @@ pub async fn create_prefix(
             .changes(p.audit_view()),
     )
     .await?;
-    tx.commit().await?;
     let mut out = serde_json::to_value(&p).unwrap_or_default();
     out["warnings"] = json!(warnings);
-    Ok((StatusCode::CREATED, Json(out)))
+    Ok(out)
 }
 
 #[derive(FromRow, Serialize)]
@@ -1021,7 +1034,23 @@ pub async fn grid(
         .as_deref()
         .and_then(|g| parse_addr(g).ok())
         .map(|g| (g.value - base) as u64);
+    // The lease layer: what DHCP servers last reported (not documentation).
+    #[allow(clippy::type_complexity)]
+    let leases: Vec<(String, Vec<u8>, Option<String>, Option<String>, Option<String>, String)> = sqlx::query_as(
+        "SELECT address, addr_bin, mac, hostname, expires_at, captured_at FROM dhcp_lease_snapshots
+         WHERE space_id = ? AND family = 4 AND addr_bin BETWEEN ? AND ? ORDER BY addr_bin LIMIT 1024",
+    )
+    .bind(p.space_id)
+    .bind(c.start().bin())
+    .bind(c.end().bin())
+    .fetch_all(&mut *conn)
+    .await?;
     Ok(Json(json!({
+        "leases": leases.iter().filter_map(|(addr, bin, mac, host, exp, seen)| {
+            let x = Addr::from_bin(bin)?;
+            Some(json!({ "offset": (x.value - base) as u64, "address": addr, "mac": mac, "hostname": host,
+                         "expires_at": exp, "seen_at": seen }))
+        }).collect::<Vec<_>>(),
         "cidr": p.cidr,
         "size": c.size() as u64,
         "network": if c.len < 31 { Some(0) } else { None },
@@ -1139,9 +1168,23 @@ pub async fn create_range(
     JsonBody(body): JsonBody<RangeFields>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let mut tx = state.pool.begin().await?;
-    let p = load_prefix(&mut tx, prefix_id).await?;
-    let chain = prefix_chain(&mut tx, p.project_id, p.location_id).await?;
-    require(&current, Action::Write, &chain)?;
+    let v = create_range_in(&mut tx, &ctx, &current, prefix_id, body).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(v)))
+}
+
+/// The work of `create_range`, inside the caller's transaction (also used by
+/// the CSV importer).
+pub async fn create_range_in(
+    tx: &mut SqliteConnection,
+    ctx: &RequestCtx,
+    current: &CurrentUser,
+    prefix_id: i64,
+    body: RangeFields,
+) -> AppResult<Value> {
+    let p = load_prefix(&mut *tx, prefix_id).await?;
+    let chain = prefix_chain(&mut *tx, p.project_id, p.location_id).await?;
+    require(current, Action::Write, &chain)?;
     let s = parse_addr(
         body.start
             .as_deref()
@@ -1155,7 +1198,7 @@ pub async fn create_range(
     )
     .map_err(AppError::bad)?;
     let kind = body.kind.unwrap_or_else(|| "dhcp_pool".into());
-    let warnings = check_range(&mut tx, &p, s, e, &kind, None).await?;
+    let warnings = check_range(&mut *tx, &p, s, e, &kind, None).await?;
     let now = now_ts();
     let id = sqlx::query(
         "INSERT INTO ip_ranges (prefix_id, start_text, end_text, start_bin, end_bin, kind, description, created_at, updated_at)
@@ -1173,10 +1216,10 @@ pub async fn create_range(
     .execute(&mut *tx)
     .await?
     .last_insert_rowid();
-    let r = load_range(&mut tx, id).await?;
+    let r = load_range(&mut *tx, id).await?;
     audit::record(
-        &mut tx,
-        &ctx,
+        &mut *tx,
+        ctx,
         Some(current.actor_ref()),
         Entry::new("create", "ip_range", Some(id))
             .path(format!("{} {}-{}", p.cidr, r.start_text, r.end_text))
@@ -1184,10 +1227,9 @@ pub async fn create_range(
             .changes(json!({ "kind": kind, "start": r.start_text, "end": r.end_text })),
     )
     .await?;
-    tx.commit().await?;
     let mut v = serde_json::to_value(&r).unwrap_or_default();
     v["warnings"] = json!(warnings);
-    Ok((StatusCode::CREATED, Json(v)))
+    Ok(v)
 }
 
 pub async fn update_range(
@@ -1739,21 +1781,35 @@ pub async fn create_address(
     Extension(ctx): Extension<RequestCtx>,
     current: CurrentUser,
     Path(project_id): Path<i64>,
-    JsonBody(mut body): JsonBody<AddressFields>,
+    JsonBody(body): JsonBody<AddressFields>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let mut tx = state.pool.begin().await?;
-    project_exists(&mut tx, project_id).await?;
+    let v = create_address_in(&mut tx, &ctx, &current, project_id, body).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(v)))
+}
+
+/// The work of `create_address`, inside the caller's transaction (also used by
+/// the CSV importer).
+pub async fn create_address_in(
+    tx: &mut SqliteConnection,
+    ctx: &RequestCtx,
+    current: &CurrentUser,
+    project_id: i64,
+    mut body: AddressFields,
+) -> AppResult<Value> {
+    project_exists(&mut *tx, project_id).await?;
     let (space_id, addr) = match (body.address.take(), body.prefix_id) {
         (Some(a), _) => {
-            let space_id = space_for(&mut tx, project_id, body.space_id).await?;
+            let space_id = space_for(&mut *tx, project_id, body.space_id).await?;
             (space_id, parse_addr(&a).map_err(AppError::bad)?)
         }
         (None, Some(pid)) => {
-            let p = load_prefix(&mut tx, pid).await?;
+            let p = load_prefix(&mut *tx, pid).await?;
             if p.project_id != project_id {
                 return Err(AppError::bad("Prefix not found in this project"));
             }
-            let taken = taken_in(&mut tx, &p, true).await?;
+            let taken = taken_in(&mut *tx, &p, true).await?;
             let free = ip::next_free(&p.cidr(), &taken, 1);
             let a = *free.first().ok_or_else(|| {
                 AppError::Conflict(format!("{} has no free address left", p.cidr))
@@ -1766,9 +1822,9 @@ pub async fn create_address(
             ))
         }
     };
-    let (v, warnings) = address_values(&mut tx, project_id, space_id, addr, body, None).await?;
-    let chain = address_chain(&mut tx, project_id, v.device_id).await?;
-    require(&current, Action::Write, &chain)?;
+    let (v, warnings) = address_values(&mut *tx, project_id, space_id, addr, body, None).await?;
+    let chain = address_chain(&mut *tx, project_id, v.device_id).await?;
+    require(current, Action::Write, &chain)?;
     let now = now_ts();
     let id = sqlx::query(
         "INSERT INTO ip_addresses (project_id, space_id, address, family, addr_bin, prefix_len, device_id, port_id, role,
@@ -1797,11 +1853,11 @@ pub async fn create_address(
     .await
     .map_err(|e| unique(e, format!("{} is already documented in this space", v.addr)))?
     .last_insert_rowid();
-    hierarchy::reindex(&mut tx, Subtree::Address(id)).await?;
-    let a = load_address(&mut tx, id).await?;
+    hierarchy::reindex(&mut *tx, Subtree::Address(id)).await?;
+    let a = load_address(&mut *tx, id).await?;
     audit::record(
-        &mut tx,
-        &ctx,
+        &mut *tx,
+        ctx,
         Some(current.actor_ref()),
         Entry::new("create", "ip_address", Some(id))
             .path(a.address.clone())
@@ -1809,10 +1865,9 @@ pub async fn create_address(
             .changes(a.audit_view()),
     )
     .await?;
-    tx.commit().await?;
     let mut out = a.to_json();
     out["warnings"] = json!(warnings);
-    Ok((StatusCode::CREATED, Json(out)))
+    Ok(out)
 }
 
 pub async fn update_address(
