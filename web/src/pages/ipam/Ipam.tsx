@@ -58,15 +58,24 @@ export function IpamPage() {
   );
 }
 
-export function Utilization({ value }: { value?: number }) {
+export function Utilization({ value, detail }: { value?: number; detail?: string }) {
   if (value == null) return <span className="muted">—</span>;
   const tone = value >= 90 ? 'danger' : value >= 75 ? 'warn' : 'ok';
   return (
-    <span className="util" title={`${value}% used`}>
+    <span className="util" title={detail ?? `${value}% used`}>
       <span className={`util-bar util-${tone}`} style={{ width: `${Math.min(100, value)}%` }} />
       <span className="util-text">{value}%</span>
     </span>
   );
+}
+
+/** "12 in use: 5 documented, 9 leased (2 both); DHCP pool of 249". */
+export function usageDetail(p: { in_use: number; address_count: number; lease_count: number; dhcp_pool_size: number }): string {
+  const both = p.address_count + p.lease_count - p.in_use;
+  let s = `${p.in_use} in use: ${p.address_count} documented, ${p.lease_count} leased`;
+  if (both > 0) s += ` (${both} both)`;
+  if (p.dhcp_pool_size) s += `; DHCP pool of ${p.dhcp_pool_size}`;
+  return s;
 }
 
 function PrefixTree() {
@@ -113,7 +122,7 @@ function PrefixTree() {
                   <td>{p.role}</td>
                   <td>{vlan(p.vlan_id) ? <span className="mono">{vlan(p.vlan_id)!.vid}</span> : null} {vlan(p.vlan_id)?.name}</td>
                   <td>{p.status !== 'active' ? <Badge tone={p.status === 'planned' ? 'info' : 'neutral'}>{p.status}</Badge> : <Badge tone="ok">active</Badge>}</td>
-                  <td><Utilization value={p.utilization} /></td>
+                  <td><Utilization value={p.utilization} detail={usageDetail(p)} /></td>
                   {multi && <td>{spaces.data?.find((s) => s.id === p.space_id)?.name}</td>}
                 </tr>
               ))}

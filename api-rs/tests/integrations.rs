@@ -92,6 +92,10 @@ async fn unifi_mock(data: Value) -> (String, Mock) {
             get(|s: State<Mock>, h: HeaderMap| list(s, h, "networks")),
         )
         .route(
+            "/proxy/network/api/s/default/rest/wlanconf",
+            get(|s: State<Mock>, h: HeaderMap| list(s, h, "wlans")),
+        )
+        .route(
             "/proxy/network/api/s/default/rest/user",
             get(|s: State<Mock>, h: HeaderMap| list(s, h, "users")),
         )
@@ -606,6 +610,40 @@ async fn windows_push_and_upload() {
     assert_eq!(office["gateway"], "10.20.30.1");
     assert_eq!(office["dns_servers"], "10.20.0.53");
     assert_eq!(office["domain_name"], "corp.example.com");
+    // Usage counts documented addresses and DHCP leases, not the whole
+    // pool (141 addresses here): a pool is room for clients, not usage.
+    let docs = office["address_count"].as_u64().unwrap();
+    assert_eq!(office["dhcp_pool_size"], 141);
+    assert_eq!(office["lease_count"], 1);
+    assert_eq!(office["in_use"], docs + 1);
+    assert_eq!(
+        office["utilization"].as_f64().unwrap(),
+        ((docs + 1) * 1000 / 254) as f64 / 10.0
+    );
+    // A leased address that is also documented counts once.
+    sqlx::query(
+        "INSERT INTO dhcp_lease_snapshots (integration_id, space_id, address, family, addr_bin, captured_at)
+         SELECT ?, space_id, address, family, addr_bin, '2026-01-01T00:00:00Z' FROM ip_addresses WHERE address = '10.20.30.60'",
+    )
+    .bind(iid)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    let (_, prefixes) = app.get(&c, &format!("/api/projects/{p}/prefixes")).await;
+    let office = prefixes["prefixes"][0].clone();
+    assert_eq!(
+        (office["lease_count"].clone(), office["in_use"].clone()),
+        (json!(2), json!(docs + 1))
+    );
+    let (_, one) = app.get(&c, &format!("/api/prefixes/{}", id(&office))).await;
+    assert_eq!(
+        (one["in_use"].clone(), one["utilization"].clone()),
+        (office["in_use"].clone(), office["utilization"].clone())
+    );
+    sqlx::query("DELETE FROM dhcp_lease_snapshots WHERE address = '10.20.30.60'")
+        .execute(&app.pool)
+        .await
+        .unwrap();
     let (_, d) = app.get(&c, &format!("/api/prefixes/{}", id(&office))).await;
     let ranges: Vec<(String, String, String)> = d["ranges"]
         .as_array()
@@ -758,4 +796,106 @@ async fn only_admins_manage_integrations() {
         .await
         .unwrap();
     assert!(stored.starts_with("v1:") && !stored.contains("s3cret"));
+}
+
+async fn wlans_of(app: &TestApp, c: &Client, p: i64) -> Vec<Value> {
+    let (_, v) = app.get(c, &format!("/api/projects/{p}/wlans")).await;
+    v["wlans"].as_array().unwrap().clone()
+}
+
+#[tokio::test]
+async fn unifi_wifi_networks() {
+    let app = spawn().await;
+    let c = app.owner().await;
+    let p = app.project(&c, "WIFI").await;
+    let mut data = unifi_data();
+    data["wlans"] = json!([
+        { "_id": "w1", "name": "Home", "security": "wpapsk", "networkconf_id": "n1", "x_passphrase": "hunter2" },
+        { "_id": "w2", "name": "Things", "security": "wpapsk", "wpa3_support": true, "wpa3_transition": true,
+          "networkconf_id": "n2", "hide_ssid": true },
+    ]);
+    let (url, mock) = unifi_mock(data).await;
+    // A Wi-Fi network typed in by hand before the integration: adopted,
+    // keeping its description.
+    post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/wlans"),
+        json!({ "ssid": "Home", "security": "open", "description": "mine" }),
+    )
+    .await;
+    let i = post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/integrations"),
+        json!({ "kind": "unifi", "name": "UDM", "base_url": url, "auth_kind": "api_key", "secret": "good-key" }),
+    )
+    .await;
+    let iid = id(&i);
+    let (s, r) = app
+        .post(&c, &format!("/api/integrations/{iid}/sync"), json!({}))
+        .await;
+    assert_eq!(s, StatusCode::OK, "{r}");
+    assert_eq!(
+        (
+            r["counts"]["wlan"]["created"].clone(),
+            r["counts"]["wlan"]["updated"].clone()
+        ),
+        (json!(1), json!(1)),
+        "{r}"
+    );
+
+    let list = wlans_of(&app, &c, p).await;
+    assert!(
+        !format!("{list:?}").contains("hunter2"),
+        "never the passphrase"
+    );
+    let find =
+        |list: &[Value], ssid: &str| list.iter().find(|w| w["ssid"] == ssid).unwrap().clone();
+    let home = find(&list, "Home");
+    assert_eq!(
+        (
+            home["security"].as_str(),
+            home["description"].as_str(),
+            home["source_integration_id"].as_i64()
+        ),
+        (Some("wpa2"), Some("mine"), Some(iid))
+    );
+    assert_eq!(home["vlan_id"], Value::Null, "the untagged LAN");
+    let things = find(&list, "Things");
+    let (_, vlans) = app.get(&c, &format!("/api/projects/{p}/vlans")).await;
+    let v30 = vlans["vlans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["vid"] == 30)
+        .unwrap()["id"]
+        .clone();
+    assert_eq!(
+        (
+            things["security"].as_str(),
+            things["hidden"].as_bool(),
+            things["vlan_id"].clone()
+        ),
+        (Some("wpa2_wpa3"), Some(true), v30)
+    );
+
+    // Unchanged: nothing to do. Gone at the source: marked missing, kept.
+    let (_, r) = app
+        .post(&c, &format!("/api/integrations/{iid}/sync"), json!({}))
+        .await;
+    assert!(
+        r["counts"]["wlan"].is_null() || r["counts"]["wlan"]["updated"] == 0,
+        "{r}"
+    );
+    mock.data.lock().unwrap()["wlans"]
+        .as_array_mut()
+        .unwrap()
+        .remove(1);
+    let (_, r) = app
+        .post(&c, &format!("/api/integrations/{iid}/sync"), json!({}))
+        .await;
+    assert_eq!(r["counts"]["wlan"]["missing"], 1, "{r}");
+    let things = find(&wlans_of(&app, &c, p).await, "Things");
+    assert!(things["missing_from_source_at"].is_string(), "{things}");
 }

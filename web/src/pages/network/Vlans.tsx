@@ -78,7 +78,21 @@ export function VlansPage() {
               onRowClick={canWrite ? (w) => setModal({ t: 'wlan', w }) : undefined}
               empty="No Wi-Fi networks yet"
               columns={[
-                { key: 'ssid', label: 'SSID', render: (w) => <>{w.ssid} {w.hidden && <Badge>hidden</Badge>}</>, sort: (w) => w.ssid },
+                {
+                  key: 'ssid',
+                  label: 'SSID',
+                  render: (w) => (
+                    <>
+                      {w.ssid} {w.hidden && <Badge>hidden</Badge>}{' '}
+                      {w.missing_from_source_at ? (
+                        <Badge tone="warn">missing at source</Badge>
+                      ) : (
+                        w.source_integration_id != null && <Badge tone="info">imported</Badge>
+                      )}
+                    </>
+                  ),
+                  sort: (w) => w.ssid,
+                },
                 { key: 'sec', label: 'Security', render: (w) => SECURITY.find((s) => s.value === w.security)?.label },
                 { key: 'vlan', label: 'VLAN', render: (w) => { const v = vlans.data?.find((x) => x.id === w.vlan_id); return v ? `${v.vid} ${v.name}` : null; } },
                 { key: 'desc', label: 'Description', render: (w) => w.description },

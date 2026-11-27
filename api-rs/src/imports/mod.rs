@@ -39,6 +39,20 @@ pub struct SrcDevice {
     pub external_url: Option<String>,
 }
 
+/// A Wi-Fi network (UniFi WLAN). Never its passphrase.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct SrcWlan {
+    pub external_id: String,
+    pub ssid: String,
+    /// One of Rackpath's WLAN security values (open, owe, wpa2, wpa3,
+    /// wpa2_wpa3, enterprise).
+    pub security: String,
+    pub hidden: bool,
+    /// The VLAN ID its clients land on; None for the untagged network.
+    pub vlan: Option<i64>,
+    pub enabled: bool,
+}
+
 /// A subnet (DHCP scope, UniFi network) with its ranges.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct SrcNetwork {
@@ -90,6 +104,8 @@ pub struct Snapshot {
     pub networks: Vec<SrcNetwork>,
     pub reservations: Vec<SrcReservation>,
     pub dns: Vec<SrcDns>,
+    #[serde(default)]
+    pub wlans: Vec<SrcWlan>,
     /// None: leases weren't collected this time (leave the old snapshot).
     pub leases: Option<Vec<SrcLease>>,
     /// Which kinds of record this source provides at all. Records of other
@@ -103,6 +119,8 @@ pub struct Covers {
     pub networks: bool,
     pub reservations: bool,
     pub dns: bool,
+    #[serde(default)]
+    pub wlans: bool,
 }
 
 /// Whether an import changes too much at once to apply without an admin.

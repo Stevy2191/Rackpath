@@ -10,7 +10,7 @@ import type { IpAddress, IpRange, PrefixDetail, PrefixGrid } from '../../types';
 import { Badge, Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, Table, fmtTime, useLoad, useToast } from '../../ui';
 import { KeyValues } from '../places/common';
 import { AddressForm, PrefixForm, RANGE_KINDS, RangeForm, useVlans } from './Forms';
-import { AddressTable, Utilization } from './Ipam';
+import { AddressTable, Utilization, usageDetail } from './Ipam';
 
 type Modal = { t: 'edit' } | { t: 'delete' } | { t: 'range'; r?: IpRange } | { t: 'address'; address?: string; next?: boolean } | { t: 'child' };
 
@@ -65,8 +65,8 @@ export function PrefixPage() {
             rows={[
               ['Status', <Badge tone={p.status === 'active' ? 'ok' : p.status === 'planned' ? 'info' : 'neutral'}>{p.status}</Badge>],
               ['Size', `${p.size} addresses${p.family === 4 ? ` (${usable} usable)` : ''}`],
-              ['Used', p.utilization != null ? <Utilization value={p.utilization} /> : null],
-              ['Documented', `${p.address_count} address(es)${p.dhcp_pool_size ? `, DHCP pool of ${p.dhcp_pool_size}` : ''}`],
+              ['Used', p.utilization != null ? <Utilization value={p.utilization} detail={usageDetail(p)} /> : null],
+              ['In use', usageDetail(p)],
               ['Gateway', p.gateway && <span className="mono">{p.gateway}</span>],
               ['DNS servers', p.dns_servers && <span className="mono">{p.dns_servers}</span>],
               ['Domain', p.domain_name],
