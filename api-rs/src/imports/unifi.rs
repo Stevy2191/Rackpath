@@ -415,6 +415,7 @@ pub fn map_fixed_ips(v: &Value) -> Vec<SrcReservation> {
                 mac: s(c, "mac").and_then(|m| mac(&m)),
                 name: text(s(c, "name").or(s(c, "hostname")).as_deref(), 253),
                 description: text(s(c, "note").as_deref(), 255),
+                static_outside_pools: true,
             })
         })
         .collect()

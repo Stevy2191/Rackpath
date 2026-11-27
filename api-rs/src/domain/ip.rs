@@ -241,6 +241,63 @@ impl Cidr {
     }
 }
 
+/// The free runs between `first` and `last` (inclusive): what `taken`
+/// (inclusive intervals, in any order, may overlap) leaves, each run split
+/// where DHCP `pools` begin and end and marked inside a pool or not. At most
+/// `max` runs; the flag says whether there were more.
+pub fn free_runs(
+    first: u128,
+    last: u128,
+    taken: &[(u128, u128)],
+    pools: &[(u128, u128)],
+    max: usize,
+) -> (Vec<(u128, u128, bool)>, bool) {
+    let mut taken: Vec<(u128, u128)> = taken
+        .iter()
+        .filter(|(s, e)| s <= e && *e >= first && *s <= last)
+        .map(|&(s, e)| (s.max(first), e.min(last)))
+        .collect();
+    taken.sort_unstable();
+    let mut gaps = Vec::new();
+    let mut cursor = Some(first);
+    for (s, e) in taken {
+        let Some(c) = cursor else { break };
+        if s > c {
+            gaps.push((c, s - 1));
+        }
+        if e >= c {
+            cursor = e.checked_add(1).filter(|n| *n <= last);
+        }
+    }
+    if let Some(c) = cursor {
+        gaps.push((c, last));
+    }
+    let mut pools: Vec<(u128, u128)> = pools.iter().copied().filter(|(s, e)| s <= e).collect();
+    pools.sort_unstable();
+    let mut out = Vec::new();
+    for (a, b) in gaps {
+        let mut c = a;
+        loop {
+            if out.len() == max {
+                return (out, true);
+            }
+            let (end, in_pool) = match pools.iter().find(|(s, e)| *s <= c && c <= *e) {
+                Some(&(_, e)) => (e.min(b), true),
+                None => {
+                    let next = pools.iter().map(|(s, _)| *s).filter(|s| *s > c).min();
+                    (next.map_or(b, |n| (n - 1).min(b)), false)
+                }
+            };
+            out.push((c, end, in_pool));
+            match end.checked_add(1) {
+                Some(n) if n <= b => c = n,
+                _ => break,
+            }
+        }
+    }
+    (out, false)
+}
+
 /// The smallest prefix in `prefixes` containing `a`.
 pub fn containing<'a, T>(a: Addr, prefixes: impl IntoIterator<Item = (&'a Cidr, T)>) -> Option<T> {
     prefixes
@@ -294,6 +351,42 @@ pub fn within(first: Addr, last: Addr, taken: &[(Addr, Addr)], count: usize) -> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn free_runs_around_taken_and_pools() {
+        use super::free_runs;
+        // .1-.254 usable; .1 gateway, .10-.16 taken, pool .100-.110 with .101 leased.
+        let taken = [(1, 1), (10, 16), (101, 101)];
+        let (runs, more) = free_runs(1, 254, &taken, &[(100, 110)], 100);
+        assert!(!more);
+        assert_eq!(
+            runs,
+            [
+                (2, 9, false),
+                (17, 99, false),
+                (100, 100, true),
+                (102, 110, true),
+                (111, 254, false)
+            ]
+        );
+        // Overlapping and out-of-range taken intervals; nothing free.
+        let (runs, _) = free_runs(5, 9, &[(0, 6), (6, 20)], &[], 10);
+        assert!(runs.is_empty());
+        // Everything free, a pool at the very end; the cap.
+        let (runs, _) = free_runs(1, 10, &[], &[(8, 20)], 10);
+        assert_eq!(runs, [(1, 7, false), (8, 10, true)]);
+        let (runs, more) = free_runs(1, 100, &[(5, 5), (10, 10), (20, 20)], &[], 2);
+        assert_eq!((runs.len(), more), (2, true));
+        // The top of the address space doesn't overflow.
+        let (runs, _) = free_runs(
+            u128::MAX - 3,
+            u128::MAX,
+            &[(u128::MAX - 1, u128::MAX)],
+            &[],
+            10,
+        );
+        assert_eq!(runs, [(u128::MAX - 3, u128::MAX - 2, false)]);
+    }
+
     #[test]
     fn public_addresses() {
         use super::parse_addr;

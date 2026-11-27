@@ -76,6 +76,12 @@ pub struct SrcReservation {
     pub mac: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
+    /// A fixed IP outside every DHCP pool is a static address, not a DHCP
+    /// reservation (UniFi: "Fixed IP" on a host set up statically). Windows
+    /// reservations stay reservations wherever they are (often inside an
+    /// exclusion).
+    #[serde(default)]
+    pub static_outside_pools: bool,
 }
 
 /// A static DNS record.

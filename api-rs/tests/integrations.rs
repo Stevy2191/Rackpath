@@ -275,7 +275,15 @@ async fn unifi_network_with_dhcp() {
             .unwrap()
     };
     let res = find("192.168.1.10");
-    assert_eq!(res["dhcp_reservation"], true);
+    // A UniFi fixed IP outside the pool (.100-.199): a static address.
+    assert_eq!(
+        (res["dhcp_reservation"].clone(), res["kind"].as_str()),
+        (json!(false), Some("static"))
+    );
+    assert!(
+        res.get("status").is_none(),
+        "no status: documented means in use"
+    );
     assert_eq!(
         res["device_id"],
         id(&nas),
@@ -1017,4 +1025,92 @@ async fn imported_devices_are_coded_from_their_names() {
     assert!(g["path"].as_str().unwrap().ends_with("GATEWAY"), "{g}");
     let (_, a) = app.get(&c, &format!("/api/devices/{}", id(&ap))).await;
     assert_eq!(a["code"], "LR-AP", "a chosen code is never changed");
+}
+
+#[tokio::test]
+async fn unifi_fixed_ips_are_static_or_reservations_by_pool() {
+    let app = spawn().await;
+    let c = app.owner().await;
+    let p = app.project(&c, "KINDS").await;
+    let mut data = unifi_data();
+    data["users"] = json!([
+        { "mac": "aa:bb:cc:00:00:10", "name": "prox-a", "use_fixedip": true, "fixed_ip": "192.168.1.10" },
+        { "mac": "aa:bb:cc:00:00:12", "name": "printer", "use_fixedip": true, "fixed_ip": "192.168.1.120" },
+    ]);
+    let (url, mock) = unifi_mock(data).await;
+    let i = post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/integrations"),
+        json!({ "kind": "unifi", "name": "UDM", "base_url": url, "auth_kind": "api_key", "secret": "good-key" }),
+    )
+    .await;
+    let iid = id(&i);
+    let sync_path = format!("/api/integrations/{iid}/sync");
+    let (s, r) = app.post(&c, &sync_path, json!({})).await;
+    assert_eq!(s, StatusCode::OK, "{r}");
+    let kinds = |list: &Value| -> Vec<(String, String)> {
+        list["addresses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| {
+                (
+                    a["address"].as_str().unwrap().to_string(),
+                    a["kind"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect()
+    };
+    let (_, all) = app.get(&c, &format!("/api/projects/{p}/addresses")).await;
+    let all = kinds(&all);
+    let kind_of = |ip: &str| all.iter().find(|(a, _)| a == ip).unwrap().1.clone();
+    // Outside the pool: static. Inside it, pinned to a MAC: a reservation.
+    // The gateway's own address (from its device record) is static too.
+    assert_eq!(kind_of("192.168.1.10"), "static");
+    assert_eq!(kind_of("192.168.1.120"), "dhcp_reservation");
+    assert_eq!(kind_of("192.168.1.1"), "static");
+
+    // The list filters by kind.
+    let (_, only) = app
+        .get(
+            &c,
+            &format!("/api/projects/{p}/addresses?kind=dhcp_reservation"),
+        )
+        .await;
+    assert_eq!(
+        kinds(&only),
+        [("192.168.1.120".to_string(), "dhcp_reservation".to_string())]
+    );
+    let (s, _) = app
+        .get(&c, &format!("/api/projects/{p}/addresses?kind=reserved"))
+        .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // Only "assigned" is accepted as a status now.
+    let (s, e) = app
+        .post(
+            &c,
+            &format!("/api/projects/{p}/addresses"),
+            json!({ "address": "192.168.1.50", "status": "reserved" }),
+        )
+        .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "{e}");
+
+    // Removed in UniFi: marked missing at the source, kept.
+    mock.data.lock().unwrap()["users"]
+        .as_array_mut()
+        .unwrap()
+        .remove(1);
+    let (_, r) = app.post(&c, &sync_path, json!({})).await;
+    assert_eq!(r["counts"]["address"]["missing"], 1, "{r}");
+    let (_, all) = app.get(&c, &format!("/api/projects/{p}/addresses")).await;
+    let printer = all["addresses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["address"] == "192.168.1.120")
+        .unwrap()
+        .clone();
+    assert!(printer["missing_from_source_at"].is_string(), "{printer}");
 }

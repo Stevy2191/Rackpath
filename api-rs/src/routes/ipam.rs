@@ -1109,6 +1109,82 @@ pub async fn grid(
     })))
 }
 
+/// The free addresses in a prefix as runs, each inside a DHCP pool or not.
+/// Taken: documented addresses, current DHCP leases, the gateway, held
+/// ranges and smaller prefixes inside it (they have their own free list).
+pub async fn free_addresses(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Path(id): Path<i64>,
+) -> AppResult<Json<Value>> {
+    let mut conn = state.pool.acquire().await?;
+    let p = load_prefix(&mut conn, id).await?;
+    require(&current, Action::Read, &Chain::project(p.project_id))?;
+    let c = p.cidr();
+    let (first, last) = c.usable();
+    let v6 = c.family() == Family::V6;
+    let bins: Vec<Vec<u8>> = sqlx::query_scalar(
+        "SELECT addr_bin FROM ip_addresses WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4
+         UNION SELECT addr_bin FROM dhcp_lease_snapshots WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4",
+    )
+    .bind(p.space_id)
+    .bind(p.family)
+    .bind(c.start().bin())
+    .bind(c.end().bin())
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut taken: Vec<(u128, u128)> = bins
+        .iter()
+        .filter_map(|b| Addr::from_bin(b))
+        .map(|a| (a.value, a.value))
+        .collect();
+    if let Some(g) = p.gateway.as_deref().and_then(|g| parse_addr(g).ok()) {
+        taken.push((g.value, g.value));
+    }
+    for child in children_of(&mut conn, &p).await? {
+        let cc = child.cidr();
+        taken.push((cc.start().value, cc.end().value));
+    }
+    let mut pools = Vec::new();
+    for r in ranges_of(&mut conn, id).await? {
+        let Some((s, e)) = r.bounds() else { continue };
+        match r.kind.as_str() {
+            "dhcp_pool" => pools.push((s.value, e.value)),
+            "reserved" => taken.push((s.value, e.value)),
+            _ => {}
+        }
+    }
+    let (runs, _) = ip::free_runs(first.value, last.value, &taken, &pools, usize::MAX);
+    let count = |n: u128| {
+        if v6 {
+            json!(n.to_string())
+        } else {
+            json!(n as u64)
+        }
+    };
+    let text = |v: u128| Addr { value: v, v6 }.to_string();
+    let (mut outside, mut inside) = (0u128, 0u128);
+    for (s, e, in_pool) in &runs {
+        let n = e - s + 1;
+        if *in_pool {
+            inside += n;
+        } else {
+            outside += n;
+        }
+    }
+    const SHOWN: usize = 500;
+    Ok(Json(json!({
+        "cidr": p.cidr,
+        "free": count(inside + outside),
+        "free_outside_pools": count(outside),
+        "free_in_pools": count(inside),
+        "runs": runs.iter().take(SHOWN).map(|(s, e, in_pool)| json!({
+            "start": text(*s), "end": text(*e), "count": count(e - s + 1), "in_pool": in_pool,
+        })).collect::<Vec<_>>(),
+        "truncated": runs.len() > SHOWN,
+    })))
+}
+
 // ---------------------------------------------------------------- ranges
 
 #[derive(Deserialize)]
@@ -1176,7 +1252,7 @@ async fn check_range(
     if kind == "dhcp_pool" {
         let statics: Vec<String> = sqlx::query_scalar(
             "SELECT address FROM ip_addresses WHERE space_id = ? AND family = ? AND addr_bin BETWEEN ? AND ?
-             AND dhcp_reservation = 0 AND status <> 'deprecated' ORDER BY addr_bin LIMIT 20",
+             AND dhcp_reservation = 0 ORDER BY addr_bin LIMIT 20",
         )
         .bind(p.space_id)
         .bind(p.family)
@@ -1383,6 +1459,9 @@ pub struct AddressRow {
     /// The linked device's name (its path shows only codes).
     device_name: Option<String>,
     port_path: Option<String>,
+    /// Inside a DHCP pool of a prefix containing it.
+    #[serde(skip)]
+    in_dhcp_pool: bool,
 }
 
 macro_rules! address_select {
@@ -1390,7 +1469,10 @@ macro_rules! address_select {
         "SELECT a.id, a.project_id, a.space_id, a.address, a.family, a.addr_bin, a.prefix_len, a.device_id, a.port_id, \
          a.role, a.status, a.mac, a.dns_name, a.dns_aliases, a.dhcp_reservation, a.description, a.notes, a.source, \
          a.external_id, a.missing_from_source_at, a.created_at, a.updated_at, ds.path AS device_path, \
-         (SELECT d.name FROM devices d WHERE d.id = a.device_id) AS device_name, ps.path AS port_path \
+         (SELECT d.name FROM devices d WHERE d.id = a.device_id) AS device_name, ps.path AS port_path, \
+         EXISTS (SELECT 1 FROM ip_ranges r JOIN prefixes p ON p.id = r.prefix_id WHERE r.kind = 'dhcp_pool' \
+                 AND p.space_id = a.space_id AND p.family = a.family \
+                 AND a.addr_bin BETWEEN r.start_bin AND r.end_bin) AS in_dhcp_pool \
          FROM ip_addresses a \
          LEFT JOIN search_entries ds ON ds.kind = 'device' AND ds.ref_id = a.device_id \
          LEFT JOIN search_entries ps ON ps.kind = 'port' AND ps.ref_id = a.port_id "
@@ -1404,9 +1486,25 @@ impl AddressRow {
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default()
     }
+    /// How the address is given out: a DHCP reservation (pinned to a MAC),
+    /// DHCP (inside a pool, not pinned) or static (outside every pool).
+    fn kind(&self) -> &'static str {
+        if self.dhcp_reservation {
+            "dhcp_reservation"
+        } else if self.in_dhcp_pool {
+            "dhcp"
+        } else {
+            "static"
+        }
+    }
     pub fn to_json(&self) -> Value {
         let mut v = serde_json::to_value(self).unwrap_or_default();
         v["dns_aliases"] = json!(self.aliases());
+        v["kind"] = json!(self.kind());
+        // A documented address is in use; free addresses aren't documented.
+        if let Some(o) = v.as_object_mut() {
+            o.remove("status");
+        }
         v
     }
     fn audit_view(&self) -> Value {
@@ -1420,6 +1518,7 @@ impl AddressRow {
                 "updated_at",
                 "device_path",
                 "device_name",
+                "kind",
             ] {
                 o.remove(k);
             }
@@ -1597,22 +1696,14 @@ async fn address_values(
             "role must be primary, secondary, gateway, vip or loopback",
         ));
     }
-    let status = f
-        .status
-        .or(old.map(|o| o.status.clone()))
-        .unwrap_or_else(|| {
-            if device_id.is_some() {
-                "assigned"
-            } else {
-                "reserved"
-            }
-            .into()
-        });
-    if !["reserved", "assigned", "deprecated"].contains(&status.as_str()) {
+    // A documented address is in use (free ones aren't documented), so the
+    // status is always "assigned"; it's still accepted for older clients.
+    if f.status.as_deref().is_some_and(|s| s != "assigned") {
         return Err(AppError::bad(
-            "status must be reserved, assigned or deprecated",
+            "An address is either documented (in use) or free; there's no other status",
         ));
     }
+    let status = String::from("assigned");
     let mac = match f.mac {
         None => old.and_then(|o| o.mac.clone()),
         Some(None) => None,
@@ -1648,7 +1739,7 @@ async fn address_values(
 
     // Warnings that need the database.
     if let Some(p) = &prefix {
-        if !dhcp_reservation && status != "deprecated" {
+        if !dhcp_reservation {
             let in_pool: Option<String> = sqlx::query_scalar(
                 "SELECT start_text || '-' || end_text FROM ip_ranges WHERE prefix_id = ? AND kind = 'dhcp_pool'
                  AND start_bin <= ? AND end_bin >= ?",
@@ -1718,7 +1809,8 @@ pub struct AddressQuery {
     prefix_id: Option<i64>,
     device_id: Option<i64>,
     port_id: Option<i64>,
-    status: Option<String>,
+    /// static, dhcp or dhcp_reservation.
+    kind: Option<String>,
     q: Option<String>,
     after_id: Option<i64>,
     limit: Option<i64>,
@@ -1759,8 +1851,25 @@ pub async fn list_addresses(
     if let Some(v) = f.port_id {
         q.push(" AND a.port_id = ").push_bind(v);
     }
-    if let Some(v) = f.status {
-        q.push(" AND a.status = ").push_bind(v);
+    const IN_POOL: &str = " EXISTS (SELECT 1 FROM ip_ranges r JOIN prefixes p ON p.id = r.prefix_id
+        WHERE r.kind = 'dhcp_pool' AND p.space_id = a.space_id AND p.family = a.family
+        AND a.addr_bin BETWEEN r.start_bin AND r.end_bin)";
+    match f.kind.as_deref() {
+        None | Some("") => {}
+        Some("dhcp_reservation") => {
+            q.push(" AND a.dhcp_reservation = 1");
+        }
+        Some("dhcp") => {
+            q.push(" AND a.dhcp_reservation = 0 AND").push(IN_POOL);
+        }
+        Some("static") => {
+            q.push(" AND a.dhcp_reservation = 0 AND NOT").push(IN_POOL);
+        }
+        Some(_) => {
+            return Err(AppError::bad(
+                "kind must be static, dhcp or dhcp_reservation",
+            ))
+        }
     }
     if let Some(text) = f.q.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()) {
         let like = format!(
@@ -2080,7 +2189,7 @@ pub async fn warnings(
         "SELECT a.id, a.address, r.start_text || '-' || r.end_text FROM ip_addresses a
          JOIN prefixes p ON p.space_id = a.space_id AND p.family = a.family AND a.addr_bin BETWEEN p.net_start AND p.net_end
          JOIN ip_ranges r ON r.prefix_id = p.id AND r.kind = 'dhcp_pool' AND a.addr_bin BETWEEN r.start_bin AND r.end_bin
-         WHERE a.project_id = ? AND a.dhcp_reservation = 0 AND a.status <> 'deprecated'
+         WHERE a.project_id = ? AND a.dhcp_reservation = 0
          GROUP BY a.id ORDER BY a.addr_bin LIMIT 500",
     )
     .bind(project_id)

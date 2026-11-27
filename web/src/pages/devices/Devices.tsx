@@ -5,6 +5,7 @@ import { api, qs } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
 import type { Device, IpAddress } from '../../types';
+import { ADDRESS_KIND_LABEL } from '../../types';
 import { PortsPanel } from '../cabling/PortsPanel';
 import { DevicePowerPanel } from '../power/Power';
 import { DeviceTagsForm, TagChip, useTags } from '../ProjectSettings';
@@ -310,8 +311,8 @@ function DeviceAddresses({ projectId, deviceId }: { projectId: number; deviceId:
         { key: 'port', label: 'Port', render: (a) => (a.port_id ? <Link to={link.port(projectId, a.port_id)} className="mono">{a.port_path?.split('/').pop()}</Link> : null) },
         { key: 'dns', label: 'DNS name', render: (a) => a.dns_name, sort: (a) => a.dns_name ?? '' },
         { key: 'role', label: 'Role', render: (a) => a.role, sort: (a) => a.role },
-        { key: 'status', label: 'Status', render: (a) => a.status, sort: (a) => a.status },
-        { key: 'source', label: 'Source', render: (a) => (a.dhcp_reservation ? `${a.source} · DHCP reservation` : a.source) },
+        { key: 'kind', label: 'Type', render: (a) => ADDRESS_KIND_LABEL[a.kind], sort: (a) => a.kind },
+        { key: 'source', label: 'Source', render: (a) => a.source },
       ]}
     />
   );

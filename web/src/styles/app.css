@@ -292,9 +292,9 @@ tr.clickable { cursor: pointer; }
 .cell.range-reserved { background: var(--color-warning-bg); border-color: var(--color-warning); }
 .cell.range-static { background: var(--color-accent-bg); }
 .cell.lease { box-shadow: inset 0 0 0 2px var(--color-info); }
-.cell.addr-assigned { background: var(--color-success); border-color: var(--color-success); color: var(--color-bg-elevated) !important; }
-.cell.addr-reserved { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-bg-elevated) !important; }
-.cell.addr-deprecated { background: var(--color-text-faint); color: var(--color-bg-elevated) !important; }
+.cell.addr-static { background: var(--color-success); border-color: var(--color-success); color: var(--color-bg-elevated) !important; }
+.cell.addr-dhcp_reservation { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-bg-elevated) !important; }
+.cell.addr-dhcp { background: var(--color-info); border-color: var(--color-info); color: var(--color-bg-elevated) !important; }
 .cell.gateway { outline: 2px solid var(--color-warning); outline-offset: -2px; }
 .swatch.range-dhcp_pool { background: var(--color-info); }
 .swatch.range-reserved { background: var(--color-warning); }
