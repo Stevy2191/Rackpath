@@ -19,8 +19,9 @@ pub struct Config {
     pub cookie_secure: bool,
     /// Public base URL, used for invitation links and QR codes.
     pub public_url: Option<String>,
-    /// Trust X-Forwarded-For from the directly connected peer (only when
-    /// Rackpath sits behind a reverse proxy you control).
+    /// Take the client address from the last X-Forwarded-For entry, the one
+    /// the proxy added (only when Rackpath sits behind a reverse proxy you
+    /// control, and only it can reach Rackpath).
     pub trust_proxy: bool,
     /// Days of audit history to keep; None keeps everything.
     pub audit_retention_days: Option<u32>,

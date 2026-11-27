@@ -124,7 +124,7 @@ instead of building). Set the port and address in `.env` (see below).
 | `RACKPATH_HTTPS_PORT`, `RACKPATH_HTTP_PORT` | `443`, `80` | Caddy's ports (HTTP redirects to HTTPS) |
 | `RACKPATH_PUBLIC_URL` | the request's address | The address people use, for invitation links and report QR codes |
 | `RACKPATH_COOKIE_SECURE` | `false` | `true` when Rackpath is reached over HTTPS |
-| `RACKPATH_TRUST_PROXY` | `false` | `true` behind a reverse proxy that sets `X-Forwarded-For` |
+| `RACKPATH_TRUST_PROXY` | `false` | `true` behind a reverse proxy that sets `X-Forwarded-For`; the last entry (the one the proxy added) is used |
 | `RACKPATH_AUDIT_RETENTION_DAYS` | keep forever | Delete change history older than this |
 
 All settings are in [api-rs/README.md](api-rs/README.md#settings-environment-variables).
