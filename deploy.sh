@@ -44,15 +44,31 @@ prompt() {
   printf '%s' "$value"
 }
 
+# Published by one of this install's own containers (fine to keep using).
+port_is_ours() {
+  docker ps --filter 'name=^rackpath$' --filter 'name=^rackpath-caddy$' --format '{{.Ports}}' 2>/dev/null |
+    grep -qE ":${1}->"
+}
+
+# Something on this machine has the port: a listening socket, or a Docker
+# container publishing it (Docker may not hold a socket for it, e.g. with
+# its userland proxy turned off). This install's own containers don't count.
 port_in_use() {
   local port="$1"
+  port_is_ours "$port" && return 1
   if command -v ss >/dev/null 2>&1; then
-    ss -Htln 2>/dev/null | awk '{print $4}' | grep -qE "[.:]${port}\$"
+    ss -Htln 2>/dev/null | awk '{print $4}' | grep -qE "[.:]${port}\$" && return 0
   elif command -v lsof >/dev/null 2>&1; then
-    lsof -iTCP:"${port}" -sTCP:LISTEN -P -n >/dev/null 2>&1
-  else
-    return 1
+    lsof -iTCP:"${port}" -sTCP:LISTEN -P -n >/dev/null 2>&1 && return 0
   fi
+  docker ps --format '{{.Ports}}' 2>/dev/null | tr ',' '\n' | grep -qE ":${port}->"
+}
+
+# The first free port from $1 up.
+next_free_port() {
+  local p="$1"
+  while [ "$p" -le 65535 ] && port_in_use "$p"; do p=$((p + 1)); done
+  printf '%s' "$p"
 }
 
 valid_port() {
@@ -107,10 +123,15 @@ fi
 
 host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 
-# Asks for a port. $1: question, $2: default, $3: a port this install
-# already uses (not reported as taken).
+# Asks for a port. $1: question, $2: default. A default that's taken is
+# replaced by the next free port (also without a terminal).
 ask_port() {
-  local p="$2" answer
+  local p="$2" answer free
+  if valid_port "$p" && port_in_use "$p"; then
+    free=$(next_free_port "$p")
+    echo "  Port $p is already in use on this machine; suggesting $free." >&2
+    p="$free"
+  fi
   if have_tty; then
     while true; do
       answer=$(prompt "  $1 [$p]: ")
@@ -119,8 +140,9 @@ ask_port() {
         echo "  '$answer' is not a port number (1-65535)." >&2
         continue
       fi
-      if port_in_use "$answer" && [ "$answer" != "${3:-}" ]; then
-        [[ "$(prompt "  Port $answer is in use. Use it anyway? [y/N]: ")" =~ ^[Yy] ]] || continue
+      if port_in_use "$answer"; then
+        echo "  Port $answer is already in use on this machine (the next free one is $(next_free_port "$answer"))." >&2
+        continue
       fi
       p="$answer"
       break
@@ -172,9 +194,9 @@ case "$mode" in
     current_http=$(env_value RACKPATH_HTTP_PORT)
     https_port="${RACKPATH_HTTPS_PORT:-${current_https:-443}}"
     http_port="${RACKPATH_HTTP_PORT:-${current_http:-80}}"
-    [ -n "${RACKPATH_HTTPS_PORT:-}" ] || https_port=$(ask_port "HTTPS port" "$https_port" "$current_https")
-    [ -n "${RACKPATH_HTTP_PORT:-}" ] || http_port=$(ask_port "HTTP port (redirects to HTTPS)" "$http_port" "$current_http")
-    [ -n "${RACKPATH_PORT:-}" ] || port=$(ask_port "Port for Rackpath itself (only reachable from this machine)" "$port" "$current_port")
+    [ -n "${RACKPATH_HTTPS_PORT:-}" ] || https_port=$(ask_port "HTTPS port" "$https_port")
+    [ -n "${RACKPATH_HTTP_PORT:-}" ] || http_port=$(ask_port "HTTP port (redirects to HTTPS)" "$http_port")
+    [ -n "${RACKPATH_PORT:-}" ] || port=$(ask_port "Port for Rackpath itself (only reachable from this machine)" "$port")
     [ "$https_port" != "$http_port" ] && [ "$https_port" != "$port" ] && [ "$http_port" != "$port" ] ||
       die "The HTTPS, HTTP and Rackpath ports must all differ ($https_port, $http_port, $port)."
     public_url="https://${hostname}"
@@ -190,7 +212,7 @@ case "$mode" in
     set_env_value RACKPATH_TRUST_PROXY true
     ;;
   proxy)
-    [ -n "${RACKPATH_PORT:-}" ] || port=$(ask_port "Port your proxy will forward to" "$port" "$current_port")
+    [ -n "${RACKPATH_PORT:-}" ] || port=$(ask_port "Port your proxy will forward to" "$port")
     if [ -z "${RACKPATH_PUBLIC_URL:-}" ] && have_tty; then
       while true; do
         answer=$(prompt "  Address people will use, e.g. https://rackpath.example.com [${public_url:-none}]: ")
@@ -211,7 +233,7 @@ case "$mode" in
     set_env_value RACKPATH_TRUST_PROXY true
     ;;
   http)
-    [ -n "${RACKPATH_PORT:-}" ] || port=$(ask_port "Web port" "$port" "$current_port")
+    [ -n "${RACKPATH_PORT:-}" ] || port=$(ask_port "Web port" "$port")
     case "$public_url" in https://*) public_url="" ;; esac
     if [ -z "${RACKPATH_PUBLIC_URL:-}" ] && have_tty; then
       answer=$(prompt "  Address people will use, e.g. http://${host_ip:-server}:${port} [${public_url:-the address each request arrives at}]: ")
@@ -223,6 +245,11 @@ case "$mode" in
     set_env_value RACKPATH_TRUST_PROXY false
     ;;
 esac
+# Ports given in the environment weren't asked about: check them too.
+for chosen in "$port" ${https_port:-} ${http_port:-}; do
+  port_in_use "$chosen" &&
+    die "Port $chosen is already in use on this machine (the next free one is $(next_free_port "$chosen")). Choose another."
+done
 set_env_value RACKPATH_PORT "$port"
 set_env_value RACKPATH_PUBLIC_URL "$public_url"
 chmod 600 .env
