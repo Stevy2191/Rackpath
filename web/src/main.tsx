@@ -16,6 +16,7 @@ import { ProjectHome } from './pages/ProjectHome';
 import { projectRoutes } from './routes';
 import { UsersPage } from './pages/admin/Users';
 import { ActivityPage } from './pages/Activity';
+import { ShortLink } from './pages/Exports';
 
 applyTheme(currentTheme());
 
@@ -56,6 +57,7 @@ function App() {
                 <Route path="account" element={<AccountPage />} />
                 <Route path="admin/users" element={<UsersPage />} />
                 <Route path="activity" element={<ActivityPage />} />
+                <Route path="r/:type/:id" element={<ShortLink />} />
                 <Route path="p/:projectId">
                   <Route index element={<ProjectHome />} />
                   {projectRoutes}

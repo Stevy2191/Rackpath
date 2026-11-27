@@ -8,6 +8,7 @@ import type { Floor, Location } from '../../types';
 import { Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, Table, TextArea, TextField, useLoad, useToast } from '../../ui';
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
 import { MoveLocation } from './Move';
+import { ReportButton } from '../Exports';
 
 type LocationRow = Location & { counts: NonNullable<Location['counts']> };
 
@@ -124,13 +125,16 @@ export function LocationPage() {
       <PageHeader
         title={<><span className="mono">{l.code}</span>{l.name && <span className="title-name"> {l.name}</span>}</>}
         actions={
-          l.can_edit && (
-            <>
-              <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
-              <Button icon={<MoveRight size={15} />} onClick={() => setModal('move')}>Move</Button>
-              <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>
-            </>
-          )
+          <>
+            <ReportButton type="location" id={l.id} />
+            {l.can_edit && (
+              <>
+                <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
+                <Button icon={<MoveRight size={15} />} onClick={() => setModal('move')}>Move</Button>
+                <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>
+              </>
+            )}
+          </>
         }
       />
       <div className="grid-2">

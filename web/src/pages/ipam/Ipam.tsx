@@ -8,6 +8,7 @@ import { link } from '../../links';
 import type { IpAddress, IpamWarning, Prefix, Space } from '../../types';
 import { Badge, Button, Empty, ErrorBox, PageHeader, SelectField, Spinner, Table, Tabs, TextField, message, useLoad } from '../../ui';
 import { AddressForm, PrefixForm, SpaceForm, useSpaces, useVlans } from './Forms';
+import { CsvButton } from '../Exports';
 
 type Tab = 'prefixes' | 'addresses' | 'warnings' | 'spaces';
 
@@ -23,12 +24,16 @@ export function IpamPage() {
         title="IP addresses"
         subtitle="Prefixes, ranges and addresses as documented; nothing here pings or scans"
         actions={
-          canWrite && (
-            <>
-              <Button variant="primary" icon={<Plus size={16} />} onClick={() => setModal('prefix')}>Add prefix</Button>
-              <Button icon={<Plus size={16} />} onClick={() => setModal('address')}>Add address</Button>
-            </>
-          )
+          <>
+            <CsvButton projectId={project.id} table="prefixes" label="Prefixes CSV" />
+            <CsvButton projectId={project.id} table="addresses" label="Addresses CSV" />
+            {canWrite && (
+              <>
+                <Button variant="primary" icon={<Plus size={16} />} onClick={() => setModal('prefix')}>Add prefix</Button>
+                <Button icon={<Plus size={16} />} onClick={() => setModal('address')}>Add address</Button>
+              </>
+            )}
+          </>
         }
       />
       <Tabs

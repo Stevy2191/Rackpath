@@ -77,3 +77,27 @@ export function qs(params: Record<string, string | number | boolean | undefined 
   const s = p.toString();
   return s ? `?${s}` : '';
 }
+
+/** Downloads a file from the API (PDF, CSV), with errors as ApiError. */
+export async function download(path: string): Promise<void> {
+  const res = await fetch(path, { credentials: 'same-origin' });
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      const body = await res.json();
+      message = body.error ?? message;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, res.status === 429 ? 'At most three PDF exports a minute; try again shortly.' : message);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'rackpath-export';
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

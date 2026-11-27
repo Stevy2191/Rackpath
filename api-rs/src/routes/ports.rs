@@ -335,6 +335,23 @@ pub async fn list_for_device(
     }))
 }
 
+/// A device's ports with cables, VLANs and chain states (reports).
+pub async fn device_ports(
+    conn: &mut SqliteConnection,
+    device_id: i64,
+) -> AppResult<Vec<ListedPort>> {
+    let rows: Vec<PortRow> = from_json_list(
+        sqlx::query_scalar(concat!(
+            port_json_list!("o.sort_order, o.code"),
+            "WHERE o.device_id = ?"
+        ))
+        .bind(device_id)
+        .fetch_one(&mut *conn)
+        .await?,
+    )?;
+    with_details(conn, rows).await
+}
+
 /// Every port in a rack (including devices on its trays), for the rack
 /// patching view.
 pub async fn list_for_rack(

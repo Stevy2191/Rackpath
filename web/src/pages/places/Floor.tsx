@@ -13,6 +13,7 @@ import { FloorForm } from './Locations';
 import { RackForm } from './Rack';
 import { RoomForm } from './Room';
 import { MoveFloor } from './Move';
+import { ReportButton } from '../Exports';
 
 const DEFAULT_W = 1200;
 const DEFAULT_H = 800;
@@ -154,26 +155,29 @@ export function FloorPage() {
         title={<><span className="mono">{f.code}</span>{f.name && <span className="title-name"> {f.name}</span>}</>}
         subtitle={`Level ${f.level}`}
         actions={
-          edit && (
-            <>
-              <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-              <Button icon={<ImagePlus size={15} />} onClick={() => file.current?.click()}>{f.plan_image_type ? 'Replace plan' : 'Upload plan'}</Button>
-              {f.plan_image_type && (
-                <Button
-                  variant="ghost"
-                  onClick={async () => {
-                    await api.del(`/api/floors/${f.id}/plan-image`).catch((e) => toast.error(e));
-                    reload();
-                  }}
-                >
-                  Remove plan
-                </Button>
-              )}
-              <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
-              <Button icon={<MoveRight size={15} />} onClick={() => setModal('move')}>Move</Button>
-              <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>
-            </>
-          )
+          <>
+            <ReportButton type="floor" id={f.id} />
+            {edit && (
+              <>
+                <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+                <Button icon={<ImagePlus size={15} />} onClick={() => file.current?.click()}>{f.plan_image_type ? 'Replace plan' : 'Upload plan'}</Button>
+                {f.plan_image_type && (
+                  <Button
+                    variant="ghost"
+                    onClick={async () => {
+                      await api.del(`/api/floors/${f.id}/plan-image`).catch((e) => toast.error(e));
+                      reload();
+                    }}
+                  >
+                    Remove plan
+                  </Button>
+                )}
+                <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
+                <Button icon={<MoveRight size={15} />} onClick={() => setModal('move')}>Move</Button>
+                <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>
+              </>
+            )}
+          </>
         }
       />
       <ErrorBox error={error} />

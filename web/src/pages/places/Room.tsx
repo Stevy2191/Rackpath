@@ -9,6 +9,7 @@ import { Badge, Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, T
 import { DeviceForm } from '../devices/DeviceForm';
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
 import { RackForm } from './Rack';
+import { ReportButton } from '../Exports';
 
 export function RoomForm({ floorId, existing, onClose, onSaved }: { floorId: number; existing?: Room; onClose: () => void; onSaved: (r: Room) => void }) {
   const f = useForm({
@@ -63,12 +64,15 @@ export function RoomPage() {
       <PageHeader
         title={<><span className="mono">{r.code}</span>{r.name && <span className="title-name"> {r.name}</span>} {r.is_default && <Badge>default room</Badge>}</>}
         actions={
-          r.can_edit && (
-            <>
-              <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
-              {!r.is_default && <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>}
-            </>
-          )
+          <>
+            <ReportButton type="room" id={r.id} />
+            {r.can_edit && (
+              <>
+                <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
+                {!r.is_default && <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>}
+              </>
+            )}
+          </>
         }
       />
       <div className="grid-2">

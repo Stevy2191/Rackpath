@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useProject } from '../layout/Shell';
 import { link } from '../links';
 import { Card, Empty, ErrorBox, PageHeader, Spinner, useLoad } from '../ui';
+import { ReportButton } from './Exports';
 
 interface LocationSummary {
   id: number;
@@ -22,7 +23,7 @@ export function ProjectHome() {
   );
   return (
     <div>
-      <PageHeader title={project.name} subtitle={project.code} />
+      <PageHeader title={project.name} subtitle={project.code} actions={<ReportButton type="project" id={project.id} label="Project report (PDF)" />} />
       {project.description && <p className="muted">{project.description}</p>}
       <ErrorBox error={locations.error} onRetry={locations.reload} />
       {locations.loading && !locations.data && <Spinner />}

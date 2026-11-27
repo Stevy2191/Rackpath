@@ -117,6 +117,23 @@ pub async fn find(
     }))
 }
 
+/// Like `get`, but also for a whole project (whose path is its code).
+pub async fn get_any(conn: &mut SqliteConnection, kind: ScopeType, id: i64) -> AppResult<Placed> {
+    if kind == ScopeType::Project {
+        let code: String = sqlx::query_scalar("SELECT code FROM projects WHERE id = ?")
+            .bind(id)
+            .fetch_optional(conn)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        return Ok(Placed {
+            project_id: id,
+            chain: Chain::project(id),
+            path: code,
+        });
+    }
+    get(conn, kind, id).await
+}
+
 /// Like `find`, but a missing item is a 404.
 pub async fn get(conn: &mut SqliteConnection, kind: ScopeType, id: i64) -> AppResult<Placed> {
     find(conn, kind, id).await?.ok_or(AppError::NotFound)

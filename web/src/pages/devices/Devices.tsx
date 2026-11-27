@@ -8,6 +8,7 @@ import type { Device, IpAddress } from '../../types';
 import { PortsPanel } from '../cabling/PortsPanel';
 import { DevicePowerPanel } from '../power/Power';
 import { DeviceTagsForm, TagChip, useTags } from '../ProjectSettings';
+import { CsvButton, ReportButton } from '../Exports';
 import { Badge, Button, Card, ErrorBox, PageHeader, SelectField, Spinner, Table, Tabs, TextField, fmtTime, message, useLoad, useToast } from '../../ui';
 import { Crumbs, DeleteModal, KeyValues, useDeviceTypes } from '../places/common';
 import { DeviceEdit, DeviceForm, MoveDevice, STATUSES, type PlaceOption } from './DeviceForm';
@@ -87,7 +88,13 @@ export function DevicesPage() {
     <div>
       <PageHeader
         title="Devices"
-        actions={canWrite && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>Add device</Button>}
+        actions={
+          <>
+            <CsvButton projectId={project.id} table="devices" label="Devices CSV" />
+            <CsvButton projectId={project.id} table="connections" label="Cables CSV" />
+            {canWrite && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>Add device</Button>}
+          </>
+        }
       />
       <div className="filters">
         <TextField label="Search" placeholder="Code, name, serial, hostname…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -183,13 +190,16 @@ export function DevicePage() {
         title={<><span className="mono">{d.code}</span>{d.name && <span className="title-name"> {d.name}</span>}</>}
         subtitle={<>{d.device_type.label} · <Badge tone={statusTone(d.status)}>{d.status}</Badge></>}
         actions={
-          d.can_edit && (
-            <>
-              <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
-              <Button icon={<MoveRight size={15} />} onClick={() => setModal('move')}>Move</Button>
-              <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>
-            </>
-          )
+          <>
+            <ReportButton type="device" id={d.id} />
+            {d.can_edit && (
+              <>
+                <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
+                <Button icon={<MoveRight size={15} />} onClick={() => setModal('move')}>Move</Button>
+                <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>
+              </>
+            )}
+          </>
         }
       />
       <Tabs

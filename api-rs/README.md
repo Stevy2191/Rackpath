@@ -338,6 +338,34 @@ shows it as the author of every imported record.
   project you can't see is a 404.
 - One transaction and one `move` entry in the change history.
 
+## Exports (phase 8)
+
+| Export | Endpoint |
+|---|---|
+| PDF report of a project, location, floor, room, rack or device | `GET /api/export/report?type=…&id=…` |
+| Rack bill of materials | `GET /api/racks/{id}/bom?format=json\|csv\|pdf` |
+| CSV tables | `GET /api/projects/{id}/export/devices\|connections\|prefixes\|addresses` |
+| Short links (what QR codes open) | `/r/{type}/{id}` in the app, resolved by `GET /api/resolve/{type}/{id}` |
+
+- **Reports** have a cover (what, project, date, who), a contents page with
+  page numbers and PDF bookmarks, the naming scheme (type prefixes), then a
+  section per place: details, rack elevations front and rear, every device
+  with its ports, cables and traced paths, each location's address plan
+  (prefixes, ranges, documented addresses), and the VLANs and WLANs in use.
+  Every section has a QR code linking to its page (`RACKPATH_PUBLIC_URL/r/…`,
+  or the address the request came to). At most 1,500 devices per report;
+  bigger ones are refused with a suggestion to export a smaller part.
+- **PDFs** are drawn in-process with [krilla](https://crates.io/crates/krilla)
+  and the embedded DejaVu fonts: no browser, no external tools.
+- **Limits:** three PDF exports a minute per person. Every export is in the
+  change history (`export`).
+- **Bill of materials:** devices grouped by type and model (quantity, codes,
+  positions), patch and power cords grouped by type, length and colour.
+- **CSV** cells that a spreadsheet would run as a formula (`=`, `+`, `-`, `@`)
+  are prefixed with `'`.
+- **Short links** answer 404 for anything you can't see, so a link doesn't
+  reveal that it exists.
+
 ## Development
 
 ```bash

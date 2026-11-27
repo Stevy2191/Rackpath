@@ -13,6 +13,7 @@ import { PortsPanel } from '../cabling/PortsPanel';
 import { RackPowerPanel } from '../power/Power';
 import { Crumbs, DeleteModal, KeyValues, num, useForm } from './common';
 import { MoveRack } from './Move';
+import { BomButton, ReportButton } from '../Exports';
 
 export function RackForm({ rooms, projectId, existing, onClose, onSaved }: { rooms: Room[]; projectId: number; existing?: Rack; onClose: () => void; onSaved: (r: Rack) => void }) {
   const f = useForm({
@@ -110,14 +111,18 @@ export function RackPage() {
         title={<><span className="mono">{r.code}</span>{r.name && <span className="title-name"> {r.name}</span>}</>}
         subtitle={`${r.u_height}U · ${r.width} · ${r.rack_type.replace('_', ' ')}${r.depth_mm ? ` · ${r.depth_mm} mm deep` : ''}`}
         actions={
-          edit && (
-            <>
-              <Button variant="primary" icon={<Plus size={15} />} onClick={() => setModal({ type: 'add', u: null })}>Add device</Button>
-              <Button icon={<Pencil size={15} />} onClick={() => setModal({ type: 'edit' })}>Edit</Button>
-              <Button icon={<MoveRight size={15} />} onClick={() => setModal({ type: 'move-rack' })}>Move</Button>
-              <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal({ type: 'delete' })}>Delete</Button>
-            </>
-          )
+          <>
+            <ReportButton type="rack" id={r.id} />
+            <BomButton rackId={r.id} />
+            {edit && (
+              <>
+                <Button variant="primary" icon={<Plus size={15} />} onClick={() => setModal({ type: 'add', u: null })}>Add device</Button>
+                <Button icon={<Pencil size={15} />} onClick={() => setModal({ type: 'edit' })}>Edit</Button>
+                <Button icon={<MoveRight size={15} />} onClick={() => setModal({ type: 'move-rack' })}>Move</Button>
+                <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal({ type: 'delete' })}>Delete</Button>
+              </>
+            )}
+          </>
         }
       />
       <ErrorBox error={error} />
