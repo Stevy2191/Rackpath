@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Copy, Save, Trash2 } from 'lucide-react';
-import { ApiError, api } from '../../api';
+import { ApiError, api, saveCsv } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
 import type { PortGroup, Template, TemplateImpact, TemplateIn } from '../../types';
@@ -383,6 +383,24 @@ function SaveImpact({ name, impacts, confirm, onClose, onSave }: { name: string;
       }
     >
       <p>Devices made from this template change with it. This is what happens:</p>
+      <Button
+        variant="ghost"
+        onClick={() =>
+          saveCsv(
+            `rackpath-template-${name.replace(/\W+/g, '-')}-changes.csv`,
+            ['device', 'change', 'what'],
+            impacts.flatMap((i) => [
+              ...i.ports_added.map((p) => [i.path, 'port added', p]),
+              ...i.ports_changed.map((p) => [i.path, 'port changed', p]),
+              ...i.ports_removed.map((p) => [i.path, 'port removed', p]),
+              ...i.cables_removed.map((c) => [i.path, 'cable removed', c]),
+              ...(i.unplaced ? [[i.path, 'moved to Unplaced', '']] : []),
+            ]),
+          )
+        }
+      >
+        Download the list (CSV)
+      </Button>
       <ul className="list impact-list">
         {impacts.map((i) => (
           <li key={i.device_id}>

@@ -101,3 +101,20 @@ export async function download(path: string): Promise<void> {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+/** Saves rows as a CSV file (built in the browser, e.g. from a dry run). */
+export function saveCsv(name: string, header: string[], rows: string[][]): void {
+  const cell = (v: string) => {
+    const safe = /^[=+\-@]/.test(v) ? `'${v}` : v;
+    return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  };
+  const text = [header, ...rows].map((r) => r.map(cell).join(',')).join('\n') + '\n';
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

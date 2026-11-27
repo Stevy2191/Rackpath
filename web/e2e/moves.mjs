@@ -2,6 +2,7 @@
 // then cancelled), and a whole location moved to another project.
 import { strict as assert } from 'node:assert';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 export default function (test, { base, shots }) {
   const snap = async (page, name) => shots && (await page.screenshot({ path: join(shots, `${name}.png`) }));
@@ -24,6 +25,8 @@ export default function (test, { base, shots }) {
     assert.match(await dlg.locator('.move-preview').innerText(), /ACME \/ HQ \/ F1 \/ SR1 \/ RK02\s*→\s*ACME \/ HQ \/ 0 \/ DEFAULT \/ RK02/);
     await dlg.getByText('1 cable(s) are removed').waitFor();
     assert.match(await dlg.locator('.move-preview').innerText(), /PP01.*WO01/s);
+    const [csv] = await Promise.all([page.waitForEvent('download'), dlg.getByRole('button', { name: 'Download the list (CSV)' }).click()]);
+    assert.match(readFileSync(await csv.path(), 'utf8'), /^cable removed by the move,from,to\n.*PP01.*WO01/s);
     await snap(page, 'move-preview');
     await dlg.getByRole('button', { name: 'Cancel' }).click();
     const after = await call(page, 'get', `/api/racks/${rack.id}`);
