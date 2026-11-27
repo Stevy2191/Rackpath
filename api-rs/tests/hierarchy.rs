@@ -220,6 +220,21 @@ async fn hierarchy_paths_defaults_and_renames() {
         hq["counts"],
         json!({ "floors": 2, "rooms": 4, "racks": 1, "devices": 2 })
     );
+
+    // Places for pickers: every container with its path, in path order.
+    let (st, places) = app
+        .get(&owner, &format!("/api/projects/{}/places", s.project))
+        .await;
+    assert_eq!(st, StatusCode::OK, "{places}");
+    let places = places.as_array().unwrap();
+    assert!(places
+        .iter()
+        .any(|p| p["kind"] == "rack" && p["id"] == s.rack));
+    assert!(places.iter().all(|p| p["kind"] != "device"));
+    let paths: Vec<&str> = places.iter().map(|p| p["path"].as_str().unwrap()).collect();
+    let mut sorted = paths.clone();
+    sorted.sort();
+    assert_eq!(paths, sorted);
 }
 
 #[tokio::test]

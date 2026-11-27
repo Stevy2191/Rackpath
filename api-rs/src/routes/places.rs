@@ -260,6 +260,29 @@ async fn create_floor_row(
     Ok(floor_id)
 }
 
+/// Every location, floor, room and rack in a project with its path, for
+/// pickers (move a device, filter a list).
+pub async fn list_places(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Path(project_id): Path<i64>,
+) -> AppResult<Json<Vec<Value>>> {
+    require(&current, Action::Read, &Chain::project(project_id))?;
+    let rows: Vec<(String, i64, String)> = sqlx::query_as(
+        "SELECT kind, ref_id, path FROM search_entries
+         WHERE project_id = ? AND kind IN ('location', 'floor', 'room', 'rack')
+         ORDER BY path",
+    )
+    .bind(project_id)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(
+        rows.into_iter()
+            .map(|(kind, id, path)| json!({ "kind": kind, "id": id, "path": path }))
+            .collect(),
+    ))
+}
+
 pub async fn list_locations(
     State(state): State<AppState>,
     current: CurrentUser,

@@ -143,6 +143,7 @@ pub fn router(state: AppState) -> Router {
                 .patch(places::update_location)
                 .delete(places::delete_location),
         )
+        .route("/api/projects/{id}/places", get(places::list_places))
         .route("/api/locations/{id}/floors", post(places::create_floor))
         .route(
             "/api/floors/{id}",

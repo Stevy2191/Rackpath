@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { LayoutDashboard, LogOut, Moon, Sun, UserCircle2, FolderKanban, Users, History } from 'lucide-react';
+import { LayoutDashboard, LogOut, MapPin, Server, Moon, Sun, UserCircle2, FolderKanban, Users, History } from 'lucide-react';
 import { api } from '../api';
 import { projectRights, useAuth } from '../auth';
 import { applyTheme, currentTheme } from '../theme';
@@ -28,6 +28,8 @@ export function useProject(): ProjectCtx {
 /** Sections of a project, added to as phase 7 lands. */
 export const projectNav: { to: string; label: string; icon: ReactNode; end?: boolean }[] = [
   { to: '', label: 'Overview', icon: <LayoutDashboard size={18} />, end: true },
+  { to: 'locations', label: 'Locations', icon: <MapPin size={18} /> },
+  { to: 'devices', label: 'Devices', icon: <Server size={18} /> },
 ];
 
 export function Shell() {

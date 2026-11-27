@@ -49,3 +49,162 @@ export interface SearchHit {
   path: string;
   detail?: string;
 }
+
+export interface Location {
+  id: number;
+  project_id: number;
+  code: string;
+  name: string | null;
+  address_street: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  address_postcode: string | null;
+  address_country: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  responsible_user_id: number | null;
+  isp_primary_name: string | null;
+  isp_primary_circuit: string | null;
+  isp_primary_contact: string | null;
+  isp_secondary_name: string | null;
+  isp_secondary_circuit: string | null;
+  isp_secondary_contact: string | null;
+  notes: string | null;
+  path?: string;
+  can_edit?: boolean;
+  counts?: { floors: number; rooms: number; racks: number; devices: number };
+  floors?: FloorSummary[];
+}
+
+export interface FloorSummary {
+  id: number;
+  code: string;
+  name: string | null;
+  level: number;
+  rooms: number;
+  racks: number;
+  devices: number;
+}
+
+export interface Floor {
+  id: number;
+  location_id: number;
+  code: string;
+  name: string | null;
+  level: number;
+  plan_width: number | null;
+  plan_height: number | null;
+  scale_px_per_m: number | null;
+  plan_image_type: string | null;
+  notes: string | null;
+  updated_at: string;
+  path?: string;
+  rooms?: Room[];
+  racks?: RackSummary[];
+  devices?: Device[];
+  can_edit?: boolean;
+}
+
+export interface Room {
+  id: number;
+  floor_id: number;
+  code: string;
+  name: string | null;
+  is_default: boolean;
+  shape: { type: 'polygon'; points: [number, number][] } | null;
+  color: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  notes: string | null;
+  path?: string;
+  racks?: RackSummary[];
+  devices?: Device[];
+  can_edit?: boolean;
+}
+
+export interface Rack {
+  id: number;
+  room_id: number;
+  code: string;
+  name: string | null;
+  u_height: number;
+  width: '19in' | '23in' | '10in';
+  depth_mm: number | null;
+  numbering: 'bottom_up' | 'top_down';
+  rack_type: 'enclosed' | 'open_frame' | 'wall_mount' | 'other';
+  plan_x: number | null;
+  plan_y: number | null;
+  plan_rotation: number | null;
+  notes: string | null;
+  path: string;
+  devices?: Device[];
+  can_edit?: boolean;
+}
+
+export type RackSummary = Rack & { device_count: number };
+
+export type Placement =
+  | { type: 'room'; room_id: number; x: number | null; y: number | null; rotation: number | null }
+  | { type: 'rack'; rack_id: number; u: number | null; face: 'front' | 'rear' | 'both'; mount: Mount }
+  | { type: 'tray'; tray_id: number }
+  | { type: 'unplaced' };
+
+export type Mount = 'full_width' | 'half_left' | 'half_right' | 'zero_u_left' | 'zero_u_right';
+
+export interface Device {
+  id: number;
+  project_id: number;
+  code: string;
+  name: string | null;
+  path: string;
+  device_type: { id: number; key: string; label: string; prefix: string };
+  placement: Placement;
+  u_height: number | null;
+  depth: 'half' | 'full' | null;
+  manufacturer: string | null;
+  model: string | null;
+  serial_number: string | null;
+  asset_tag: string | null;
+  purchase_date: string | null;
+  warranty_expiry: string | null;
+  in_service_date: string | null;
+  status: 'planned' | 'active' | 'spare' | 'faulty' | 'retired';
+  hostname: string | null;
+  mac: string | null;
+  os: string | null;
+  firmware: string | null;
+  source: string;
+  external_url: string | null;
+  missing_from_source_at: string | null;
+  template_id: number | null;
+  tags: { id: number; name: string; color: string | null }[];
+  notes: string | null;
+  on_tray?: Device[];
+  can_edit?: boolean;
+}
+
+export interface DeviceType {
+  id: number;
+  key: string;
+  label: string;
+  prefix: string;
+  placement: 'floor' | 'rack' | 'either' | 'tray';
+  icon: string | null;
+  is_builtin: boolean;
+}
+
+export interface TemplateSummary {
+  id: number;
+  project_id: number | null;
+  builtin: boolean;
+  builtin_key: string | null;
+  name: string;
+  device_type: string;
+  manufacturer: string | null;
+  model: string | null;
+  u_height: number | null;
+  version: number;
+  device_count: number;
+}

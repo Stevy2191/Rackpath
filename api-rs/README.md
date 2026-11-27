@@ -125,6 +125,7 @@ rackpath version
 | Area | Endpoints |
 |---|---|
 | Locations | `GET/POST /api/projects/{id}/locations`, `GET/PATCH/DELETE /api/locations/{id}` |
+| Places | `GET /api/projects/{id}/places`: every location, floor, room and rack with its path, for pickers |
 | Floors | `POST /api/locations/{id}/floors`, `GET/PATCH/DELETE /api/floors/{id}` |
 | Rooms | `POST /api/floors/{id}/rooms`, `GET/PATCH/DELETE /api/rooms/{id}` |
 | Racks | `POST /api/rooms/{id}/racks`, `GET/PATCH/DELETE /api/racks/{id}` |

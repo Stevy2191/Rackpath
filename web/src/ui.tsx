@@ -369,7 +369,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: 
   return (
     <div className="tabs" role="tablist">
       {tabs.map((t) => (
-        <button key={t.id} role="tab" aria-selected={t.id === value} className={t.id === value ? 'tab active' : 'tab'} onClick={() => onChange(t.id)}>
+        <button key={t.id} type="button" role="tab" aria-selected={t.id === value} className={t.id === value ? 'tab active' : 'tab'} onClick={() => onChange(t.id)}>
           {t.label}
         </button>
       ))}
