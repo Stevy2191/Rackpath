@@ -78,10 +78,11 @@ export default function (test, { base, shots, allow }) {
     await snap(page, 'prefix');
 
     // Free addresses as runs: for static use outside the pool, DHCP inside.
-    await page.getByText('10.30.5.3 – 10.30.5.99').waitFor();
-    await page.getByText('10.30.5.100 – 10.30.5.199').waitFor();
+    const freeCard = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Free addresses' }) });
+    await freeCard.getByText('10.30.5.3 – 10.30.5.99').waitFor();
+    await freeCard.getByText('10.30.5.100 – 10.30.5.199').waitFor();
     await page.getByRole('button', { name: 'Use 10.30.5.3' }).click();
-    assert.equal(await page.getByRole('dialog').getByLabel('Address').inputValue(), '10.30.5.3');
+    assert.equal(await page.getByRole('dialog').getByLabel('Address', { exact: true }).inputValue(), '10.30.5.3');
     await page.keyboard.press('Escape');
     await page.getByRole('dialog').waitFor({ state: 'detached' });
   });
