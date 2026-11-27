@@ -1,0 +1,53 @@
+[package]
+name = "rackpath"
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.94"
+description = "Rackpath: self-hosted IT infrastructure documentation"
+license = "MIT"
+publish = false
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "tracing", "matched-path", "original-uri"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }
+tower = { version = "0.5", default-features = false, features = ["util"] }
+tower-http = { version = "0.6", features = ["set-header", "limit", "trace", "fs"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "mysql", "migrate", "macros", "json"] }
+# Not used directly: sets a floor so the bundled SQLite is never older than
+# the release that fixed RUSTSEC-2026-0459 (CVE-2026-119375).
+libsqlite3-sys = { version = ">=0.39, <0.41", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+qrcode = { version = "0.15", default-features = false }
+krilla = { version = "0.8", default-features = false, features = ["simple-text"] }
+dejavu = "2.37"
+ttf-parser = "0.25"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
+argon2 = "0.5"
+bcrypt = "0.17"
+aes-gcm = "0.10"
+rand = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+subtle = "2"
+totp-rs = { version = "5", features = ["otpauth"] }
+ulid = "1"
+data-encoding = "2"
+# Outbound calls to UniFi and Zabbix (integrations only).
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+flate2 = "1"
+quick-xml = "0.41"
+csv = "1"
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "rustls-tls"] }
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -3,314 +3,185 @@
 </p>
 
 <p align="center">
-  <strong>Network documentation and infrastructure management for IT teams and homelabs</strong>
+  <strong>Network documentation for IT teams and homelabs</strong>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Stevy2191/Rackpath?style=flat-square" alt="License"></a>
   <a href="https://github.com/Stevy2191/Rackpath/stargazers"><img src="https://img.shields.io/github/stars/Stevy2191/Rackpath?style=flat-square" alt="GitHub stars"></a>
-  <img src="https://img.shields.io/badge/version-0.1.0-4adede?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.0.0-4adede?style=flat-square" alt="Version">
 </p>
 
 ---
 
 ## What is Rackpath?
 
-Rackpath is a self-hosted network documentation platform for documenting,
-visualizing, and managing IT infrastructure. It brings together network
-topology diagrams, visual rack layouts, device inventory, VLAN planning, and
-third-party integrations in a single web app — so you always have an
-up-to-date picture of what's running where, whether you're managing a
-business network or a homelab.
+Rackpath is self-hosted documentation software for IT infrastructure. It
+records what you have, where it is and how it's connected: sites, floors and
+rooms, racks and the devices in them, every port and cable, IP plans, VLANs
+and Wi-Fi, power, and network diagrams.
 
-Everything runs in your own environment via Docker Compose: your data never
-leaves your infrastructure.
+Rackpath documents your network; it doesn't probe or monitor it. It never
+scans your LAN, polls devices or stores device logins. Inventory comes from
+you and from systems you already run: UniFi, Zabbix and your Windows DHCP/DNS
+servers, which push to Rackpath rather than being logged in to.
+
+It's one small container (or one binary) with its data in one SQLite file.
 
 ## ✨ Features
 
-- 🗺️ **Interactive Network Topology** — drag-and-drop canvas with animated
-  links and interface labels
-- 🗄️ **Visual Rack Builder** — front/back views, vendor catalog, multi-rack
-  support
-- 📋 **Device Inventory** — SNMP scanning, credential macros, tags and
-  locations
-- 🔗 **Integrations** — UniFi, UniFi Protect, UniFi Access, Zabbix, LibreNMS,
-  NetBox, SNMP
-- 🌐 **VLAN Planning** — subnet management and zone visualization
-- 📊 **Project Dashboard** — site overview with warnings and activity log
-- 🔍 **Subnet Scanner** — discover and fingerprint devices on your network
-- 📦 **Project Templates** — starter topologies for common setups
-- 🏢 **Multi-site** — manage multiple sites as separate projects
+- 🏢 **Sites, floors and rooms**, with floor plans you upload and draw rooms
+  on, and racks and floor-standing devices placed on them
+- 🗄️ **Rack elevations**, front and rear, in half-U steps with zero-U side
+  mounts; click a free U to add a device, drag to move it
+- 🔌 **Ports and cabling**: patch cords and permanent cabling through patch
+  panels and wall outlets, connector and optic compatibility checks (RJ45,
+  SFP/SFP+/SFP28/QSFP, LC/SC/MPO, Cat5e–Cat8, OM1–OM5, OS1/OS2, DAC/AOC), and
+  end-to-end tracing of every chain
+- 🌐 **IP address management**: prefixes that nest by themselves, DHCP pools
+  and reserved ranges, an address map, next free address, and warnings
+- 🏷️ **VLANs and Wi-Fi networks** on ports, and **tags** on devices
+- 🧩 **Device templates** with a port layout designer; editing a template
+  updates every device made from it, after showing exactly what changes
+- ⚡ **Power**: outlets, inlets and cords, load and failover load per feed,
+  UPS runtime with battery modules
+- 🔗 **Integrations**: UniFi Network (with DHCP), UniFi Protect and Access,
+  Zabbix, Windows DHCP/DNS (pushed by a PowerShell script), and CSV import,
+  with safeguards against an import changing too much at once
+- 🗺️ **Diagrams** whose links can be backed by documented cables
+- 📄 **PDF reports** with a QR code on every section, **bills of materials**,
+  and CSV exports
+- 🚚 **Moves** of devices, racks, floors and whole locations (also between
+  projects), previewed before they happen
+- 👥 **Users, roles and invitations**: reader, editor or admin of every project,
+  one project, or part of one; two-factor sign-in; a full change history
 
 ## 📸 Screenshots
 
-| Dashboard | Topology |
+| Floor plan | Rack elevation |
 |---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Topology](docs/screenshots/topology.png) |
-| Project overview with warnings and recent activity | Drag-and-drop network topology canvas |
+| ![Floor plan](docs/screenshots/floor-plan.png) | ![Rack elevation](docs/screenshots/rack-elevation.png) |
 
-| Rack Builder | Device Inventory |
+| Patching | Cable trace |
 |---|---|
-| ![Rack Builder](docs/screenshots/rack-builder.png) | ![Device Inventory](docs/screenshots/devices.png) |
-| Front/back rack views with a vendor catalog | Inventory list with SNMP scan results and tags |
+| ![Rack patching view](docs/screenshots/rack-patching.png) | ![Port and its traced chain](docs/screenshots/port-trace.png) |
 
-| Integrations |
-|---|
-| ![Integrations](docs/screenshots/integrations.png) |
-| Connect UniFi, Zabbix, LibreNMS, NetBox, and more |
+| IP address map | Template designer |
+|---|---|
+| ![Prefix with its address map](docs/screenshots/prefix.png) | ![Template designer](docs/screenshots/template-designer.png) |
 
-*Don't see images above? Add screenshots to [`docs/screenshots/`](docs/screenshots/) — see that folder's README for filenames.*
-
-## 🚀 Quick Start
+## 🚀 Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/deploy.sh | bash
 ```
 
-This downloads the compose config, asks which ports to use and for a JWT
-secret, starts the stack, applies the database schema, and creates the
-default admin user.
+This creates a `rackpath/` folder with `docker-compose.yml` and `.env` (with a
+new encryption key), asks for the web port and the address people will use,
+starts Rackpath, and prints the first password for `admin`. You choose your
+own password at the first sign-in.
 
-Once it finishes, open the URL it prints — by default:
+### By hand
 
+```bash
+mkdir rackpath && cd rackpath
+curl -fsSLO https://raw.githubusercontent.com/Stevy2191/Rackpath/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/.env.example -o .env
+sed -i "s/^RACKPATH_ENCRYPTION_KEY=.*/RACKPATH_ENCRYPTION_KEY=$(openssl rand -hex 32)/" .env
+docker compose up -d
+docker compose logs rackpath | grep password
 ```
-http://your-server-ip:8080
+
+Or without Compose:
+
+```bash
+docker run -d --name rackpath -p 8080:8080 -v rackpath-data:/data \
+  -e RACKPATH_ENCRYPTION_KEY=$(openssl rand -hex 32) ghcr.io/stevy2191/rackpath:latest
 ```
 
-**Default login:** `admin` / `rackpath` — you'll be required to change this
-password immediately on first login.
+To build the image yourself: `docker build -t rackpath .` from this folder.
 
-> Prefer to set things up by hand or build from source? See
-> [Manual setup](#manual-setup) below.
+### Settings
 
-## 🛠️ Tech Stack
+| Setting | Default | |
+|---|---|---|
+| `RACKPATH_ENCRYPTION_KEY` | required | 64 hex characters (`openssl rand -hex 32`). Encrypts stored integration secrets. **Back it up with your data.** |
+| `RACKPATH_PORT` | `8080` | Host port (Compose) |
+| `RACKPATH_PUBLIC_URL` | the request's address | The address people use, for invitation links and report QR codes |
+| `RACKPATH_COOKIE_SECURE` | `false` | `true` when Rackpath is reached over HTTPS |
+| `RACKPATH_TRUST_PROXY` | `false` | `true` behind a reverse proxy that sets `X-Forwarded-For` |
+| `RACKPATH_AUDIT_RETENTION_DAYS` | keep forever | Delete change history older than this |
 
-- **Frontend**: React + React Flow (topology diagram), custom rack builder UI, served via nginx
-- **Backend**: Node.js + Express, JWT-based authentication
-- **Database**: MariaDB
-- **Scanner**: Python (nmap, SNMP, mDNS, NetBIOS, MAC OUI lookup) for network discovery
-- **Deployment**: Docker Compose
+All settings are in [api-rs/README.md](api-rs/README.md#settings-environment-variables).
+
+### Backups
+
+Everything is in the `rackpath-data` volume: the database file and uploaded
+floor plans. For a consistent copy while Rackpath runs:
+
+```bash
+docker compose exec rackpath rackpath backup /data/rackpath-backup.db
+```
+
+Keep `.env` (the encryption key) with your backups.
+
+### Upgrading
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Database changes are applied automatically at start.
+
+### Coming from Rackpath v1
+
+Version 2 replaces the Node API, the nginx frontend and MariaDB with a single
+container. Your v1 data can be brought across into a fresh v2:
+
+```bash
+# v1 must be at its latest version (so its database is fully migrated).
+docker compose exec rackpath rackpath import-v1 --from "mysql://rackpath:PASSWORD@v1-db-host:3306/rackpath" --dry-run
+docker compose exec rackpath rackpath import-v1 --from "mysql://rackpath:PASSWORD@v1-db-host:3306/rackpath"
+```
+
+Use the same `RACKPATH_ENCRYPTION_KEY` as v1 so integration secrets stay
+readable. v1 users keep their passwords. What maps to what is described in
+[api-rs/README.md](api-rs/README.md#bringing-v1-data-across).
+
+## 🔒 Security
+
+- **Nothing probes your network**, and no device logins are stored. The only
+  secrets are the integration keys you give it, encrypted with AES-256-GCM
+  and never sent back to the browser.
+- **Passwords** are hashed with argon2id. Sign-in attempts are rate limited;
+  two-factor sign-in (TOTP, with recovery codes) can be required for everyone.
+- **Permissions** are checked on the server for every request; what you can't
+  see answers 404.
+- **The Windows DHCP push** uses its own token per integration, stored hashed
+  and shown once.
+- Details: [api-rs/README.md](api-rs/README.md#security-model-phase-1).
+
+## 🛠️ Development
 
 ```
 Rackpath/
-├── deploy.sh   # Automated fresh-install script
-├── frontend/   # React app (React Flow topology, rack builder, device & scan pages)
-├── api/        # Express API + MariaDB access layer
-├── scanner/    # Python discovery service (nmap/snmp/lldp/arp), exposes a REST API
-├── db/         # MariaDB schema init scripts
-└── .github/    # CI workflows (build & publish images to GHCR)
+├── api-rs/   # The server: Rust (axum, SQLite), API, migrations, tests
+├── web/      # The web app: React + TypeScript (Vite), browser tests
+├── tools/    # Windows DHCP/DNS push script
+├── docs/     # Design notes and screenshots
+└── Dockerfile, docker-compose.yml, deploy.sh
 ```
 
-## Manual setup
+- Server: see [api-rs/README.md](api-rs/README.md). `cargo test`,
+  `cargo clippy --all-targets -- -D warnings`, `cargo fmt`, `cargo audit`.
+- Web app: see [web/README.md](web/README.md). `npm run dev` proxies the API
+  to a local server; `node e2e/run.mjs` runs the browser tests against a
+  release build.
+- Database changes always ship with a new numbered migration in
+  `api-rs/migrations/` (see `CLAUDE.md`).
 
-### Prerequisites
-
-- [Docker Engine](https://docs.docker.com/engine/install/)
-- [Docker Compose plugin](https://docs.docker.com/compose/install/) (`docker compose ...`) - `docker-compose` v1 also works as a fallback
-- `curl` and `openssl` (used by `deploy.sh`)
-
-### Using `deploy.sh`
-
-The fastest way to stand up a fresh instance is the included deploy script.
-It creates a deployment directory, downloads the compose config, prompts for
-a JWT secret and admin password, starts the stack, applies the database
-schema, and creates the default admin user.
-
-Run it directly from the repo:
-
-```bash
-./deploy.sh
-```
-
-Or fetch and run it without cloning the repo (same command as Quick Start):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/deploy.sh | bash
-```
-
-By default this creates a `rackpath/` directory in the current working
-directory containing `docker-compose.yml`, `.env`, and `db/init.sql`. Set
-`RACKPATH_DEPLOY_DIR=/path/to/dir` to install elsewhere.
-
-During setup you'll be prompted for:
-
-- **Ports** for the web UI, API, scanner, and database - press Enter to take
-  the default shown for each. If a port is already in use the script says so
-  and asks again, so you can route around a conflict during the install
-  rather than afterwards.
-- **JWT signing secret** - leave blank to auto-generate a secure random value (recommended)
-
-Re-running the script is safe: it offers your current ports as the defaults
-and keeps the existing JWT secret and database password rather than
-resetting them.
-
-To install without a terminal — a `curl ... | bash` pipe has none, and
-neither does a provisioning script — set any of these first and the matching
-question is skipped:
-
-```bash
-RACKPATH_FRONTEND_PORT=9090 \
-RACKPATH_API_PORT=4010 \
-RACKPATH_SCANNER_PORT=6001 \
-RACKPATH_DB_PORT=3307 \
-  bash deploy.sh
-```
-
-When it finishes, it prints the URL, login credentials, the ports in use,
-and the path to your `.env` file.
-
-### Setting things up by hand
-
-If you'd rather set things up by hand, or need to customize the compose
-file:
-
-1. Get the compose config (clone the repo, or download `docker-compose.yml`,
-   `.env.example`, and `db/init.sql` individually).
-
-2. Copy the environment template and fill in secrets:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   At minimum, set `RACKPATH_JWT_SECRET` to a long random value
-   (`openssl rand -hex 32`).
-   See the comments in `.env.example` for what every variable controls.
-
-3. Start the stack (pulls pre-built images from GHCR by default):
-
-   ```bash
-   docker compose up -d
-   ```
-
-4. Wait for `rackpath-db` to report healthy:
-
-   ```bash
-   docker compose ps
-   ```
-
-5. The database schema in `db/init.sql` is applied automatically by MariaDB
-   on first startup (it's mounted into `/docker-entrypoint-initdb.d/`). If
-   you need to (re-)apply it manually, it's safe to re-run:
-
-   ```bash
-   docker compose exec -T rackpath-db sh -c 'exec mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < db/init.sql
-   ```
-
-   On every startup, the API also applies any pending SQL files in
-   `api/src/db/migrations/` (tracked in a `schema_migrations` table), so
-   schema changes shipped after your initial deploy are picked up
-   automatically.
-
-6. Create the default admin user:
-
-   ```bash
-   docker compose exec rackpath-api npm run seed
-   ```
-
-7. Open the frontend at `http://localhost:8080` (or `FRONTEND_PORT` from `.env`).
-
-#### Building locally instead of pulling
-
-To build all images from source instead of pulling from GHCR:
-
-```bash
-docker compose build
-docker compose up -d
-```
-
-### Services and ports
-
-| Service              | Description                                 | Default port | `.env` variable  |
-|----------------------|----------------------------------------------|---------------|-------------------|
-| `rackpath-frontend`  | React UI served via nginx                   | 8080          | `FRONTEND_PORT`   |
-| `rackpath-api`       | Express API backed by MariaDB               | 3010          | `API_PORT`        |
-| `rackpath-scanner`   | Python discovery service (host networking)  | 5001          | `SCANNER_PORT`    |
-| `rackpath-db`        | MariaDB with persistent named volume        | 3306          | `DB_PORT`         |
-
-`deploy.sh` asks for all four during install. To change one later, edit
-`.env` and run `docker compose up -d` — no rebuild is needed, because the
-frontend reaches the API through a relative `/api` path that nginx proxies
-inside the compose network.
-
-Two of these values are addresses rather than mappings, so they have to be
-kept in step by hand if you edit `.env` directly:
-
-- `API_PUBLIC_URL` must carry `API_PORT` — the scanner runs on the host
-  network and calls back into the API through the published host port.
-- `SCANNER_URL` must carry `SCANNER_PORT`.
-
-Every port in the table is a **host** port. The ports used inside the
-compose network are fixed: the API always listens on 3010 there, because
-the frontend image bakes in an nginx config that proxies to
-`rackpath-api:3010`.
-
-`DB_PORT` only matters if you want to reach MariaDB from outside Docker (a
-GUI client, a backup job); the API talks to it over the compose network
-either way. To stop publishing it at all, delete the `ports:` block from
-`rackpath-db` in `docker-compose.yml`.
-
-`rackpath-scanner` runs with `network_mode: host` so it can perform ping
-sweeps, ARP probes, and SNMP/LLDP discovery directly on your LAN. Because of
-that, `SCANNER_PORT` is a real port on the host rather than a published
-mapping. `SCAN_INTERFACE` should be set to the host network interface you
-want scans to run on (default `eth0`).
-
-## 📖 Usage
-
-### Pages
-
-- `/topology` — React Flow canvas of discovered devices and links
-- `/racks` — Rack builder: create racks and place devices into U slots
-- `/devices` — Device list with an editable detail form and per-port editor (cabling/connections)
-- `/scan` — Configure and start subnet scans, watch results stream in live,
-  sort/export them, and select hosts to import into inventory
-
-A light/dark theme toggle is available in the navbar; the choice is
-remembered per-browser.
-
-### Projects (multi-site)
-
-Rackpath data is organized into **projects** — each project has its own
-isolated set of devices, ports, racks, topology, and scans. A project
-switcher in the nav bar shows the current project and lets you switch
-between projects, create new ones, and rename or delete existing ones. The
-**Default Project** is created automatically and cannot be deleted.
-
-### Subnet scanner
-
-Each scan can target a whole subnet (CIDR), a single IP, or a list of
-multiple IPs, with selectable profiles:
-
-- **Quick** — ping sweep only (fast, no port scan)
-- **Standard** (default) — ping + top 1000 ports + OS detection + NetBIOS + SNMP
-- **Deep** — ping + all 65535 ports + OS + service-version detection + NetBIOS + SNMP + mDNS
-- **Port Scan Only** — port scan up hosts, skip the other discovery steps
-- **Custom** — individually toggle each discovery step
-
-Results stream into the `/scan` page row-by-row over Server-Sent Events.
-Discovered devices are **not** added to inventory automatically — review and
-click "Add Selected" to import them.
-
-## 🗺️ Roadmap
-
-Planned work and known issues are tracked in
-[GitHub Issues](https://github.com/Stevy2191/Rackpath/issues). Feature
-requests and bug reports are welcome there.
-
-## 🤝 Contributing
-
-Contributions are welcome!
-
-1. Fork the repo and create a feature branch
-2. Make your changes (see `CLAUDE.md` for database migration conventions —
-   any new table/column/index needs a matching file in
-   `api/src/db/migrations/` in the same commit)
-3. Open a pull request describing your change
-
-`.github/workflows/docker-publish.yml` builds and publishes the frontend,
-API, and scanner images to GHCR (`ghcr.io/stevy2191/rackpath-*`) on every
-push to `main`.
+CI runs both test suites on every push, and `docker-publish.yml` publishes
+`ghcr.io/stevy2191/rackpath` from `main`.
 
 ## 📄 License
 

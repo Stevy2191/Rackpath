@@ -27,3 +27,7 @@ npm-debug.log*
 
 # Database data (bind-mounted, not the named volume)
 db/data/
+
+# Rust API (v2)
+api-rs/target/
+api-rs/data/

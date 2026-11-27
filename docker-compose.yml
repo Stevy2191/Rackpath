@@ -1,84 +1,29 @@
+# Rackpath: one container. The server serves the web app and the API, and
+# keeps everything in one SQLite file in the rackpath-data volume.
 services:
-  rackpath-db:
-    image: mariadb:11
-    container_name: rackpath-db
+  rackpath:
+    image: ${GHCR_NAMESPACE:-ghcr.io/stevy2191}/rackpath:${IMAGE_TAG:-latest}
+    build:
+      context: .
+    container_name: rackpath
     restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "${DB_PORT:-3306}:3306"
+      - "${RACKPATH_PORT:-8080}:8080"
+    environment:
+      # Required: 64 hex characters (openssl rand -hex 32). Encrypts the
+      # integration secrets you store. Keep it with your backups.
+      RACKPATH_ENCRYPTION_KEY: ${RACKPATH_ENCRYPTION_KEY:?Set RACKPATH_ENCRYPTION_KEY in .env (openssl rand -hex 32)}
+      # The address people use, e.g. https://rackpath.example.com. Used for
+      # invitation links and the QR codes in PDF reports.
+      RACKPATH_PUBLIC_URL: ${RACKPATH_PUBLIC_URL:-}
+      # true when Rackpath is reached over HTTPS (behind a TLS proxy).
+      RACKPATH_COOKIE_SECURE: ${RACKPATH_COOKIE_SECURE:-false}
+      # true when a reverse proxy sets X-Forwarded-For.
+      RACKPATH_TRUST_PROXY: ${RACKPATH_TRUST_PROXY:-false}
+      RACKPATH_AUDIT_RETENTION_DAYS: ${RACKPATH_AUDIT_RETENTION_DAYS:-}
+      RACKPATH_LOG: ${RACKPATH_LOG:-info}
     volumes:
-      - rackpath-db-data:/var/lib/mysql
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  rackpath-api:
-    image: ${GHCR_NAMESPACE:-ghcr.io/stevy2191}/rackpath-api:${IMAGE_TAG:-latest}
-    build:
-      context: ./api
-    container_name: rackpath-api
-    restart: unless-stopped
-    depends_on:
-      rackpath-db:
-        condition: service_healthy
-    environment:
-      # Fixed inside the container, the way DB_PORT_INTERNAL is: the
-      # frontend's nginx.conf proxies /api/ to rackpath-api:3010 and is baked
-      # into the image, so this must not follow the host port below.
-      API_PORT: 3010
-      DB_HOST: rackpath-db
-      DB_PORT_INTERNAL: ${DB_PORT_INTERNAL:-3306}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      # Default these off the chosen ports so a .env that only changes
-      # SCANNER_PORT or API_PORT stays consistent without further edits.
-      SCANNER_URL: ${SCANNER_URL:-http://host.docker.internal:${SCANNER_PORT:-5001}}
-      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:${API_PORT:-3010}}
-      SNMP_COMMUNITY: ${SNMP_COMMUNITY}
-      RACKPATH_JWT_SECRET: ${RACKPATH_JWT_SECRET}
-    ports:
-      # Host port is configurable; container port is not (see API_PORT above).
-      - "${API_PORT:-3010}:3010"
-    volumes:
-      - rackpath-uploads:/uploads
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  rackpath-scanner:
-    image: ${GHCR_NAMESPACE:-ghcr.io/stevy2191}/rackpath-scanner:${IMAGE_TAG:-latest}
-    build:
-      context: ./scanner
-    container_name: rackpath-scanner
-    restart: unless-stopped
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    environment:
-      SCANNER_PORT: ${SCANNER_PORT:-5001}
-      SNMP_COMMUNITY: ${SNMP_COMMUNITY}
-      SCAN_INTERFACE: ${SCAN_INTERFACE}
-
-  rackpath-frontend:
-    image: ${GHCR_NAMESPACE:-ghcr.io/stevy2191}/rackpath-frontend:${IMAGE_TAG:-latest}
-    build:
-      context: ./frontend
-    container_name: rackpath-frontend
-    restart: unless-stopped
-    depends_on:
-      - rackpath-api
-    ports:
-      - "${FRONTEND_PORT:-8080}:80"
+      - rackpath-data:/data
 
 volumes:
-  rackpath-db-data:
-  rackpath-uploads:
+  rackpath-data:

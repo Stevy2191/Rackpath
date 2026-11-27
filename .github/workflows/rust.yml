@@ -1,0 +1,49 @@
+name: Rust API (v2)
+
+on:
+  push:
+    paths: ["api-rs/**", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["api-rs/**", ".github/workflows/rust.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: api-rs
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      # A v1-style MariaDB for the v1 importer test (tests/import_v1.rs).
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: rackpath-test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: api-rs
+      - name: Formatting
+        run: cargo fmt --check
+      - name: Lints
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Tests
+        run: cargo test --locked
+        env:
+          RACKPATH_TEST_MYSQL_URL: mysql://root:rackpath-test@127.0.0.1:3306/mysql
+      - name: Dependency advisories
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
