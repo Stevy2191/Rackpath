@@ -9,6 +9,7 @@ import { Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, Table, T
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
 import { MoveLocation } from './Move';
 import { ReportButton } from '../Exports';
+import { formatPhone } from '../../phone';
 
 type LocationRow = Location & { counts: NonNullable<Location['counts']> };
 
@@ -127,7 +128,13 @@ function LocationForm({ projectId, existing, onClose, onSaved }: { projectId: nu
       <h4 className="form-section">Site contact</h4>
       <div className="grid-2">
         <TextField label="Name" {...f.bind('contact_name')} />
-        <TextField label="Phone" {...f.bind('contact_phone')} />
+        <TextField
+          label="Phone"
+          type="tel"
+          placeholder="(979) 203-4748"
+          {...f.bind('contact_phone')}
+          onBlur={() => f.set('contact_phone', formatPhone(f.values.contact_phone))}
+        />
         <TextField label="Email" type="email" {...f.bind('contact_email')} />
       </div>
       <h4 className="form-section">Internet</h4>
