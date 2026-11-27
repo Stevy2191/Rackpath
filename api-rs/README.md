@@ -150,6 +150,7 @@ rackpath version
 | Rack patching view | `GET /api/racks/{id}/ports` (every port with both cables, VLANs and chain state) |
 | Cables | `POST /api/connections`, `GET/PATCH/DELETE /api/connections/{id}` |
 | Chains | `GET /api/ports/{id}/trace`, `POST /api/ports/{id}/chain-color` |
+| Media catalog | `GET /api/media`: connectors, transceivers (with cage and speed) and cable types, for pickers |
 | VLANs | `GET/POST /api/projects/{id}/vlans`, `PATCH/DELETE /api/vlans/{id}`, `PUT /api/ports/{id}/vlans` |
 | WLANs | `GET/POST /api/projects/{id}/wlans`, `PATCH/DELETE /api/wlans/{id}` |
 | Search | `GET /api/search?q=…&kind=port` (ports are only searched when asked for) |

@@ -121,9 +121,9 @@ export default function (test, { base, shots }) {
     await page.waitForResponse((res) => res.url().includes('/api/racks/') && res.request().method() === 'GET');
     const rack = await api(page, `/api/racks/${rackId}`);
     assert.equal(rack.devices.find((d) => d.code === 'SW01').placement.u, 5);
-    await page.getByRole('tab', { name: 'Rear' }).click();
+    await page.getByRole('button', { name: 'Rear', exact: true }).click();
     await page.locator('.rack-device.other-face[data-device=SW01]').waitFor();
-    await page.getByRole('tab', { name: 'Front' }).click();
+    await page.getByRole('button', { name: 'Front', exact: true }).click();
   });
 
   test('devices list, device page and moving to Unplaced', async (page) => {

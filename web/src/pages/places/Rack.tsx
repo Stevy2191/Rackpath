@@ -1,7 +1,7 @@
 // A rack: front and rear elevations in half-U steps, zero-U devices at the
 // sides, and devices added by clicking a free U or moved by dragging.
 import { useEffect, useState, type DragEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
@@ -9,6 +9,7 @@ import { link } from '../../links';
 import type { Device, Placement, Rack, Room } from '../../types';
 import { Badge, Button, Card, ErrorBox, FormModal, PageHeader, SelectField, Spinner, Tabs, TextArea, TextField, message, useLoad, useToast } from '../../ui';
 import { DeviceForm, MoveDevice } from '../devices/DeviceForm';
+import { PortsPanel } from '../cabling/PortsPanel';
 import { Crumbs, DeleteModal, KeyValues, num, useForm } from './common';
 
 export function RackForm({ rooms, projectId, existing, onClose, onSaved }: { rooms: Room[]; projectId: number; existing?: Rack; onClose: () => void; onSaved: (r: Rack) => void }) {
@@ -75,6 +76,8 @@ export function RackPage() {
   const toast = useToast();
   const rack = useLoad(() => api.get<Rack>(`/api/racks/${id}`), [id]);
   const [face, setFace] = useState<Face>('front');
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'patching' ? 'patching' : 'elevation';
   const [selected, setSelected] = useState<number | null>(null);
   const [modal, setModal] = useState<{ type: 'edit' | 'delete' | 'move' } | { type: 'add'; u: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -115,9 +118,34 @@ export function RackPage() {
         }
       />
       <ErrorBox error={error} />
+      <Tabs
+        tabs={[
+          { id: 'elevation', label: 'Elevation' },
+          { id: 'patching', label: 'Patching' },
+        ]}
+        value={view}
+        onChange={(v) => setParams(v === 'elevation' ? {} : { view: v }, { replace: true })}
+      />
+      {view === 'patching' ? (
+        <div className="tab-panel">
+          <PortsPanel
+            projectId={project.id}
+            rackId={r.id}
+            canEdit={edit}
+            groupBy={(p) => {
+              const d = devices.find((x) => x.id === p.device_id);
+              return d ? `${d.code}${d.name ? ` · ${d.name}` : ''}${d.placement.type === 'rack' && d.placement.u != null ? ` · U${d.placement.u}` : ''}` : p.path.split('/').slice(-2, -1)[0];
+            }}
+          />
+        </div>
+      ) : (
       <div className="rack-layout">
         <div>
-          <Tabs tabs={[{ id: 'front', label: 'Front' }, { id: 'rear', label: 'Rear' }]} value={face} onChange={setFace} />
+          <div className="segmented" role="group" aria-label="Rack face">
+            {(['front', 'rear'] as Face[]).map((x) => (
+              <button key={x} type="button" aria-pressed={face === x} onClick={() => setFace(x)}>{x === 'front' ? 'Front' : 'Rear'}</button>
+            ))}
+          </div>
           <div className="rack-frame-wrap">
             <ZeroU devices={zero('zero_u_left')} label="Left" onSelect={setSelected} selected={selected} />
             <Elevation
@@ -167,6 +195,7 @@ export function RackPage() {
           )}
         </aside>
       </div>
+      )}
       {modal?.type === 'edit' && (
         <RackEdit rack={r} projectId={project.id} onClose={() => setModal(null)} onSaved={rack.reload} />
       )}

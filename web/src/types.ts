@@ -208,3 +208,117 @@ export interface TemplateSummary {
   version: number;
   device_count: number;
 }
+
+export interface Port {
+  id: number;
+  device_id: number;
+  code: string;
+  path: string;
+  face: 'front' | 'rear';
+  role: 'active' | 'passive';
+  requires_permanent: boolean;
+  medium: 'copper' | 'fiber' | 'wireless' | 'power' | 'console' | 'coax' | 'other';
+  connector: string | null;
+  transceiver: string | null;
+  fiber_mode: string | null;
+  sort_order: number;
+  interface_name: string | null;
+  speed: number | null;
+  effective_speed: number | null;
+  poe: string | null;
+  description: string | null;
+  mac: string | null;
+  wlan_id: number | null;
+  outlet_group: number | null;
+  from_template: boolean;
+  notes: string | null;
+}
+
+export interface CableOnPort {
+  connection_id: number;
+  kind: 'patch' | 'permanent' | 'power';
+  cable_type: string | null;
+  length_m: number | null;
+  color: string | null;
+  label: string | null;
+  far: { port_id: number; side: 'front' | 'rear'; path: string; device_id: number };
+}
+
+export type ChainState = 'complete' | 'incomplete' | 'unconnected';
+
+export interface ListedPort extends Port {
+  front: CableOnPort | null;
+  rear: CableOnPort | null;
+  vlans: { id: number; vid: number; name: string; mode: 'untagged' | 'tagged' }[];
+  chain_state: ChainState;
+  can_edit?: boolean;
+}
+
+export type TraceHop =
+  | {
+      type: 'port';
+      id: number;
+      path: string | null;
+      device_id: number | null;
+      role: 'active' | 'passive' | null;
+      connector: string | null;
+      transceiver: string | null;
+      enter: 'front' | 'rear' | null;
+      exit: 'front' | 'rear' | null;
+    }
+  | {
+      type: 'cable';
+      id: number;
+      kind: CableOnPort['kind'] | null;
+      cable_type: string | null;
+      length_m: number | null;
+      color: string | null;
+      label: string | null;
+    };
+
+export interface Trace {
+  state: ChainState;
+  truncated: boolean;
+  ends: [number, number];
+  total_length_m: number | null;
+  hops: TraceHop[];
+  warnings: string[];
+}
+
+export interface Connection {
+  id: number;
+  kind: CableOnPort['kind'];
+  cable_type: string | null;
+  length_m: number | null;
+  color: string | null;
+  label: string | null;
+  notes: string | null;
+  a: { port_id: number; side: 'front' | 'rear'; path: string; device_id: number };
+  b: { port_id: number; side: 'front' | 'rear'; path: string; device_id: number };
+  warnings?: string[];
+}
+
+export interface MediaCatalog {
+  media: string[];
+  connectors: { name: string; media: string[]; cage: boolean }[];
+  transceivers: { name: string; cage: string; speed: number; medium: string }[];
+  cable_types: string[];
+}
+
+export interface IpAddress {
+  id: number;
+  address: string;
+  prefix_len: number | null;
+  device_id: number | null;
+  port_id: number | null;
+  role: string;
+  status: string;
+  mac: string | null;
+  dns_name: string | null;
+  dns_aliases: string[];
+  dhcp_reservation: boolean;
+  description: string | null;
+  source: string;
+  device_path: string | null;
+  port_path: string | null;
+}

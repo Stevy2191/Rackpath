@@ -1,6 +1,7 @@
 // Project pages, added as phase 7 lands (nav entries live in layout/Shell.tsx).
 import type { ReactNode } from 'react';
 import { Route } from 'react-router-dom';
+import { PortPage } from './pages/cabling/PortPage';
 import { DevicePage, DevicesPage } from './pages/devices/Devices';
 import { FloorPage } from './pages/places/Floor';
 import { LocationPage, LocationsPage } from './pages/places/Locations';
@@ -16,5 +17,6 @@ export const projectRoutes: ReactNode = (
     <Route path="racks/:id" element={<RackPage />} />
     <Route path="devices" element={<DevicesPage />} />
     <Route path="devices/:id" element={<DevicePage />} />
+    <Route path="ports/:id" element={<PortPage />} />
   </>
 );

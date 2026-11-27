@@ -4,8 +4,9 @@ import { ExternalLink, MoveRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api, qs } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
-import type { Device } from '../../types';
-import { Badge, Button, Card, ErrorBox, PageHeader, SelectField, Spinner, Table, TextField, fmtTime, message, useLoad, useToast } from '../../ui';
+import type { Device, IpAddress } from '../../types';
+import { PortsPanel } from '../cabling/PortsPanel';
+import { Badge, Button, Card, ErrorBox, PageHeader, SelectField, Spinner, Table, Tabs, TextField, fmtTime, message, useLoad, useToast } from '../../ui';
 import { Crumbs, DeleteModal, KeyValues, useDeviceTypes } from '../places/common';
 import { DeviceEdit, DeviceForm, MoveDevice, STATUSES, type PlaceOption } from './DeviceForm';
 
@@ -156,6 +157,8 @@ export function DevicePage() {
   const toast = useToast();
   const dev = useLoad(() => api.get<Device>(`/api/devices/${id}`), [id]);
   const [modal, setModal] = useState<'edit' | 'move' | 'delete' | null>(null);
+  const [params, setParams] = useSearchParams();
+  const tab = (params.get('tab') ?? 'overview') as 'overview' | 'ports' | 'addresses';
   if (dev.error) return <ErrorBox error={dev.error} onRetry={dev.reload} />;
   if (!dev.data) return <Spinner />;
   const d = dev.data;
@@ -177,49 +180,67 @@ export function DevicePage() {
           )
         }
       />
-      {d.missing_from_source_at && (
-        <div className="error-box" role="status">Not seen by {d.source} since {fmtTime(d.missing_from_source_at)}.</div>
-      )}
-      <div className="grid-2">
-        <Card title="Details">
-          <KeyValues
-            rows={[
-              ['Where', <PlacementText d={d} projectId={project.id} />],
-              ['Model', [d.manufacturer, d.model].filter(Boolean).join(' ')],
-              ['Height', d.u_height != null ? `${d.u_height}U` : null],
-              ['Serial number', d.serial_number && <span className="mono">{d.serial_number}</span>],
-              ['Asset tag', d.asset_tag],
-              ['Hostname', d.hostname && <span className="mono">{d.hostname}</span>],
-              ['MAC', d.mac && <span className="mono">{d.mac}</span>],
-              ['OS', d.os],
-              ['Firmware', d.firmware],
-              ['Tags', d.tags.length > 0 && <span className="row">{d.tags.map((t) => <Badge key={t.id}>{t.name}</Badge>)}</span>],
-            ]}
-          />
-        </Card>
-        <Card title="Lifecycle">
-          <KeyValues
-            rows={[
-              ['Purchased', d.purchase_date],
-              ['Warranty until', d.warranty_expiry],
-              ['In service since', d.in_service_date],
-              ['Source', d.source !== 'manual' && (d.external_url ? <a href={d.external_url} target="_blank" rel="noreferrer">{d.source} <ExternalLink size={12} /></a> : d.source)],
-              ['Notes', d.notes && <span className="pre">{d.notes}</span>],
-            ]}
-          />
-        </Card>
+      <Tabs
+        tabs={[
+          { id: 'overview', label: 'Overview' },
+          { id: 'ports', label: 'Ports' },
+          { id: 'addresses', label: 'IP addresses' },
+        ]}
+        value={tab}
+        onChange={(t) => setParams(t === 'overview' ? {} : { tab: t }, { replace: true })}
+      />
+      <div className="tab-panel">
+        {tab === 'overview' && (
+          <>
+          {d.missing_from_source_at && (
+            <div className="error-box" role="status">Not seen by {d.source} since {fmtTime(d.missing_from_source_at)}.</div>
+          )}
+          <div className="grid-2">
+            <Card title="Details">
+              <KeyValues
+                rows={[
+                  ['Where', <PlacementText d={d} projectId={project.id} />],
+                  ['Model', [d.manufacturer, d.model].filter(Boolean).join(' ')],
+                  ['Height', d.u_height != null ? `${d.u_height}U` : null],
+                  ['Serial number', d.serial_number && <span className="mono">{d.serial_number}</span>],
+                  ['Asset tag', d.asset_tag],
+                  ['Hostname', d.hostname && <span className="mono">{d.hostname}</span>],
+                  ['MAC', d.mac && <span className="mono">{d.mac}</span>],
+                  ['OS', d.os],
+                  ['Firmware', d.firmware],
+                  ['Tags', d.tags.length > 0 && <span className="row">{d.tags.map((t) => <Badge key={t.id}>{t.name}</Badge>)}</span>],
+                ]}
+              />
+            </Card>
+            <Card title="Lifecycle">
+              <KeyValues
+                rows={[
+                  ['Purchased', d.purchase_date],
+                  ['Warranty until', d.warranty_expiry],
+                  ['In service since', d.in_service_date],
+                  ['Source', d.source !== 'manual' && (d.external_url ? <a href={d.external_url} target="_blank" rel="noreferrer">{d.source} <ExternalLink size={12} /></a> : d.source)],
+                  ['Notes', d.notes && <span className="pre">{d.notes}</span>],
+                ]}
+              />
+            </Card>
+          </div>
+          {d.on_tray && d.on_tray.length > 0 && (
+            <Card title="On this shelf" className="mt">
+              <ul className="list">
+                {d.on_tray.map((c) => (
+                  <li key={c.id}>
+                    <Link to={link.device(project.id, c.id)} className="mono">{c.code}</Link> {c.name}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          </>
+        )}
+        {tab === 'ports' && <PortsPanel projectId={project.id} deviceId={d.id} canEdit={!!d.can_edit && d.placement.type !== 'unplaced'} />}
+        {tab === 'ports' && d.placement.type === 'unplaced' && <p className="small muted">Unplaced devices can't be cabled; move it into a rack or room first.</p>}
+        {tab === 'addresses' && <DeviceAddresses projectId={project.id} deviceId={d.id} />}
       </div>
-      {d.on_tray && d.on_tray.length > 0 && (
-        <Card title="On this shelf" className="mt">
-          <ul className="list">
-            {d.on_tray.map((c) => (
-              <li key={c.id}>
-                <Link to={link.device(project.id, c.id)} className="mono">{c.code}</Link> {c.name}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
       {modal === 'edit' && <DeviceEdit device={d} onClose={() => setModal(null)} onSaved={dev.reload} />}
       {modal === 'move' && <MoveDevice device={d} projectId={project.id} onClose={() => setModal(null)} onSaved={dev.reload} />}
       {modal === 'delete' && (
@@ -236,5 +257,29 @@ export function DevicePage() {
         />
       )}
     </div>
+  );
+}
+
+function DeviceAddresses({ projectId, deviceId }: { projectId: number; deviceId: number }) {
+  const list = useLoad(
+    () => api.get<{ addresses: IpAddress[] }>(`/api/projects/${projectId}/addresses${qs({ device_id: deviceId, limit: 500 })}`).then((r) => r.addresses),
+    [projectId, deviceId],
+  );
+  if (list.error) return <ErrorBox error={list.error} onRetry={list.reload} />;
+  if (!list.data) return <Spinner />;
+  return (
+    <Table
+      rows={list.data}
+      rowKey={(a) => a.id}
+      empty="No IP addresses documented for this device"
+      columns={[
+        { key: 'address', label: 'Address', render: (a) => <Link to={link.address(projectId, a.id)} className="mono">{a.address}{a.prefix_len != null ? `/${a.prefix_len}` : ''}</Link>, sort: (a) => a.address },
+        { key: 'port', label: 'Port', render: (a) => (a.port_id ? <Link to={link.port(projectId, a.port_id)} className="mono">{a.port_path?.split('/').pop()}</Link> : null) },
+        { key: 'dns', label: 'DNS name', render: (a) => a.dns_name, sort: (a) => a.dns_name ?? '' },
+        { key: 'role', label: 'Role', render: (a) => a.role, sort: (a) => a.role },
+        { key: 'status', label: 'Status', render: (a) => a.status, sort: (a) => a.status },
+        { key: 'source', label: 'Source', render: (a) => (a.dhcp_reservation ? `${a.source} · DHCP reservation` : a.source) },
+      ]}
+    />
   );
 }

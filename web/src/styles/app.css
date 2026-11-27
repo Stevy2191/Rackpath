@@ -252,3 +252,22 @@ tr.clickable { cursor: pointer; }
   .plan-layout, .rack-layout { grid-template-columns: 1fr; }
   .filters { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---------------------------------------------------------------- cabling */
+
+.tab-panel { margin-top: 1rem; }
+.segmented { display: inline-flex; border: 1px solid var(--color-border-strong); border-radius: 6px; overflow: hidden; margin-top: 0.75rem; }
+.segmented button { font: inherit; font-size: 0.85rem; padding: 0.3rem 0.9rem; border: 0; background: var(--color-bg-elevated); color: var(--color-text); cursor: pointer; }
+.segmented button + button { border-left: 1px solid var(--color-border-strong); }
+.segmented button[aria-pressed='true'] { background: var(--color-accent-bg); color: var(--color-accent-text); font-weight: 600; }
+.link-btn { font: inherit; font-size: 0.85rem; display: inline-flex; gap: 0.3rem; align-items: center; background: none; border: 0; padding: 0; color: var(--color-link); cursor: pointer; }
+.link-btn:hover { text-decoration: underline; }
+.cable-cell { display: inline-flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+.table.ports td { vertical-align: middle; }
+.table tr.selected td { background: var(--color-accent-bg); }
+.table tr.group-row td { background: var(--color-bg-subtle); font-weight: 600; font-size: 0.85rem; font-family: var(--font-mono); }
+.row-actions { white-space: nowrap; text-align: right; }
+.trace-hops { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.trace-port { display: flex; flex-direction: column; padding: 0.4rem 0.6rem; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-bg-elevated); }
+.trace-port.here { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent); }
+.trace-cable { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.5rem; border-bottom: 3px solid var(--color-text-faint); color: var(--color-text-muted); }

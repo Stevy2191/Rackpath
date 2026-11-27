@@ -55,7 +55,7 @@ const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
 export const ctx = { base, password, shots };
 
-const mods = process.env.E2E_ONLY ? process.env.E2E_ONLY.split(',') : ['auth', 'places'];
+const mods = process.env.E2E_ONLY ? process.env.E2E_ONLY.split(',') : ['auth', 'places', 'cabling'];
 for (const m of mods) (await import(`./${m}.mjs`)).default(test, ctx);
 
 const browser = await chromium.launch();

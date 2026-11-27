@@ -13,6 +13,7 @@ pub mod floor_plans;
 pub mod integrations;
 pub mod invitations;
 pub mod ipam;
+pub mod media;
 pub mod places;
 pub mod power;
 
@@ -202,6 +203,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/ports/{id}/trace", get(ports::trace))
         .route("/api/ports/{id}/chain-color", post(ports::chain_color))
         .route("/api/ports/{id}/vlans", put(ports::set_vlans))
+        .route("/api/media", get(media::catalog))
         .route("/api/connections", post(connections::create))
         .route(
             "/api/connections/{id}",
