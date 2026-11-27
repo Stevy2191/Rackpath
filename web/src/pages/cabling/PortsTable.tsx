@@ -23,6 +23,7 @@ function CableCell({ c, p, side, projectId, a }: { c: CableOnPort | null; p: Lis
       <span className="cable-cell">
         <span className="swatch" style={{ background: c.color ?? 'var(--color-border-strong)' }} />
         <Link to={link.port(projectId, c.far.port_id)} className="mono">{c.far.path.split('/').slice(-2).join(' ')}</Link>
+        {c.far.device_name && <span className="muted small"> · {c.far.device_name}</span>}
         <span className="small muted">{[c.cable_type, c.length_m != null ? `${c.length_m} m` : null].filter(Boolean).join(' · ')}</span>
         {a.onCable && (
           <button type="button" className="icon-btn" aria-label={`Cable on ${p.code} ${side}`} onClick={() => a.onCable!(c.connection_id)}>

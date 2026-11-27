@@ -94,7 +94,10 @@ export function Search({ projectId }: { projectId?: number }) {
                 <Badge>{h.kind}</Badge>
               </span>
               <span>
-                <div className="path">{h.path}</div>
+                <div className="path">
+                  {h.path}
+                  {h.name && <span className="muted"> · {h.name}</span>}
+                </div>
                 {h.detail && <div className="detail">→ {h.detail}</div>}
               </span>
             </div>

@@ -194,9 +194,10 @@ export function AddressTable({ rows, projectId, onOpen }: { rows: IpAddress[]; p
             a.device_id ? (
               <Link to={a.port_id ? link.port(projectId, a.port_id) : link.device(projectId, a.device_id)} onClick={(e) => e.stopPropagation()}>
                 {(a.port_path ?? a.device_path ?? '').split('/').slice(-2).join(' ')}
+                {a.device_name && <span className="muted"> · {a.device_name}</span>}
               </Link>
             ) : (
-              <span className="muted">spare</span>
+              <span className="muted">not linked</span>
             ),
           sort: (a) => a.device_path ?? '',
         },

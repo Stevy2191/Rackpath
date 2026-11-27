@@ -195,6 +195,9 @@ pub struct FarEnd {
     pub side: String,
     pub path: String,
     pub device_id: i64,
+    /// The far device's name (its path shows only codes).
+    #[serde(default)]
+    pub device_name: Option<String>,
 }
 
 /// A cable on a port side, as listed with the port.
@@ -249,7 +252,7 @@ pub async fn with_details(
             "SELECT json_group_array(json_object('port_id', e.port_id, 'side', e.side, 'connection_id', c.id,
                     'kind', c.kind, 'cable_type', c.cable_type, 'length_m', c.length_m, 'color', c.color,
                     'label', c.label, 'far', json_object('port_id', f.port_id, 'side', f.side, 'path', s.path,
-                    'device_id', s.device_id)))
+                    'device_id', s.device_id, 'device_name', (SELECT d.name FROM devices d WHERE d.id = s.device_id))))
              FROM connection_ends e
              JOIN connections c ON c.id = e.connection_id
              JOIN connection_ends f ON f.connection_id = e.connection_id AND f.endpoint <> e.endpoint

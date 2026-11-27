@@ -160,7 +160,7 @@ function DevicePortPicker({ projectId, deviceId, portId, onChange }: { projectId
         value={deviceId}
         onChange={(e) => onChange(e.target.value, '')}
         options={[
-          { value: '', label: 'None (a documented spare)' },
+          { value: '', label: 'None (not linked to a device)' },
           ...(deviceId && !current ? [{ value: deviceId, label: 'Current device' }] : []),
           ...devices.map((d) => ({ value: String(d.id), label: d.path.split('/').slice(1).join(' / ') })),
         ]}

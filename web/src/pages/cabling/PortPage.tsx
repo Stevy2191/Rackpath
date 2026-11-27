@@ -70,6 +70,7 @@ export function PortPage() {
                     <>
                       <span className="swatch" style={{ background: c.color ?? 'var(--color-border-strong)' }} />
                       <Link to={link.port(project.id, c.far.port_id)} className="mono">{c.far.path.split('/').slice(1).join(' / ')}</Link>
+                      {c.far.device_name && <span className="muted"> · {c.far.device_name}</span>}
                       <span className="small muted">{[c.kind, c.cable_type, c.length_m != null ? `${c.length_m} m` : null, c.label].filter(Boolean).join(' · ')}</span>
                       {p.can_edit && <Button variant="ghost" onClick={() => setModal({ t: 'cable', id: c.connection_id })}>Change</Button>}
                     </>

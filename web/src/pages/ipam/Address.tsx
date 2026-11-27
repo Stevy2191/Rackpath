@@ -49,7 +49,7 @@ export function AddressPage() {
       <Card title="Details">
         <KeyValues
           rows={[
-            ['Device', a.device_id ? <Link to={link.device(project.id, a.device_id)}>{a.device_path?.split('/').slice(1).join(' / ')}</Link> : <span className="muted">None (a documented spare)</span>],
+            ['Device', a.device_id ? <Link to={link.device(project.id, a.device_id)}>{a.device_path?.split('/').slice(1).join(' / ')}{a.device_name ? ` · ${a.device_name}` : ''}</Link> : <span className="muted">Not linked to a device</span>],
             ['Port', a.port_id && <Link to={link.port(project.id, a.port_id)} className="mono">{a.port_path?.split('/').pop()}</Link>],
             ['Role', a.role],
             ['MAC', a.mac && <span className="mono">{a.mac}</span>],

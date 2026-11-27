@@ -40,6 +40,35 @@ pub struct Addr {
 }
 
 impl Addr {
+    /// An address on the public internet: not private (RFC 1918, ULA),
+    /// shared (CGNAT 100.64/10), loopback, link-local, multicast or
+    /// otherwise reserved. A router's WAN address, for instance.
+    pub fn is_public(self) -> bool {
+        if self.v6 {
+            let seg = std::net::Ipv6Addr::from(self.value).segments();
+            // Only global unicast (2000::/3) is public, minus reserved
+            // blocks in 2001::/16 (Teredo, benchmarking, documentation).
+            let global = (seg[0] & 0xe000) == 0x2000;
+            let reserved = seg[0] == 0x2001 && (seg[1] < 0x0200 || seg[1] == 0x0db8);
+            global && !reserved
+        } else {
+            let v = std::net::Ipv4Addr::from((self.value & 0xffff_ffff) as u32);
+            let [a, b, c, _] = v.octets();
+            !(v.is_private()
+                || v.is_loopback()
+                || v.is_link_local()
+                || v.is_multicast()
+                || v.is_broadcast()
+                || v.is_unspecified()
+                || v.is_documentation()
+                || a == 0
+                || (a == 100 && (64..128).contains(&b))
+                || (a == 192 && b == 0 && c == 0)
+                || (a == 198 && (18..20).contains(&b))
+                || a >= 240)
+        }
+    }
+
     pub fn from_ip(ip: IpAddr) -> Addr {
         match ip {
             IpAddr::V4(v4) => Addr {
@@ -265,6 +294,47 @@ pub fn within(first: Addr, last: Addr, taken: &[(Addr, Addr)], count: usize) -> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn public_addresses() {
+        use super::parse_addr;
+        for a in [
+            "108.204.170.224",
+            "8.8.8.8",
+            "1.1.1.1",
+            "2606:4700::1111",
+            "2001:4860::8888",
+        ] {
+            assert!(parse_addr(a).unwrap().is_public(), "{a}");
+        }
+        for a in [
+            "10.1.1.1",
+            "172.16.0.1",
+            "172.31.255.1",
+            "192.168.1.1",
+            "100.64.0.1",
+            "100.127.0.1",
+            "127.0.0.1",
+            "169.254.1.1",
+            "224.0.0.1",
+            "255.255.255.255",
+            "0.0.0.0",
+            "192.0.2.1",
+            "198.18.0.1",
+            "240.0.0.1",
+            "fd00::1",
+            "fe80::1",
+            "::1",
+            "2001:db8::1",
+            "ff02::1",
+        ] {
+            assert!(!parse_addr(a).unwrap().is_public(), "{a}");
+        }
+        // Just outside the private and shared ranges: public.
+        for a in ["172.32.0.1", "100.128.0.1", "11.0.0.1"] {
+            assert!(parse_addr(a).unwrap().is_public(), "{a}");
+        }
+    }
+
     use super::*;
 
     fn a(s: &str) -> Addr {

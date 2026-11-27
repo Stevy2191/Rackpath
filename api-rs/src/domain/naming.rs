@@ -41,6 +41,33 @@ pub fn next_free_code(prefix: &str, existing: &[String]) -> String {
     }
 }
 
+/// A code made from a free-text name (an imported device's name):
+/// uppercased, anything but letters and digits becomes `-`, runs of `-`
+/// collapse, and it's cut to 16 characters. "Living Room AP" becomes
+/// `LIVING-ROOM-AP`. None when nothing usable is left (no ASCII letters or
+/// digits).
+pub fn code_from_name(name: &str) -> Option<String> {
+    let mut out = String::new();
+    for c in name.trim().chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_uppercase());
+        } else if !out.is_empty() && !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    out.truncate(MAX_CODE_LEN);
+    let out = out.trim_end_matches('-');
+    normalize_code(out).ok()
+}
+
+/// Whether `code` is an automatic one for `prefix`: the prefix and digits,
+/// as `next_free_code` makes (`AP01`, `SW12`).
+pub fn is_auto_code(code: &str, prefix: &str) -> bool {
+    code.len() > prefix.len()
+        && code[..prefix.len()].eq_ignore_ascii_case(prefix)
+        && code[prefix.len()..].chars().all(|c| c.is_ascii_digit())
+}
+
 /// A variant of `code` that isn't in `taken`: `CODE`, then `CODE-2`,
 /// `CODE-3`, … shortening the base so the result stays within 16 characters.
 pub fn unique_variant(code: &str, taken: &[String]) -> String {
@@ -67,6 +94,43 @@ pub fn path(codes: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codes_from_names() {
+        for (name, code) in [
+            ("Living Room AP", Some("LIVING-ROOM-AP")),
+            ("  office-ap ", Some("OFFICE-AP")),
+            ("U7 Pro (Upstairs Hallway)", Some("U7-PRO-UPSTAIRS")),
+            ("USW-Pro-24-PoE", Some("USW-PRO-24-POE")),
+            ("Switch / Rack 2", Some("SWITCH-RACK-2")),
+            ("Café AP", Some("CAF-AP")),
+            ("---", None),
+            ("Ångström", Some("NGSTR-M")),
+            ("📡", None),
+            ("", None),
+        ] {
+            assert_eq!(code_from_name(name).as_deref(), code, "{name}");
+        }
+        assert!(
+            code_from_name("A very long access point name")
+                .unwrap()
+                .len()
+                <= MAX_CODE_LEN
+        );
+        assert_eq!(
+            code_from_name("A very long access point name").as_deref(),
+            Some("A-VERY-LONG-ACCE")
+        );
+    }
+
+    #[test]
+    fn auto_codes() {
+        assert!(is_auto_code("AP01", "AP"));
+        assert!(is_auto_code("ap12", "AP"));
+        assert!(!is_auto_code("AP", "AP"));
+        assert!(!is_auto_code("AP-OFFICE", "AP"));
+        assert!(!is_auto_code("SW01", "AP"));
+    }
 
     #[test]
     fn accepts_and_uppercases_valid_codes() {

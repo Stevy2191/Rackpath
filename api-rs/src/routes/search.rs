@@ -28,6 +28,10 @@ pub struct Hit {
     /// For an IP address: the port or device it's assigned to.
     #[serde(skip_serializing_if = "Option::is_none")]
     detail: Option<String>,
+    /// The name beside the codes: a device's (an address's device, a port's
+    /// device) or a location's, room's or rack's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
 }
 
 /// Turns free text into a safe FTS5 query: every word must match, as a
@@ -67,7 +71,16 @@ pub async fn search(
                     SELECT COALESCE(ps.path, ds.path) FROM ip_addresses a
                     LEFT JOIN search_entries ps ON ps.kind = 'port' AND ps.ref_id = a.port_id
                     LEFT JOIN search_entries ds ON ds.kind = 'device' AND ds.ref_id = a.device_id
-                    WHERE a.id = e.ref_id) END AS detail
+                    WHERE a.id = e.ref_id) END AS detail,
+                CASE e.kind
+                    WHEN 'device' THEN (SELECT name FROM devices WHERE id = e.ref_id)
+                    WHEN 'port' THEN (SELECT d.name FROM ports o JOIN devices d ON d.id = o.device_id WHERE o.id = e.ref_id)
+                    WHEN 'address' THEN (SELECT d.name FROM ip_addresses a JOIN devices d ON d.id = a.device_id
+                                         WHERE a.id = e.ref_id)
+                    WHEN 'location' THEN (SELECT name FROM locations WHERE id = e.ref_id)
+                    WHEN 'room' THEN (SELECT name FROM rooms WHERE id = e.ref_id)
+                    WHEN 'rack' THEN (SELECT name FROM racks WHERE id = e.ref_id)
+                END AS name
          FROM search_fts f JOIN search_entries e ON e.id = f.rowid
          WHERE search_fts MATCH ",
     );
