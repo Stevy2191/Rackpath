@@ -38,6 +38,29 @@ export const projectNav: { to: string; label: string; icon: ReactNode; end?: boo
   { to: 'settings', label: 'Settings', icon: <Settings size={18} /> },
 ];
 
+// The project last opened, remembered in this browser so the sidebar keeps
+// it while you're on an account-wide page (projects, users, activity, your
+// account).
+const LAST_PROJECT = 'rackpath.lastProject';
+
+function rememberedProject(): number | undefined {
+  try {
+    const v = Number(localStorage.getItem(LAST_PROJECT));
+    return Number.isInteger(v) && v > 0 ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function rememberProject(id: number | undefined) {
+  try {
+    if (id === undefined) localStorage.removeItem(LAST_PROJECT);
+    else localStorage.setItem(LAST_PROJECT, String(id));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export function Shell() {
   const { projectId } = useParams();
   const pid = projectId ? Number(projectId) : undefined;
@@ -56,6 +79,16 @@ export function Shell() {
     }
   }, [pid, projects.data, project, projects]);
   const rights = pid ? projectRights(me, pid) : { write: false, manage: false };
+  // The project the sidebar shows: the open one, or else the last one opened
+  // (if it still exists and you can still see it).
+  const [lastPid, setLastPid] = useState(rememberedProject);
+  useEffect(() => {
+    if (project && project.id !== lastPid) {
+      setLastPid(project.id);
+      rememberProject(project.id);
+    }
+  }, [project, lastPid]);
+  const sideProject = project ?? projects.data?.find((p) => p.id === lastPid);
 
   let body: ReactNode = <Outlet />;
   if (pid !== undefined) {
@@ -82,8 +115,17 @@ export function Shell() {
           <select
             className="input"
             aria-label="Project"
-            value={pid ?? ''}
-            onChange={(e) => nav(e.target.value ? `/p/${e.target.value}` : '/projects')}
+            value={sideProject?.id ?? ''}
+            onChange={(e) => {
+              if (e.target.value) {
+                nav(`/p/${e.target.value}`);
+              } else {
+                // "All projects": forget the last project too.
+                setLastPid(undefined);
+                rememberProject(undefined);
+                nav('/projects');
+              }
+            }}
           >
             <option value="">All projects…</option>
             {projects.data?.map((p) => (
@@ -94,18 +136,19 @@ export function Shell() {
           </select>
         </div>
         <nav className="rail-nav">
-          {project && (
+          {sideProject && (
             <>
-              <div className="rail-group u-label">{project.code}</div>
+              <div className="rail-group u-label">{sideProject.code}</div>
               {projectNav.map((n) => (
-                <NavLink key={n.label} to={`/p/${project.id}${n.to ? `/${n.to}` : ''}`} end={n.end} className="rail-link">
+                <NavLink key={n.label} to={`/p/${sideProject.id}${n.to ? `/${n.to}` : ''}`} end={n.end} className="rail-link">
                   {n.icon}
                   <span>{n.label}</span>
                 </NavLink>
               ))}
             </>
           )}
-          <div className="rail-group u-label">Rackpath</div>
+          {/* Pages across every project, not inside one. */}
+          <div className="rail-group u-label">Account</div>
           <NavLink to="/projects" className="rail-link" end>
             <FolderKanban size={18} />
             <span>Projects</span>
