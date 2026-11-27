@@ -9,6 +9,7 @@ pub mod connections;
 pub mod csv_import;
 pub mod device_types;
 pub mod devices;
+pub mod floor_plans;
 pub mod integrations;
 pub mod invitations;
 pub mod ipam;
@@ -35,6 +36,7 @@ use serde::Serialize;
 use serde_json::json;
 use sqlx::SqliteConnection;
 use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::auth::{CurrentUser, UserRow};
@@ -324,7 +326,15 @@ pub fn router(state: AppState) -> Router {
             "/api/integrations/{id}/rotate-token",
             post(integrations::rotate_token),
         )
-        .fallback(|| async { AppError::NotFound })
+        .route(
+            "/api/floors/{id}/plan-image",
+            get(floor_plans::get_image).delete(floor_plans::delete_image),
+        )
+        .route(
+            "/api/{*rest}",
+            axum::routing::any(|| async { AppError::NotFound }),
+        )
+        .fallback_service(web_app(&state.config.web_dir))
         .layer(RequestBodyLimitLayer::new(1024 * 1024));
 
     // Imports take bigger bodies (20 MB, before decompression).
@@ -338,6 +348,7 @@ pub fn router(state: AppState) -> Router {
             post(integrations::windows_upload),
         )
         .route("/api/projects/{id}/import/csv", post(csv_import::import))
+        .route("/api/floors/{id}/plan-image", put(floor_plans::put_image))
         .layer(RequestBodyLimitLayer::new(20 * 1024 * 1024));
     app = app.merge(uploads);
 
@@ -354,6 +365,25 @@ pub fn router(state: AppState) -> Router {
     ))
     .layer(tower_http::trace::TraceLayer::new_for_http())
     .with_state(state)
+}
+
+/// The built web app: hashed files under /assets cached for a year, every
+/// other path answered with index.html (the app routes in the browser).
+fn web_app(dir: &std::path::Path) -> Router {
+    use axum::http::{header, HeaderValue};
+    let csp = SetResponseHeaderLayer::overriding(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(middleware::APP_CSP),
+    );
+    let assets = ServeDir::new(dir.join("assets")).precompressed_gzip();
+    Router::new()
+        .nest_service("/assets", assets)
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        ))
+        .fallback_service(ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html"))))
+        .layer(csp)
 }
 
 /// Where a grant points: the chain used for permission checks, the project

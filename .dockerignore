@@ -1,0 +1,10 @@
+# Only api-rs/ and web/ go into the v2 image.
+*
+!api-rs/Cargo.toml
+!api-rs/Cargo.lock
+!api-rs/migrations
+!api-rs/src
+!web
+web/node_modules
+web/dist
+web/e2e

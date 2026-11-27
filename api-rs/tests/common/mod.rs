@@ -30,6 +30,7 @@ pub async fn spawn() -> TestApp {
         public_url: Some("http://rackpath.test".into()),
         trust_proxy: false,
         audit_retention_days: None,
+        web_dir: dir.path().join("web"),
     };
     let pool = db::connect(&config.database_path).await.unwrap();
     db::migrate(&pool).await.unwrap();
@@ -65,6 +66,7 @@ pub async fn spawn_on(db_file: &std::path::Path, owner_password: &str) -> TestAp
         public_url: Some("http://rackpath.test".into()),
         trust_proxy: false,
         audit_retention_days: None,
+        web_dir: dir.path().join("web"),
     };
     let pool = db::connect(&db_path).await.unwrap();
     db::migrate(&pool).await.unwrap();

@@ -11,7 +11,7 @@ publish = false
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "tracing", "matched-path", "original-uri"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }
 tower = { version = "0.5", default-features = false, features = ["util"] }
-tower-http = { version = "0.6", features = ["set-header", "limit", "trace"] }
+tower-http = { version = "0.6", features = ["set-header", "limit", "trace", "fs"] }
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "json"] }
 # Not used directly: sets a floor so the bundled SQLite is never older than
 # the release that fixed RUSTSEC-2026-0459 (CVE-2026-119375).

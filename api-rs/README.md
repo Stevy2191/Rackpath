@@ -50,6 +50,7 @@ password, printed once to the console. You must change it at first sign-in.
 With Docker:
 
 ```bash
+# from the repository root: builds the web app and the server into one image
 docker build -t rackpath-v2 .
 docker run -p 8080:8080 -v rackpath-data:/data -e RACKPATH_ENCRYPTION_KEY=... rackpath-v2
 ```
@@ -62,6 +63,7 @@ docker run -p 8080:8080 -v rackpath-data:/data -e RACKPATH_ENCRYPTION_KEY=... ra
 | `RACKPATH_DATA_DIR` | `./data` | Holds `rackpath.db` (and uploads in later phases) |
 | `RACKPATH_DATABASE` | `<data dir>/rackpath.db` | Database file |
 | `RACKPATH_BIND` | `0.0.0.0:8080` | Listen address |
+| `RACKPATH_WEB_DIR` | `./web` (`/app/web` in the image) | The built web app (`web/dist`). Without it, only the API is served |
 | `RACKPATH_PUBLIC_URL` | none | e.g. `https://rackpath.example.com`. Used for invitation links |
 | `RACKPATH_COOKIE_SECURE` | `false` | Set `true` when served over HTTPS |
 | `RACKPATH_TRUST_PROXY` | `false` | Take the client IP from `X-Forwarded-For` (only behind your own reverse proxy) |

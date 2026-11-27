@@ -24,6 +24,8 @@ pub struct Config {
     pub trust_proxy: bool,
     /// Days of audit history to keep; None keeps everything.
     pub audit_retention_days: Option<u32>,
+    /// The built web app (index.html and assets/). Missing: API only.
+    pub web_dir: PathBuf,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -98,6 +100,7 @@ impl Config {
             database_path,
             bind,
             encryption_key,
+            web_dir: PathBuf::from(env("RACKPATH_WEB_DIR").unwrap_or_else(|| "./web".into())),
             cookie_secure: env_bool("RACKPATH_COOKIE_SECURE", false)?,
             public_url,
             trust_proxy: env_bool("RACKPATH_TRUST_PROXY", false)?,

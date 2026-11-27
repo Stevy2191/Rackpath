@@ -113,6 +113,7 @@ async fn serve(config: Config, pool: sqlx::SqlitePool) -> ExitCode {
     // Audit retention and expired-session cleanup, hourly.
     let maintenance_pool = pool.clone();
     let retention = config.audit_retention_days;
+    let data_dir = config.data_dir.clone();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(3600));
         loop {
@@ -128,6 +129,11 @@ async fn serve(config: Config, pool: sqlx::SqlitePool) -> ExitCode {
                         .bind(cutoff)
                         .execute(&mut *conn)
                         .await;
+                if let Err(e) =
+                    rackpath::routes::floor_plans::sweep(&maintenance_pool, &data_dir).await
+                {
+                    tracing::warn!(error = %e, "floor plan clean-up failed");
+                }
             }
         }
     });

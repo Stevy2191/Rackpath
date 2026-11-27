@@ -501,6 +501,10 @@ pub struct Floor {
     pub plan_width: Option<i64>,
     pub plan_height: Option<i64>,
     pub scale_px_per_m: Option<f64>,
+    #[serde(skip)]
+    pub plan_image: Option<String>,
+    /// Set when the floor has a plan image (GET /api/floors/{id}/plan-image).
+    pub plan_image_type: Option<String>,
     pub notes: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -508,11 +512,12 @@ pub struct Floor {
 
 macro_rules! floor_columns {
     () => {
-        "id, location_id, code, name, level, plan_width, plan_height, scale_px_per_m, notes, created_at, updated_at"
+        "id, location_id, code, name, level, plan_width, plan_height, scale_px_per_m, plan_image, plan_image_type, notes, \
+         created_at, updated_at"
     };
 }
 
-async fn load_floor(conn: &mut SqliteConnection, id: i64) -> AppResult<Floor> {
+pub async fn load_floor(conn: &mut SqliteConnection, id: i64) -> AppResult<Floor> {
     sqlx::query_as::<_, Floor>(concat!(
         "SELECT ",
         floor_columns!(),

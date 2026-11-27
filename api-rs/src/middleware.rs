@@ -104,6 +104,13 @@ pub async fn same_origin(State(state): State<AppState>, req: Request, next: Next
     next.run(req).await
 }
 
+/// Content security policy for the web app's pages: everything from this
+/// origin only. Inline styles are allowed for the diagram and rack drawing
+/// libraries; scripts never.
+pub const APP_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+     img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; \
+     form-action 'self'; frame-ancestors 'none'";
+
 pub fn security_headers() -> Vec<(header::HeaderName, HeaderValue)> {
     vec![
         (
