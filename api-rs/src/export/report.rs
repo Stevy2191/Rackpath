@@ -53,6 +53,7 @@ struct LocationRow {
     isp_secondary_name: Option<String>,
     isp_secondary_circuit: Option<String>,
     notes: Option<String>,
+    site: Option<String>,
 }
 
 fn join(parts: &[&Option<String>], sep: &str) -> String {
@@ -273,6 +274,7 @@ impl Builder<'_> {
             Some(&qr),
         );
         self.doc.key_values(&[
+            ("Site", l.site.clone().unwrap_or_default()),
             (
                 "Address",
                 join(
@@ -636,8 +638,8 @@ pub async fn build(
         let locations: Vec<LocationRow> = sqlx::query_as(
             "SELECT id, code, name, address_street, address_city, address_state, address_postcode, address_country,
                     contact_name, contact_phone, contact_email, isp_primary_name, isp_primary_circuit,
-                    isp_secondary_name, isp_secondary_circuit, notes
-             FROM locations WHERE project_id = ? ORDER BY code",
+                    isp_secondary_name, isp_secondary_circuit, notes, site
+             FROM locations WHERE project_id = ? ORDER BY site IS NULL, site, code",
         )
         .bind(placed.project_id)
         .fetch_all(&mut *b.conn)

@@ -157,6 +157,8 @@ pub struct Location {
     pub isp_secondary_circuit: Option<String>,
     pub isp_secondary_contact: Option<String>,
     pub notes: Option<String>,
+    /// Groups buildings (locations) of one campus; display only.
+    pub site: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -165,7 +167,7 @@ macro_rules! location_columns {
     () => {
         "id, project_id, code, name, address_street, address_city, address_state, address_postcode, address_country, \
          contact_name, contact_phone, contact_email, responsible_user_id, isp_primary_name, isp_primary_circuit, \
-         isp_primary_contact, isp_secondary_name, isp_secondary_circuit, isp_secondary_contact, notes, created_at, updated_at"
+         isp_primary_contact, isp_secondary_name, isp_secondary_circuit, isp_secondary_contact, notes, site, created_at, updated_at"
     };
 }
 
@@ -202,7 +204,11 @@ pub struct LocationFields {
     isp_secondary_circuit: Option<String>,
     isp_secondary_contact: Option<String>,
     notes: Option<String>,
+    site: Option<String>,
 }
+
+/// Index of the site in `location_values`.
+const SITE: usize = 16;
 
 /// The editable text fields of a location, in column order, merged with old values.
 fn location_values(f: LocationFields, old: Option<&Location>) -> Vec<Option<String>> {
@@ -230,6 +236,7 @@ fn location_values(f: LocationFields, old: Option<&Location>) -> Vec<Option<Stri
             o(|l| l.isp_secondary_contact.clone()),
         ),
         merge_text(f.notes, o(|l| l.notes.clone())),
+        merge_text(f.site, o(|l| l.site.clone())),
     ]
 }
 
@@ -301,7 +308,7 @@ pub async fn list_locations(
     let locations = sqlx::query_as::<_, Location>(concat!(
         "SELECT ",
         location_columns!(),
-        " FROM locations WHERE project_id = ? ORDER BY code"
+        " FROM locations WHERE project_id = ? ORDER BY site IS NULL, site COLLATE NOCASE, code"
     ))
     .bind(project_id)
     .fetch_all(&mut *conn)
@@ -345,6 +352,7 @@ pub async fn create_location(
     let responsible = body.responsible_user_id.flatten();
     let values = location_values(body, None);
     check_len("Name", &values[0], 255)?;
+    check_len("Site", &values[SITE], 100)?;
     let mut tx = state.pool.begin().await?;
     let exists: Option<i64> = sqlx::query_scalar("SELECT id FROM projects WHERE id = ?")
         .bind(project_id)
@@ -356,9 +364,9 @@ pub async fn create_location(
     let mut q = sqlx::query(
         "INSERT INTO locations (project_id, code, name, address_street, address_city, address_state, address_postcode,
          address_country, contact_name, contact_phone, contact_email, isp_primary_name, isp_primary_circuit,
-         isp_primary_contact, isp_secondary_name, isp_secondary_circuit, isp_secondary_contact, notes,
+         isp_primary_contact, isp_secondary_name, isp_secondary_circuit, isp_secondary_contact, notes, site,
          responsible_user_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(project_id)
     .bind(&code);
@@ -382,7 +390,7 @@ pub async fn create_location(
         Entry::new("create", "location", Some(id))
             .path(placed.path.clone())
             .project(Some(project_id))
-            .changes(json!({ "code": code, "name": values[0] })),
+            .changes(json!({ "code": code, "name": values[0], "site": values[SITE] })),
     )
     .await?;
     let item = load_location(&mut tx, id).await?;
@@ -432,11 +440,12 @@ pub async fn update_location(
     check_user_exists(&mut tx, responsible).await?;
     let values = location_values(body, Some(&old));
     check_len("Name", &values[0], 255)?;
+    check_len("Site", &values[SITE], 100)?;
     let mut q = sqlx::query(
         "UPDATE locations SET code = ?, name = ?, address_street = ?, address_city = ?, address_state = ?,
          address_postcode = ?, address_country = ?, contact_name = ?, contact_phone = ?, contact_email = ?,
          isp_primary_name = ?, isp_primary_circuit = ?, isp_primary_contact = ?, isp_secondary_name = ?,
-         isp_secondary_circuit = ?, isp_secondary_contact = ?, notes = ?, responsible_user_id = ?, updated_at = ?
+         isp_secondary_circuit = ?, isp_secondary_contact = ?, notes = ?, site = ?, responsible_user_id = ?, updated_at = ?
          WHERE id = ?",
     )
     .bind(&code);
