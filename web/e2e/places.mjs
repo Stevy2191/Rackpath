@@ -37,7 +37,7 @@ export default function (test, { base, shots }) {
     const add = async (code, site) => {
       await page.goto(`${base}/p/${cid}/locations`);
       await page.getByRole('button', { name: 'Add location' }).click();
-      await page.getByLabel('Code').fill(code);
+      await page.getByLabel('Code', { exact: true }).fill(code);
       if (site) await page.getByLabel('Site').fill(site);
       await page.getByRole('button', { name: 'Save' }).click();
       await page.getByRole('heading', { name: new RegExp(code.toUpperCase()) }).waitFor();
