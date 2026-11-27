@@ -15,6 +15,7 @@ type Values = {
   transceiver: string;
   speed: string;
   poe: string;
+  outlet_group: string;
   mac: string;
   description: string;
   requires_permanent: boolean;
@@ -31,6 +32,7 @@ function initial(p?: Port): Values {
     transceiver: p?.transceiver ?? '',
     speed: p?.speed != null ? String(p.speed) : '',
     poe: p?.poe ?? '',
+    outlet_group: p?.outlet_group != null ? String(p.outlet_group) : '',
     mac: p?.mac ?? '',
     description: p?.description ?? '',
     requires_permanent: p?.requires_permanent ?? true,
@@ -47,6 +49,7 @@ function body(v: Values) {
     transceiver: v.transceiver || null,
     speed: num(v.speed),
     poe: v.poe || null,
+    outlet_group: num(v.outlet_group),
     mac: v.mac || null,
     description: v.description,
     requires_permanent: v.role === 'passive' ? v.requires_permanent : undefined,
@@ -54,7 +57,7 @@ function body(v: Values) {
   };
 }
 
-function MediaFields({ f }: { f: ReturnType<typeof useForm<Values>> }) {
+function MediaFields({ f, power }: { f: ReturnType<typeof useForm<Values>>; power?: boolean }) {
   const media = useMedia();
   const v = f.values;
   const conn = media?.connectors.find((c) => c.name === v.connector);
@@ -62,7 +65,7 @@ function MediaFields({ f }: { f: ReturnType<typeof useForm<Values>> }) {
   return (
     <>
       <div className="grid-3">
-        <SelectField
+        {!power && <SelectField
           label="Role"
           {...f.bind('role')}
           options={[
@@ -70,13 +73,13 @@ function MediaFields({ f }: { f: ReturnType<typeof useForm<Values>> }) {
             { value: 'active', label: 'Active (switch port, NIC)' },
             { value: 'passive', label: 'Passive (panel, outlet)' },
           ]}
-        />
+        />}
         <SelectField
           label="Connector"
           {...f.bind('connector')}
           options={[
             { value: '', label: 'Usual for the device type' },
-            ...(media?.connectors.filter((c) => !c.media.includes('power')).map((c) => ({ value: c.name, label: c.name })) ?? []),
+            ...(media?.connectors.filter((c) => c.media.includes('power') === !!power).map((c) => ({ value: c.name, label: c.name })) ?? []),
           ]}
         />
         {conn?.cage && (
@@ -86,8 +89,9 @@ function MediaFields({ f }: { f: ReturnType<typeof useForm<Values>> }) {
             options={[{ value: '', label: 'Empty cage' }, ...modules.map((t) => ({ value: t.name, label: t.name }))]}
           />
         )}
-        <TextField label="Speed (Mb/s)" type="number" min={1} hint="Blank to follow the module or connector" {...f.bind('speed')} />
-        <SelectField
+        {!power && <TextField label="Speed (Mb/s)" type="number" min={1} hint="Blank to follow the module or connector" {...f.bind('speed')} />}
+        {power && <TextField label="Outlet bank" type="number" min={1} hint="Numbered banks on a PDU or UPS" {...f.bind('outlet_group')} />}
+        {!power && <SelectField
           label="PoE"
           {...f.bind('poe')}
           options={[
@@ -97,7 +101,7 @@ function MediaFields({ f }: { f: ReturnType<typeof useForm<Values>> }) {
             { value: 'bt', label: '802.3bt (60–90 W)' },
             { value: 'passive', label: 'Passive' },
           ]}
-        />
+        />}
         <SelectField label="On the device's" {...f.bind('face')} options={[{ value: 'front', label: 'Front' }, { value: 'rear', label: 'Rear' }]} />
       </div>
       {v.role === 'passive' && (
@@ -112,11 +116,11 @@ function MediaFields({ f }: { f: ReturnType<typeof useForm<Values>> }) {
   );
 }
 
-export function PortForm({ deviceId, existing, onClose, onSaved, onDelete }: { deviceId: number; existing?: Port; onClose: () => void; onSaved: () => void; onDelete?: () => void }) {
+export function PortForm({ deviceId, existing, power, onClose, onSaved, onDelete }: { deviceId: number; existing?: Port; power?: boolean; onClose: () => void; onSaved: () => void; onDelete?: () => void }) {
   const f = useForm<Values>(initial(existing));
   return (
     <FormModal
-      title={existing ? `Edit port ${existing.code}` : 'Add port'}
+      title={existing ? `Edit port ${existing.code}` : power ? 'Add power port' : 'Add port'}
       wide
       onClose={onClose}
       onSubmit={async () => {
@@ -131,7 +135,7 @@ export function PortForm({ deviceId, existing, onClose, onSaved, onDelete }: { d
         <TextField label="Interface name" placeholder="e.g. Gi1/0/24" {...f.bind('interface_name')} />
         <TextField label="MAC address" {...f.bind('mac')} />
       </div>
-      <MediaFields f={f} />
+      <MediaFields f={f} power={power} />
       <TextField label="Description" {...f.bind('description')} />
       <TextArea label="Notes" {...f.bind('notes')} />
       {existing && onDelete && (
@@ -143,7 +147,7 @@ export function PortForm({ deviceId, existing, onClose, onSaved, onDelete }: { d
   );
 }
 
-export function BulkPortsForm({ deviceId, onClose, onSaved }: { deviceId: number; onClose: () => void; onSaved: (count: number) => void }) {
+export function BulkPortsForm({ deviceId, power, onClose, onSaved }: { deviceId: number; power?: boolean; onClose: () => void; onSaved: (count: number) => void }) {
   const f = useForm<Values>(initial());
   const extra = useForm({ prefix: '', start: '1', count: '24' });
   const n = Number(extra.values.count) || 0;
@@ -152,7 +156,7 @@ export function BulkPortsForm({ deviceId, onClose, onSaved }: { deviceId: number
   const sample = (i: number) => `${extra.values.prefix}${String(i).padStart(width, '0')}`;
   return (
     <FormModal
-      title="Add numbered ports"
+      title={power ? 'Add numbered outlets' : 'Add numbered ports'}
       wide
       onClose={onClose}
       onSubmit={async () => {
@@ -171,7 +175,7 @@ export function BulkPortsForm({ deviceId, onClose, onSaved }: { deviceId: number
         <TextField label="How many" type="number" min={1} max={512} required {...extra.bind('count')} />
       </div>
       {n > 0 && <p className="small muted">Creates {sample(first)}{n > 1 ? ` … ${sample(first + n - 1)}` : ''}.</p>}
-      <MediaFields f={f} />
+      <MediaFields f={f} power={power} />
     </FormModal>
   );
 }

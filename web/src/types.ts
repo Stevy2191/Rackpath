@@ -419,3 +419,103 @@ export interface Wlan {
   notes: string | null;
   port_count: number;
 }
+
+export interface CurvePoint {
+  load_w: number;
+  minutes: number;
+}
+
+export interface PowerSpec {
+  input_voltage?: string | null;
+  capacity_va?: number | null;
+  capacity_w?: number | null;
+  typical_w?: number | null;
+  max_w?: number | null;
+  runtime_curve?: CurvePoint[] | null;
+  ebm_runtime_curve?: CurvePoint[] | null;
+  max_ebm_slots?: number | null;
+}
+
+export interface PortGroup {
+  face: 'front' | 'rear';
+  grid_row: number;
+  grid_col: number;
+  rows: number;
+  cols: number;
+  prefix: string;
+  numbering?: 'column_major' | 'row_major' | null;
+  start?: number | null;
+  connector?: string | null;
+  medium?: string | null;
+  transceiver?: string | null;
+  fiber_mode?: string | null;
+  role?: 'active' | 'passive' | null;
+  requires_permanent?: boolean | null;
+  speed?: number | null;
+  poe?: string | null;
+  outlet_group?: number | null;
+  description?: string | null;
+}
+
+/** What a template is made of, as saved (PUT replaces all of it). */
+export interface TemplateIn {
+  name: string;
+  device_type: string;
+  manufacturer?: string | null;
+  model?: string | null;
+  u_height?: number | null;
+  depth?: string | null;
+  half_width?: boolean;
+  power?: PowerSpec | null;
+  notes?: string | null;
+  port_groups: PortGroup[];
+  port_overrides: { port_index: number; code: string }[];
+  elements: unknown[];
+}
+
+export interface Template extends TemplateIn {
+  id: number;
+  project_id: number | null;
+  builtin: boolean;
+  builtin_key: string | null;
+  version: number;
+  device_count: number;
+  grid: { rows: number; cols: number };
+  ports: { index: number; code: string; face: 'front' | 'rear'; row: number; col: number; group: number }[];
+}
+
+export interface TemplateImpact {
+  device_id: number;
+  path: string;
+  ports_added: string[];
+  ports_removed: string[];
+  ports_changed: string[];
+  cables_removed: string[];
+  unplaced: boolean;
+}
+
+export interface DevicePower {
+  device_id: number;
+  code: string;
+  path: string;
+  power: PowerSpec;
+  draw_w: number | null;
+  demand_w: number;
+  output_w: number;
+  failover_w: number;
+  load_pct: number | null;
+  failover_pct: number | null;
+  runtime_min: number | null;
+  failover_runtime_min: number | null;
+  battery_modules: number[];
+  outlets: { total: number; used: number; groups: { group: number | null; total: number; used: number }[] };
+  inlets: { total: number; used: number };
+  warnings: string[];
+}
+
+export interface RackPower {
+  rack_id: number;
+  devices: DevicePower[];
+  totals: { draw_w: number; ups_count: number; ups_capacity_va: number; ups_capacity_w: number; ups_redundant_va: number | null; ups_redundant_w: number | null };
+  loop_detected: boolean;
+}

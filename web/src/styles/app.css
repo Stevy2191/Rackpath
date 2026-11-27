@@ -300,3 +300,27 @@ tr.clickable { cursor: pointer; }
 .checks { border: 0; padding: 0; margin: 0.75rem 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 0.25rem; }
 .checks legend { font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 0.25rem; }
 @media (max-width: 900px) { .ip-grid { grid-template-columns: repeat(16, minmax(0, 1fr)); } }
+
+/* ---------------------------------------------------------------- templates and power */
+
+.designer { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1.25rem; align-items: start; }
+.face-wrap { overflow: auto; max-height: 72vh; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-elevated); padding: 0.5rem; }
+.face-grid {
+  --cell: 26px;
+  position: relative; display: grid; min-width: 960px; user-select: none; touch-action: none; cursor: crosshair;
+  background-image: linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+  background-size: calc(100% / var(--cols, 48)) var(--cell);
+  border: 2px solid var(--color-border-strong); border-radius: 4px;
+}
+.face-grid.narrow { min-width: 0; width: 160px; --cell: 20px; }
+.face-group { grid-row: auto; border: 2px solid; border-radius: 3px; padding: 0; cursor: pointer; z-index: 1; }
+.face-group.selected { box-shadow: 0 0 0 2px var(--color-accent); z-index: 2; }
+.face-port { z-index: 3; pointer-events: none; font-family: var(--font-mono); font-size: 0.6rem; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; }
+.face-drawing { z-index: 4; border: 2px dashed var(--color-accent); background: var(--color-accent-bg); pointer-events: none; }
+fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
+.impact-list li { display: grid; gap: 0.2rem; }
+.curve { border: 1px solid var(--color-border); border-radius: 6px; padding: 0.5rem 0.75rem; }
+.curve legend { font-size: 0.85rem; color: var(--color-text-muted); }
+.curve .row { align-items: flex-end; }
+.curve .field { margin: 0; }
+@media (max-width: 1100px) { .designer { grid-template-columns: 1fr; } }

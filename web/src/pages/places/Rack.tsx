@@ -10,6 +10,7 @@ import type { Device, Placement, Rack, Room } from '../../types';
 import { Badge, Button, Card, ErrorBox, FormModal, PageHeader, SelectField, Spinner, Tabs, TextArea, TextField, message, useLoad, useToast } from '../../ui';
 import { DeviceForm, MoveDevice } from '../devices/DeviceForm';
 import { PortsPanel } from '../cabling/PortsPanel';
+import { RackPowerPanel } from '../power/Power';
 import { Crumbs, DeleteModal, KeyValues, num, useForm } from './common';
 
 export function RackForm({ rooms, projectId, existing, onClose, onSaved }: { rooms: Room[]; projectId: number; existing?: Rack; onClose: () => void; onSaved: (r: Rack) => void }) {
@@ -77,7 +78,7 @@ export function RackPage() {
   const rack = useLoad(() => api.get<Rack>(`/api/racks/${id}`), [id]);
   const [face, setFace] = useState<Face>('front');
   const [params, setParams] = useSearchParams();
-  const view = params.get('view') === 'patching' ? 'patching' : 'elevation';
+  const view = (['patching', 'power'] as const).find((v) => v === params.get('view')) ?? 'elevation';
   const [selected, setSelected] = useState<number | null>(null);
   const [modal, setModal] = useState<{ type: 'edit' | 'delete' | 'move' } | { type: 'add'; u: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,11 +123,16 @@ export function RackPage() {
         tabs={[
           { id: 'elevation', label: 'Elevation' },
           { id: 'patching', label: 'Patching' },
+          { id: 'power', label: 'Power' },
         ]}
         value={view}
         onChange={(v) => setParams(v === 'elevation' ? {} : { view: v }, { replace: true })}
       />
-      {view === 'patching' ? (
+      {view === 'power' ? (
+        <div className="tab-panel">
+          <RackPowerPanel projectId={project.id} rackId={r.id} />
+        </div>
+      ) : view === 'patching' ? (
         <div className="tab-panel">
           <PortsPanel
             projectId={project.id}

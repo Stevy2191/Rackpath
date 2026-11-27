@@ -6,6 +6,7 @@ import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
 import type { Device, IpAddress } from '../../types';
 import { PortsPanel } from '../cabling/PortsPanel';
+import { DevicePowerPanel } from '../power/Power';
 import { Badge, Button, Card, ErrorBox, PageHeader, SelectField, Spinner, Table, Tabs, TextField, fmtTime, message, useLoad, useToast } from '../../ui';
 import { Crumbs, DeleteModal, KeyValues, useDeviceTypes } from '../places/common';
 import { DeviceEdit, DeviceForm, MoveDevice, STATUSES, type PlaceOption } from './DeviceForm';
@@ -158,7 +159,7 @@ export function DevicePage() {
   const dev = useLoad(() => api.get<Device>(`/api/devices/${id}`), [id]);
   const [modal, setModal] = useState<'edit' | 'move' | 'delete' | null>(null);
   const [params, setParams] = useSearchParams();
-  const tab = (params.get('tab') ?? 'overview') as 'overview' | 'ports' | 'addresses';
+  const tab = (params.get('tab') ?? 'overview') as 'overview' | 'ports' | 'power' | 'addresses';
   if (dev.error) return <ErrorBox error={dev.error} onRetry={dev.reload} />;
   if (!dev.data) return <Spinner />;
   const d = dev.data;
@@ -184,6 +185,7 @@ export function DevicePage() {
         tabs={[
           { id: 'overview', label: 'Overview' },
           { id: 'ports', label: 'Ports' },
+          { id: 'power', label: 'Power' },
           { id: 'addresses', label: 'IP addresses' },
         ]}
         value={tab}
@@ -239,6 +241,7 @@ export function DevicePage() {
         )}
         {tab === 'ports' && <PortsPanel projectId={project.id} deviceId={d.id} canEdit={!!d.can_edit && d.placement.type !== 'unplaced'} />}
         {tab === 'ports' && d.placement.type === 'unplaced' && <p className="small muted">Unplaced devices can't be cabled; move it into a rack or room first.</p>}
+        {tab === 'power' && <DevicePowerPanel projectId={project.id} deviceId={d.id} typeKey={d.device_type.key} canEdit={!!d.can_edit} />}
         {tab === 'addresses' && <DeviceAddresses projectId={project.id} deviceId={d.id} />}
       </div>
       {modal === 'edit' && <DeviceEdit device={d} onClose={() => setModal(null)} onSaved={dev.reload} />}

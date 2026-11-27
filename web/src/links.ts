@@ -13,6 +13,8 @@ export const link = {
   port: (p: number, id: number) => `/p/${p}/ports/${id}`,
   ipam: (p: number) => `/p/${p}/ipam`,
   vlans: (p: number) => `/p/${p}/vlans`,
+  templates: (p: number) => `/p/${p}/templates`,
+  template: (p: number, id: number) => `/p/${p}/templates/${id}`,
   prefix: (p: number, id: number) => `/p/${p}/ipam/prefixes/${id}`,
   address: (p: number, id: number) => `/p/${p}/ipam/addresses/${id}`,
 };

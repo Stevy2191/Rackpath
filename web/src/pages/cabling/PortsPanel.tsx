@@ -24,21 +24,27 @@ export function PortsPanel({
   rackId,
   canEdit,
   groupBy,
+  power = false,
+  onChanged,
 }: {
   projectId: number;
   deviceId?: number;
   rackId?: number;
   canEdit: boolean;
   groupBy?: (p: ListedPort) => string;
+  /** Show power ports (outlets, inlets) instead of data ports. */
+  power?: boolean;
+  onChanged?: () => void;
 }) {
   const url = deviceId ? `/api/devices/${deviceId}/ports` : `/api/racks/${rackId}/ports`;
-  const ports = useLoad(() => api.get<{ ports: ListedPort[] }>(url).then((r) => r.ports.filter((p) => p.medium !== 'power')), [url]);
+  const ports = useLoad(() => api.get<{ ports: ListedPort[] }>(url).then((r) => r.ports.filter((p) => (p.medium === 'power') === power)), [url, power]);
   const [modal, setModal] = useState<Modal | null>(null);
   const [tracing, setTracing] = useState<ListedPort | null>(null);
   const [version, setVersion] = useState(0);
   const toast = useToast();
   const reload = () => {
     setVersion((v) => v + 1);
+    onChanged?.();
     return ports.reload();
   };
   const close = () => setModal(null);
@@ -46,8 +52,8 @@ export function PortsPanel({
     <div className="stack">
       {deviceId && canEdit && (
         <div className="row">
-          <Button icon={<Plus size={15} />} onClick={() => setModal({ t: 'add' })}>Add port</Button>
-          <Button icon={<ListPlus size={15} />} onClick={() => setModal({ t: 'bulk' })}>Add numbered ports</Button>
+          <Button icon={<Plus size={15} />} onClick={() => setModal({ t: 'add' })}>{power ? 'Add power port' : 'Add port'}</Button>
+          <Button icon={<ListPlus size={15} />} onClick={() => setModal({ t: 'bulk' })}>{power ? 'Add numbered outlets' : 'Add numbered ports'}</Button>
         </div>
       )}
       <ErrorBox error={ports.error} onRetry={ports.reload} />
@@ -67,7 +73,7 @@ export function PortsPanel({
           }}
         />
       )}
-      {tracing && (
+      {tracing && !power && (
         <Card
           title={`Trace from ${tracing.path.split('/').slice(-2).join(' ')}`}
           actions={<Button variant="ghost" icon={<X size={15} />} aria-label="Close trace" onClick={() => setTracing(null)} />}
@@ -75,10 +81,10 @@ export function PortsPanel({
           <TraceView portId={tracing.id} projectId={projectId} canEdit={canEdit} version={version} onChanged={reload} />
         </Card>
       )}
-      {modal?.t === 'add' && deviceId && <PortForm deviceId={deviceId} onClose={close} onSaved={reload} />}
-      {modal?.t === 'bulk' && deviceId && <BulkPortsForm deviceId={deviceId} onClose={close} onSaved={(n) => { toast.ok(`Added ${n} ports`); reload(); }} />}
+      {modal?.t === 'add' && deviceId && <PortForm deviceId={deviceId} power={power} onClose={close} onSaved={reload} />}
+      {modal?.t === 'bulk' && deviceId && <BulkPortsForm deviceId={deviceId} power={power} onClose={close} onSaved={(n) => { toast.ok(`Added ${n} ports`); reload(); }} />}
       {modal?.t === 'edit' && deviceId && (
-        <PortForm deviceId={deviceId} existing={modal.p} onClose={close} onSaved={reload} onDelete={() => setModal({ t: 'delete', p: modal.p })} />
+        <PortForm deviceId={deviceId} power={power} existing={modal.p} onClose={close} onSaved={reload} onDelete={() => setModal({ t: 'delete', p: modal.p })} />
       )}
       {modal?.t === 'delete' && (
         <FormModal

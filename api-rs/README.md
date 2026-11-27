@@ -208,6 +208,7 @@ rackpath version
 | Area | Endpoints |
 |---|---|
 | Templates | `GET/POST /api/projects/{id}/templates`, `GET/PUT/DELETE /api/templates/{id}` (`PUT ?dry_run=true`), `POST /api/templates/{id}/duplicate` |
+| Template preview | `POST /api/projects/{id}/templates/preview`: checks a template and lists the ports it would make, without saving |
 | Devices from templates | `POST /api/projects/{id}/devices` with `"template_id"` |
 | Power figures | `GET/PUT /api/devices/{id}/power` |
 | Power summary | `GET /api/racks/{id}/power` |

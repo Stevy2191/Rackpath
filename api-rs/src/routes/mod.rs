@@ -241,6 +241,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/templates/{id}/duplicate", post(templates::duplicate))
         .route(
+            "/api/projects/{id}/templates/preview",
+            post(templates::preview),
+        )
+        .route(
             "/api/devices/{id}/power",
             get(power::device_power).put(power::put_device_power),
         )

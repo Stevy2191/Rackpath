@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { LayoutDashboard, LogOut, MapPin, Network, Server, Waypoints, Moon, Sun, UserCircle2, FolderKanban, Users, History } from 'lucide-react';
+import { LayoutDashboard, LayoutTemplate, LogOut, MapPin, Network, Server, Waypoints, Moon, Sun, UserCircle2, FolderKanban, Users, History } from 'lucide-react';
 import { api } from '../api';
 import { projectRights, useAuth } from '../auth';
 import { applyTheme, currentTheme } from '../theme';
@@ -32,6 +32,7 @@ export const projectNav: { to: string; label: string; icon: ReactNode; end?: boo
   { to: 'devices', label: 'Devices', icon: <Server size={18} /> },
   { to: 'ipam', label: 'IP addresses', icon: <Network size={18} /> },
   { to: 'vlans', label: 'VLANs and Wi-Fi', icon: <Waypoints size={18} /> },
+  { to: 'templates', label: 'Templates', icon: <LayoutTemplate size={18} /> },
 ];
 
 export function Shell() {

@@ -37,9 +37,10 @@ export function ConnectForm({
   const [ports, setPorts] = useState<ListedPort[] | null>(null);
   // Permanent cables join the rear sides of passive ports; patch cords
   // plug into front sides.
-  const kinds = from.role === 'passive' ? sides.map((x) => (x === 'rear' ? 'permanent' : 'patch')) : ['patch'];
+  const isPower = from.medium === 'power';
+  const kinds = isPower ? ['power'] : from.role === 'passive' ? sides.map((x) => (x === 'rear' ? 'permanent' : 'patch')) : ['patch'];
   const f = useForm({
-    kind: side === 'rear' ? 'permanent' : side === 'front' ? 'patch' : kinds[0],
+    kind: isPower ? 'power' : side === 'rear' ? 'permanent' : side === 'front' ? 'patch' : kinds[0],
     device_id: '',
     port_id: '',
     cable_type: '',
@@ -67,7 +68,7 @@ export function ConnectForm({
     setPorts(null);
     if (!deviceId) return;
     api.get<{ ports: ListedPort[] }>(`/api/devices/${deviceId}/ports`).then(
-      (r) => setPorts(r.ports.filter((p) => p.medium !== 'power' && p.id !== from.id)),
+      (r) => setPorts(r.ports.filter((p) => (p.medium === 'power') === (from.medium === 'power') && p.id !== from.id)),
       () => setPorts([]),
     );
   }, [deviceId, from.id]);
@@ -101,7 +102,7 @@ export function ConnectForm({
         <SelectField
           label="Cable"
           {...f.bind('kind')}
-          options={kinds.map((k) => ({ value: k, label: k === 'permanent' ? 'Permanent, rear to rear (structured cabling)' : 'Patch cord, front' }))}
+          options={kinds.map((k) => ({ value: k, label: k === 'power' ? 'Power cord' : k === 'permanent' ? 'Permanent, rear to rear (structured cabling)' : 'Patch cord, front' }))}
         />
         <TextField label="Find a device" placeholder="Code, name, hostname…" value={q} onChange={(e) => setQ(e.target.value)} />
         <SelectField
@@ -128,7 +129,10 @@ export function ConnectForm({
         <SelectField
           label="Cable type"
           {...f.bind('cable_type')}
-          options={[{ value: '', label: 'Not recorded' }, ...(media?.cable_types.filter((c) => c !== 'Power cord' && c !== 'Battery cable').map((c) => ({ value: c, label: c })) ?? [])]}
+          options={[
+            { value: '', label: 'Not recorded' },
+            ...(media?.cable_types.filter((c) => (c === 'Power cord' || c === 'Battery cable') === isPower).map((c) => ({ value: c, label: c })) ?? []),
+          ]}
         />
         <TextField label="Length (m)" type="number" min={0} step="any" {...f.bind('length_m')} />
         <TextField label="Colour" placeholder="#1e90ff" {...f.bind('color')} />

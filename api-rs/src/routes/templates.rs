@@ -1315,6 +1315,27 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(to_json(&row, &p, 0))))
 }
 
+/// Checks a template and lists the ports it would make, without saving:
+/// the designer's live preview. Errors (overlapping groups, duplicate
+/// names, groups off the face) come back as they would on save.
+pub async fn preview(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Path(project_id): Path<i64>,
+    JsonBody(body): JsonBody<TemplateIn>,
+) -> AppResult<Json<Value>> {
+    require(&current, Action::Read, &Chain::project(project_id))?;
+    let mut conn = state.pool.acquire().await?;
+    let p = prepare(&mut conn, Some(project_id), body).await?;
+    let grid = grid_for(p.u_half);
+    Ok(Json(json!({
+        "grid": { "rows": grid.rows, "cols": grid.cols },
+        "ports": p.ports.iter()
+            .map(|g| json!({ "index": g.index, "code": g.code, "face": g.face.as_str(), "row": g.row, "col": g.col, "group": g.group }))
+            .collect::<Vec<_>>(),
+    })))
+}
+
 #[derive(Deserialize)]
 pub struct SaveQuery {
     #[serde(default)]

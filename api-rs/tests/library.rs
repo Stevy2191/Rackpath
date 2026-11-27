@@ -205,6 +205,50 @@ async fn template_edits_keep_cables_and_need_confirmation() {
     .await;
     let tid = id(&t);
     assert_eq!(t["ports"].as_array().unwrap().len(), 24);
+    // The designer's preview names ports and checks layouts without saving.
+    let (st, pv) = app
+        .post(
+            &c,
+            &format!("/api/projects/{p}/templates/preview"),
+            json!({ "name": "Draft", "device_type": "switch", "u_height": 1,
+                    "port_groups": [ { "grid_row": 0, "grid_col": 0, "rows": 2, "cols": 2, "prefix": "G" } ] }),
+        )
+        .await;
+    assert_eq!(st, StatusCode::OK, "{pv}");
+    assert_eq!(pv["grid"], json!({ "rows": 2, "cols": 48 }));
+    let codes: Vec<&str> = pv["ports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(codes, vec!["G1", "G2", "G3", "G4"]);
+    assert_eq!(
+        (
+            pv["ports"][1]["row"].as_u64(),
+            pv["ports"][1]["col"].as_u64()
+        ),
+        (Some(1), Some(0)),
+        "1 above 2"
+    );
+    let (st, _) = app
+        .post(
+            &c,
+            &format!("/api/projects/{p}/templates/preview"),
+            json!({ "name": "Draft", "device_type": "switch", "u_height": 1,
+                    "port_groups": [ { "grid_row": 1, "grid_col": 0, "rows": 2, "cols": 2 } ] }),
+        )
+        .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST, "off the face");
+    let (_, list) = app.get(&c, &format!("/api/projects/{p}/templates")).await;
+    assert!(
+        !list["templates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x["name"] == "Draft"),
+        "nothing saved"
+    );
     // Bad layouts are refused.
     let (st, e) = app
         .post(
