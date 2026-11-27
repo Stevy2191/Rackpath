@@ -51,15 +51,15 @@ export function MovePreview({ r }: { r: MoveResult }) {
         <span className="mono">{show(r.from)}</span> → <strong className="mono">{show(r.to)}</strong>
       </div>
       {x.code_clash && <Warnings items={[`The code ${x.code_clash.code} is already used there; it will be ${x.code_clash.suggested} (you can change it).`]} />}
-      {x.cables_cut.length > 0 && (
-        <Button variant="ghost" onClick={() => saveCsv(`rackpath-move-${r.from.replace(/\//g, '-')}.csv`, ['cable removed by the move', 'from', 'to'], x.cables_cut.map((c) => [c, r.from, r.to]))}>
-          Download the list (CSV)
-        </Button>
-      )}
       {lines.length === 0 ? (
         <p className="small"><Badge tone="ok">Nothing else changes</Badge></p>
       ) : (
         <ul className="list small">{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
+      )}
+      {x.cables_cut.length > 0 && (
+        <Button variant="ghost" onClick={() => saveCsv(`rackpath-move-${r.from.replace(/\//g, '-')}.csv`, ['cable removed by the move', 'from', 'to'], x.cables_cut.map((c) => [c, r.from, r.to]))}>
+          Download the list (CSV)
+        </Button>
       )}
     </div>
   );

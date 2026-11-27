@@ -5,7 +5,7 @@
 ### Database Changes — MANDATORY
 Any time a new table, column, index, or constraint is added to the codebase, a migration file MUST be created in the same commit. No exceptions.
 
-- Migration files live in api/src/db/migrations/ (v1 Node API, MariaDB) and api-rs/migrations/ (v2 Rust API, SQLite). Each folder has its own numbering.
+- Migration files live in api-rs/migrations/ (SQLite).
 - Files are numbered sequentially with four digits: 0001_, 0002_, 0003_ etc. (continue from the highest existing number)
 - Use ALTER TABLE ... ADD COLUMN IF NOT EXISTS for columns
 - Use CREATE TABLE IF NOT EXISTS for new tables

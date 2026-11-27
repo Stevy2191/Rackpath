@@ -1,11 +1,11 @@
 # Rackpath v2 API (Rust)
 
-The new Rackpath backend: one small program with its database in a single
-SQLite file. It is being built in phases (see
-[`docs/design/v2-data-model.md`](../docs/design/v2-data-model.md), section 21).
-The v1 Node API in `api/` keeps serving the current frontend until phase 7.
+The Rackpath server: one small program that serves the web app and the API,
+with its database in a single SQLite file. It was built in phases (see
+[`docs/design/v2-data-model.md`](../docs/design/v2-data-model.md), section 21);
+the v1 Node API, nginx frontend and MariaDB were retired in phase 7.
 
-**Status: phases 1 to 6 complete.**
+**Status: all phases (1 to 8) complete.**
 
 - **Phase 1, security core:** users, roles and scoped permissions,
   server-side sessions, two-factor login, invitations, projects, account
@@ -35,7 +35,12 @@ The v1 Node API in `api/` keeps serving the current frontend until phase 7.
   ownership rules, missing-record tracking and held imports. Also device
   tags and topology diagrams.
 
-The new frontend follows in phase 7.
+- **Phase 7, the web app:** React + TypeScript (in `web/`), served by this
+  program; v1's Node API, nginx and MariaDB retired; one container.
+
+- **Phase 8, reports and extras:** PDF reports with QR codes, rack bills of
+  materials, CSV exports, moves (also between projects) with exact previews,
+  and the v1 importer.
 
 ## Running it
 

@@ -875,6 +875,18 @@ All resolved by the project owner.
 - **Topology diagrams** are stored as nodes, edges and items saved together; v1's uploaded diagram icons arrive with attachments.
 - **Measured:** the release binary grew to 12.5 MB with the HTTPS client (rustls) for UniFi and Zabbix; about 13 MB of memory at idle.
 
+### Phase 7 notes (as built)
+- **The web app** is React + TypeScript built with Vite (`web/`), served by the Rust binary with a strict same-origin CSP. No component framework: a small kit of its own, v1's design tokens and fonts.
+- **Diagrams** are drawn with plain SVG rather than AntV X6, which kept the app's dependencies to React, React Router, lucide icons and a QR encoder.
+- **Floor plans** are images only (decision D4); rooms are drawn as polygons on them, racks and floor-standing devices are positioned in plan pixels, and racks are drawn to size from the floor's scale.
+- **Browser tests** (Playwright) drive the real release binary through every page; CI runs them.
+- **Retired:** `api/`, `frontend/`, `db/` and the MariaDB container. `docker-compose.yml` runs one container with one volume.
+
+### Phase 8 notes (as built)
+- **PDF reports** are drawn with krilla (the PDF writer underneath Typst) and a small layout engine in `src/export/pdf.rs`, with embedded DejaVu fonts. Typst itself was tried first, but its bibliography support brings in a quick-xml with open security advisories (2026-0194/0195), so it would have failed `cargo audit`.
+- **Moves** reuse the device and rack update logic inside one transaction; a dry run performs the whole move and rolls it back, so the preview is exact.
+- **The v1 importer** drives the v2 API in-process as a temporary account, so imported data passes every v2 rule. It is tested against a real MariaDB with v1's schema (kept as a test fixture).
+
 ---
 
 ## 20. Open questions (not blocking)
@@ -889,7 +901,7 @@ All resolved by the project owner.
 
 ## 21. Build order
 
-Each phase ends with something usable and tested. The old Node API keeps serving the frontend until the switch in phase 7.
+Each phase ends with something usable and tested. **All eight phases are built** (notes below); the Node API, nginx and MariaDB were retired in phase 7.
 
 1. **Skeleton and security core.** Rust project, config, startup checks, sessions, users, roles, permission extractor, TOTP, audit log, invitations. Tests for every permission rule.
 2. **Hierarchy and naming.** Projects, locations, floors, rooms, racks, device types, devices (all placements), unplaced inventory, code generation and validation, global search.
