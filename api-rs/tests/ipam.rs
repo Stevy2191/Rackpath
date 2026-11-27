@@ -749,3 +749,78 @@ async fn upgrades_a_phase_3_database() {
         .unwrap();
     assert_eq!(hit["detail"], "HOME2/HOUSE/0/CLOSET/RK01/SW01/1");
 }
+
+#[tokio::test]
+async fn free_addresses_as_runs() {
+    let app = spawn().await;
+    let c = app.owner().await;
+    let p = app.project(&c, "FREE").await;
+    // Like a Proxmox management network: gateway .1, hosts .10-.16, DHCP .100-.110.
+    let n = post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/prefixes"),
+        json!({ "cidr": "10.1.70.0/24", "gateway": "10.1.70.1" }),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    post_ok(
+        &app,
+        &c,
+        &format!("/api/prefixes/{n}/ranges"),
+        json!({ "start": "10.1.70.100", "end": "10.1.70.110", "kind": "dhcp_pool" }),
+    )
+    .await;
+    for host in 10..=16 {
+        post_ok(
+            &app,
+            &c,
+            &format!("/api/projects/{p}/addresses"),
+            json!({ "address": format!("10.1.70.{host}") }),
+        )
+        .await;
+    }
+    // A documented address inside the pool is taken too.
+    post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/addresses"),
+        json!({ "address": "10.1.70.105", "dhcp_reservation": true, "mac": "aa:bb:cc:00:00:01" }),
+    )
+    .await;
+    let (s, f) = app.get(&c, &format!("/api/prefixes/{n}/free")).await;
+    assert_eq!(s, StatusCode::OK, "{f}");
+    let runs: Vec<(String, String, u64, bool)> = f["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["start"].as_str().unwrap().to_string(),
+                r["end"].as_str().unwrap().to_string(),
+                r["count"].as_u64().unwrap(),
+                r["in_pool"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    let run = |a: &str, b: &str, n: u64, pool: bool| (a.to_string(), b.to_string(), n, pool);
+    assert_eq!(
+        runs,
+        [
+            run("10.1.70.2", "10.1.70.9", 8, false),
+            run("10.1.70.17", "10.1.70.99", 83, false),
+            run("10.1.70.100", "10.1.70.104", 5, true),
+            run("10.1.70.106", "10.1.70.110", 5, true),
+            run("10.1.70.111", "10.1.70.254", 144, false),
+        ]
+    );
+    assert_eq!(
+        (
+            f["free"].as_u64(),
+            f["free_in_pools"].as_u64(),
+            f["free_outside_pools"].as_u64()
+        ),
+        (Some(245), Some(10), Some(235))
+    );
+}

@@ -121,6 +121,7 @@ export function PrefixPage() {
           />
         </Card>
       )}
+      <FreeAddresses prefixId={p.id} version={version} canEdit={p.can_edit} onUse={(address) => setModal({ t: 'address', address })} />
       <Card title={`Addresses${p.addresses_truncated ? ' (first ones)' : ''}`} className="mt" actions={p.can_edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal({ t: 'address' })}>Add address</Button>}>
         {p.addresses.length === 0 ? <Empty title="No addresses documented here" /> : <AddressTable rows={p.addresses} projectId={project.id} onOpen={(a: IpAddress) => nav(link.address(project.id, a.id))} />}
       </Card>
@@ -215,5 +216,54 @@ function AddressGrid({ prefixId, version, onCell }: { prefixId: number; version:
       </div>
       <div className="ip-grid">{cells}</div>
     </div>
+  );
+}
+
+interface FreeRun {
+  start: string;
+  end: string;
+  count: number | string;
+  in_pool: boolean;
+}
+
+/** Free addresses as runs: outside the DHCP pools (for static use) and
+ * inside them (DHCP will hand those out). */
+function FreeAddresses({ prefixId, version, canEdit, onUse }: { prefixId: number; version: number; canEdit?: boolean; onUse: (address: string) => void }) {
+  const free = useLoad(
+    () =>
+      api.get<{ free: number | string; free_outside_pools: number | string; free_in_pools: number | string; runs: FreeRun[]; truncated: boolean }>(
+        `/api/prefixes/${prefixId}/free`,
+      ),
+    [prefixId, version],
+  );
+  return (
+    <Card title="Free addresses" className="mt">
+      <ErrorBox error={free.error} onRetry={free.reload} />
+      {free.data && (
+        <>
+          <p className="small">
+            <strong>{String(free.data.free_outside_pools)}</strong> free outside the DHCP pools (for static use) ·{' '}
+            <strong>{String(free.data.free_in_pools)}</strong> free inside them (DHCP hands those out)
+          </p>
+          {free.data.runs.length === 0 ? (
+            <Empty title="No free addresses" />
+          ) : (
+            <Table
+              rows={free.data.runs}
+              rowKey={(r) => r.start}
+              columns={[
+                { key: 'range', label: 'Free', render: (r) => <span className="mono">{r.start === r.end ? r.start : `${r.start} – ${r.end}`}</span> },
+                { key: 'count', label: 'Addresses', render: (r) => String(r.count), className: 'num' },
+                { key: 'where', label: 'Where', render: (r) => (r.in_pool ? <Badge tone="info">DHCP pool</Badge> : <Badge tone="ok">static use</Badge>) },
+                ...(canEdit
+                  ? [{ key: 'use', label: '', render: (r: FreeRun) => <Button variant="ghost" onClick={() => onUse(r.start)}>Use {r.start}</Button> }]
+                  : []),
+              ]}
+            />
+          )}
+          {free.data.truncated && <p className="small muted">Only the first 500 runs are listed.</p>}
+        </>
+      )}
+    </Card>
   );
 }

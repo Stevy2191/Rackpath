@@ -76,6 +76,14 @@ export default function (test, { base, shots, allow }) {
     await page.locator('.ip-grid .cell.addr-static').first().waitFor();
     assert.match(await page.locator('.ip-grid .cell.addr-static').first().getAttribute('title'), /10\.30\.5\.2 · printer1/);
     await snap(page, 'prefix');
+
+    // Free addresses as runs: for static use outside the pool, DHCP inside.
+    await page.getByText('10.30.5.3 – 10.30.5.99').waitFor();
+    await page.getByText('10.30.5.100 – 10.30.5.199').waitFor();
+    await page.getByRole('button', { name: 'Use 10.30.5.3' }).click();
+    assert.equal(await page.getByRole('dialog').getByLabel('Address').inputValue(), '10.30.5.3');
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
   });
 
   test('click a free cell to document an address on a device port', async (page) => {

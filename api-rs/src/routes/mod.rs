@@ -278,6 +278,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/prefixes/{id}/next-free", get(ipam::next_free))
         .route("/api/prefixes/{id}/grid", get(ipam::grid))
+        .route("/api/prefixes/{id}/free", get(ipam::free_addresses))
         .route("/api/prefixes/{id}/ranges", post(ipam::create_range))
         .route(
             "/api/ranges/{id}",

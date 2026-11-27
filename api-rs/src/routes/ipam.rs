@@ -1109,6 +1109,82 @@ pub async fn grid(
     })))
 }
 
+/// The free addresses in a prefix as runs, each inside a DHCP pool or not.
+/// Taken: documented addresses, current DHCP leases, the gateway, held
+/// ranges and smaller prefixes inside it (they have their own free list).
+pub async fn free_addresses(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Path(id): Path<i64>,
+) -> AppResult<Json<Value>> {
+    let mut conn = state.pool.acquire().await?;
+    let p = load_prefix(&mut conn, id).await?;
+    require(&current, Action::Read, &Chain::project(p.project_id))?;
+    let c = p.cidr();
+    let (first, last) = c.usable();
+    let v6 = c.family() == Family::V6;
+    let bins: Vec<Vec<u8>> = sqlx::query_scalar(
+        "SELECT addr_bin FROM ip_addresses WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4
+         UNION SELECT addr_bin FROM dhcp_lease_snapshots WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4",
+    )
+    .bind(p.space_id)
+    .bind(p.family)
+    .bind(c.start().bin())
+    .bind(c.end().bin())
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut taken: Vec<(u128, u128)> = bins
+        .iter()
+        .filter_map(|b| Addr::from_bin(b))
+        .map(|a| (a.value, a.value))
+        .collect();
+    if let Some(g) = p.gateway.as_deref().and_then(|g| parse_addr(g).ok()) {
+        taken.push((g.value, g.value));
+    }
+    for child in children_of(&mut conn, &p).await? {
+        let cc = child.cidr();
+        taken.push((cc.start().value, cc.end().value));
+    }
+    let mut pools = Vec::new();
+    for r in ranges_of(&mut conn, id).await? {
+        let Some((s, e)) = r.bounds() else { continue };
+        match r.kind.as_str() {
+            "dhcp_pool" => pools.push((s.value, e.value)),
+            "reserved" => taken.push((s.value, e.value)),
+            _ => {}
+        }
+    }
+    let (runs, _) = ip::free_runs(first.value, last.value, &taken, &pools, usize::MAX);
+    let count = |n: u128| {
+        if v6 {
+            json!(n.to_string())
+        } else {
+            json!(n as u64)
+        }
+    };
+    let text = |v: u128| Addr { value: v, v6 }.to_string();
+    let (mut outside, mut inside) = (0u128, 0u128);
+    for (s, e, in_pool) in &runs {
+        let n = e - s + 1;
+        if *in_pool {
+            inside += n;
+        } else {
+            outside += n;
+        }
+    }
+    const SHOWN: usize = 500;
+    Ok(Json(json!({
+        "cidr": p.cidr,
+        "free": count(inside + outside),
+        "free_outside_pools": count(outside),
+        "free_in_pools": count(inside),
+        "runs": runs.iter().take(SHOWN).map(|(s, e, in_pool)| json!({
+            "start": text(*s), "end": text(*e), "count": count(e - s + 1), "in_pool": in_pool,
+        })).collect::<Vec<_>>(),
+        "truncated": runs.len() > SHOWN,
+    })))
+}
+
 // ---------------------------------------------------------------- ranges
 
 #[derive(Deserialize)]
