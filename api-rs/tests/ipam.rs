@@ -435,6 +435,16 @@ async fn ranges_addresses_and_next_free() {
         "{pool2}"
     );
 
+    // A public address (a router's WAN address) outside every prefix isn't
+    // flagged; a private one is.
+    post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/addresses"),
+        json!({ "address": "108.204.170.224" }),
+    )
+    .await;
+
     // Port VLAN mismatch: the port carries VLAN 20 only.
     app.send(
         &c,
@@ -461,6 +471,10 @@ async fn ranges_addresses_and_next_free() {
     ] {
         assert!(kinds.contains(&k), "{k} missing from {w}");
     }
+    assert!(
+        !w.to_string().contains("108.204.170.224"),
+        "public addresses aren't outside the plan: {w}"
+    );
 
     // Grid: offsets for the network, gateway, ranges and addresses.
     let (_, g) = app.get(&c, &format!("/api/prefixes/{n}/grid")).await;

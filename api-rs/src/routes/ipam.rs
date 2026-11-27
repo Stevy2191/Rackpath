@@ -2039,7 +2039,12 @@ pub async fn warnings(
     .bind(project_id)
     .fetch_all(&mut *conn)
     .await?;
-    for (id, addr) in outside {
+    // A public internet address (a router's WAN address, from the ISP)
+    // isn't part of the internal plan, so it isn't flagged.
+    for (id, addr) in outside
+        .into_iter()
+        .filter(|(_, a)| !parse_addr(a).is_ok_and(|x| x.is_public()))
+    {
         push(
             "outside_prefix",
             "ip_address",

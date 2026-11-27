@@ -196,7 +196,7 @@ export function AddressTable({ rows, projectId, onOpen }: { rows: IpAddress[]; p
                 {(a.port_path ?? a.device_path ?? '').split('/').slice(-2).join(' ')}
               </Link>
             ) : (
-              <span className="muted">spare</span>
+              <span className="muted">not linked</span>
             ),
           sort: (a) => a.device_path ?? '',
         },
