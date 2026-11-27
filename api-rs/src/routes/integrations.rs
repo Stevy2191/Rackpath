@@ -1005,8 +1005,10 @@ pub async fn windows_upload(
     // Export-DhcpServer writes UTF-8, sometimes with a BOM; UTF-16 is converted.
     let text = if raw.starts_with(&[0xFF, 0xFE]) {
         let units: Vec<u16> = raw[2..]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
             .collect();
         String::from_utf16(&units).map_err(|_| AppError::bad("The file isn't valid UTF-16"))?
     } else {
