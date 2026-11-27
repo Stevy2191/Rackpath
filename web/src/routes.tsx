@@ -2,6 +2,10 @@
 import type { ReactNode } from 'react';
 import { Route } from 'react-router-dom';
 import { PortPage } from './pages/cabling/PortPage';
+import { AddressPage } from './pages/ipam/Address';
+import { IpamPage } from './pages/ipam/Ipam';
+import { PrefixPage } from './pages/ipam/Prefix';
+import { VlansPage } from './pages/network/Vlans';
 import { DevicePage, DevicesPage } from './pages/devices/Devices';
 import { FloorPage } from './pages/places/Floor';
 import { LocationPage, LocationsPage } from './pages/places/Locations';
@@ -18,5 +22,9 @@ export const projectRoutes: ReactNode = (
     <Route path="devices" element={<DevicesPage />} />
     <Route path="devices/:id" element={<DevicePage />} />
     <Route path="ports/:id" element={<PortPage />} />
+    <Route path="ipam" element={<IpamPage />} />
+    <Route path="ipam/prefixes/:id" element={<PrefixPage />} />
+    <Route path="ipam/addresses/:id" element={<AddressPage />} />
+    <Route path="vlans" element={<VlansPage />} />
   </>
 );

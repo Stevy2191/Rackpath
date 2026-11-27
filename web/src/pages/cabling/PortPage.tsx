@@ -11,13 +11,14 @@ import { Crumbs, KeyValues } from '../places/common';
 import { CableEdit, ConnectForm, freeSides } from './Connect';
 import { speedText } from './media';
 import { PortForm } from './PortForm';
+import { PortVlansForm } from '../network/Vlans';
 import { stateText, stateTone, TraceView } from './Trace';
 
 export function PortPage() {
   const { project } = useProject();
   const { id } = useParams();
   const port = useLoad(() => api.get<ListedPort>(`/api/ports/${id}`), [id]);
-  const [modal, setModal] = useState<{ t: 'edit' } | { t: 'connect'; side: 'front' | 'rear' } | { t: 'cable'; id: number } | null>(null);
+  const [modal, setModal] = useState<{ t: 'edit' } | { t: 'vlans' } | { t: 'connect'; side: 'front' | 'rear' } | { t: 'cable'; id: number } | null>(null);
   const [version, setVersion] = useState(0);
   if (port.error) return <ErrorBox error={port.error} onRetry={port.reload} />;
   if (!port.data) return <Spinner />;
@@ -46,7 +47,13 @@ export function PortPage() {
               ['Speed', speedText(p.effective_speed)],
               ['PoE', p.poe],
               ['MAC', p.mac && <span className="mono">{p.mac}</span>],
-              ['VLANs', p.vlans.map((v) => `${v.vid} ${v.name}${v.mode === 'tagged' ? ' (tagged)' : ''}`).join(', ')],
+              [
+                'VLANs',
+                <span className="row">
+                  {p.vlans.map((v) => `${v.vid} ${v.name}${v.mode === 'tagged' ? ' (tagged)' : ''}`).join(', ') || <span className="muted">None</span>}
+                  {p.can_edit && <Button variant="ghost" onClick={() => setModal({ t: 'vlans' })}>Set VLANs</Button>}
+                </span>,
+              ],
               ['Description', p.description],
               ['Notes', p.notes && <span className="pre">{p.notes}</span>],
             ]}
@@ -81,6 +88,7 @@ export function PortPage() {
       <Card title="Chain" className="mt">
         <TraceView portId={p.id} projectId={project.id} canEdit={p.can_edit} version={version} onChanged={reload} />
       </Card>
+      {modal?.t === 'vlans' && <PortVlansForm projectId={project.id} portId={p.id} current={p.vlans} onClose={() => setModal(null)} onSaved={reload} />}
       {modal?.t === 'edit' && <PortForm deviceId={p.device_id} existing={p} onClose={() => setModal(null)} onSaved={reload} />}
       {modal?.t === 'connect' && <ConnectForm projectId={project.id} from={p} side={modal.side} onClose={() => setModal(null)} onSaved={reload} />}
       {modal?.t === 'cable' && <CableEdit id={modal.id} onClose={() => setModal(null)} onSaved={reload} />}

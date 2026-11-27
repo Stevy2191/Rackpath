@@ -271,3 +271,32 @@ tr.clickable { cursor: pointer; }
 .trace-port { display: flex; flex-direction: column; padding: 0.4rem 0.6rem; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-bg-elevated); }
 .trace-port.here { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent); }
 .trace-cable { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.5rem; border-bottom: 3px solid var(--color-text-faint); color: var(--color-text-muted); }
+
+/* ---------------------------------------------------------------- IPAM */
+
+.util { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 7rem; }
+.util-bar { height: 6px; border-radius: 3px; max-width: 4rem; flex: none; }
+.util-ok { background: var(--color-success); }
+.util-warn { background: var(--color-warning); }
+.util-danger { background: var(--color-danger); }
+.util-text { font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.ip-grid { display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 2px; }
+.ip-grid .cell { font: inherit; font-family: var(--font-mono); font-size: 0.62rem; padding: 0.3rem 0; text-align: center; color: var(--color-text-muted); }
+.cell { display: inline-block; min-width: 14px; min-height: 12px; border: 1px solid var(--color-border); border-radius: 3px; background: var(--color-bg-elevated); cursor: pointer; vertical-align: middle; }
+.legend .cell { cursor: default; margin-right: 0.25rem; }
+.legend > * { display: inline-flex; align-items: center; }
+.cell:disabled, .cell.network, .cell.broadcast { background: var(--color-bg-subtle); cursor: default; opacity: 0.6; }
+.cell.range-dhcp_pool { background: var(--color-info-bg); border-color: var(--color-info); }
+.cell.range-reserved { background: var(--color-warning-bg); border-color: var(--color-warning); }
+.cell.range-static { background: var(--color-accent-bg); }
+.cell.lease { box-shadow: inset 0 0 0 2px var(--color-info); }
+.cell.addr-assigned { background: var(--color-success); border-color: var(--color-success); color: var(--color-bg-elevated) !important; }
+.cell.addr-reserved { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-bg-elevated) !important; }
+.cell.addr-deprecated { background: var(--color-text-faint); color: var(--color-bg-elevated) !important; }
+.cell.gateway { outline: 2px solid var(--color-warning); outline-offset: -2px; }
+.swatch.range-dhcp_pool { background: var(--color-info); }
+.swatch.range-reserved { background: var(--color-warning); }
+.swatch.range-static { background: var(--color-accent); }
+.checks { border: 0; padding: 0; margin: 0.75rem 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 0.25rem; }
+.checks legend { font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 0.25rem; }
+@media (max-width: 900px) { .ip-grid { grid-template-columns: repeat(16, minmax(0, 1fr)); } }

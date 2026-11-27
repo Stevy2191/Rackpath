@@ -307,7 +307,10 @@ export interface MediaCatalog {
 
 export interface IpAddress {
   id: number;
+  space_id: number;
   address: string;
+  notes?: string | null;
+  missing_from_source_at?: string | null;
   prefix_len: number | null;
   device_id: number | null;
   port_id: number | null;
@@ -321,4 +324,98 @@ export interface IpAddress {
   source: string;
   device_path: string | null;
   port_path: string | null;
+}
+
+export interface Space {
+  id: number;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  prefix_count: number;
+  address_count: number;
+}
+
+export interface Prefix {
+  id: number;
+  project_id: number;
+  space_id: number;
+  cidr: string;
+  family: 4 | 6;
+  prefix_len: number;
+  vlan_id: number | null;
+  location_id: number | null;
+  role: string;
+  status: 'planned' | 'active' | 'deprecated';
+  gateway: string | null;
+  dns_servers: string | null;
+  domain_name: string | null;
+  description: string | null;
+  notes: string | null;
+  source: string;
+  missing_from_source_at: string | null;
+  size: number | string;
+  address_count: number;
+  dhcp_pool_size: number;
+  utilization?: number;
+  parent_id?: number | null;
+  depth?: number;
+}
+
+export interface IpRange {
+  id: number;
+  prefix_id: number;
+  start_text: string;
+  end_text: string;
+  kind: 'dhcp_pool' | 'reserved' | 'static';
+  description: string | null;
+  source: string;
+}
+
+export interface PrefixDetail extends Prefix {
+  parent: { id: number; cidr: string } | null;
+  children: Prefix[];
+  ranges: IpRange[];
+  addresses: IpAddress[];
+  addresses_truncated: boolean;
+  can_edit: boolean;
+}
+
+export interface PrefixGrid {
+  cidr: string;
+  size: number;
+  network: number | null;
+  broadcast: number | null;
+  gateway: number | null;
+  ranges: { id: number; kind: IpRange['kind']; from: number; to: number; description: string | null }[];
+  addresses: (IpAddress & { offset: number })[];
+  leases: { offset: number; address: string; mac: string | null; hostname: string | null; expires_at: string | null; seen_at: string }[];
+}
+
+export interface IpamWarning {
+  kind: string;
+  resource_type: string;
+  resource_id: number;
+  path: string;
+  message: string;
+}
+
+export interface Vlan {
+  id: number;
+  vid: number;
+  name: string;
+  description: string | null;
+  color: string | null;
+  notes: string | null;
+  port_count: number;
+}
+
+export interface Wlan {
+  id: number;
+  ssid: string;
+  description: string | null;
+  security: 'open' | 'owe' | 'wpa2' | 'wpa3' | 'wpa2_wpa3' | 'enterprise';
+  hidden: boolean;
+  vlan_id: number | null;
+  notes: string | null;
+  port_count: number;
 }

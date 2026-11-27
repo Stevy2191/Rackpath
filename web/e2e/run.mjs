@@ -53,17 +53,34 @@ const password = await new Promise((resolve, reject) => {
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
-export const ctx = { base, password, shots };
+// A request a test expects to fail (e.g. a refused value): one per
+// allow(), and its console error is not counted.
+const allowed = [];
+let expectedFailures = 0;
+const allow = (pattern) => allowed.push(pattern);
+export const ctx = { base, password, shots, allow };
 
-const mods = process.env.E2E_ONLY ? process.env.E2E_ONLY.split(',') : ['auth', 'places', 'cabling'];
+const mods = process.env.E2E_ONLY ? process.env.E2E_ONLY.split(',') : ['auth', 'places', 'cabling', 'ipam'];
 for (const m of mods) (await import(`./${m}.mjs`)).default(test, ctx);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1360, height: 860 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-page.on("response", async (r) => r.status() >= 400 && r.status() !== 401 && console.log(`  [${r.status()}] ${r.request().method()} ${r.url()} ${r.request().postData()} -> ${await r.text().catch(() => "")}`));
-page.on('console', (m) => m.type() === 'error' && !m.text().includes('401') && errors.push(m.text()));
+page.on('response', async (r) => {
+  if (r.status() < 400 || r.status() === 401) return;
+  const i = allowed.findIndex((a) => a.test(`${r.request().method()} ${r.url()}`));
+  if (i >= 0) {
+    allowed.splice(i, 1); // one expected failure per allow()
+    return void expectedFailures++;
+  }
+  console.log(`  [${r.status()}] ${r.request().method()} ${r.url()} ${r.request().postData()} -> ${await r.text().catch(() => '')}`);
+});
+page.on('console', (m) => {
+  if (m.type() !== 'error' || m.text().includes('401')) return;
+  if (m.text().startsWith('Failed to load resource') && expectedFailures > 0) return void expectedFailures--;
+  errors.push(m.text());
+});
 let failed = 0;
 for (const t of tests) {
   try {

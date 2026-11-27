@@ -12,6 +12,7 @@ export const link = {
   device: (p: number, id: number) => `/p/${p}/devices/${id}`,
   port: (p: number, id: number) => `/p/${p}/ports/${id}`,
   ipam: (p: number) => `/p/${p}/ipam`,
+  vlans: (p: number) => `/p/${p}/vlans`,
   prefix: (p: number, id: number) => `/p/${p}/ipam/prefixes/${id}`,
   address: (p: number, id: number) => `/p/${p}/ipam/addresses/${id}`,
 };
