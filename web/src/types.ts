@@ -319,7 +319,9 @@ export interface IpAddress {
   device_id: number | null;
   port_id: number | null;
   role: string;
-  status: string;
+  /** How it's given out: static (outside every DHCP pool), DHCP (in a
+   * pool, not pinned) or a DHCP reservation (pinned to a MAC). */
+  kind: AddressKind;
   mac: string | null;
   dns_name: string | null;
   dns_aliases: string[];
@@ -532,3 +534,10 @@ export interface RackPower {
   totals: { draw_w: number; ups_count: number; ups_capacity_va: number; ups_capacity_w: number; ups_redundant_va: number | null; ups_redundant_w: number | null };
   loop_detected: boolean;
 }
+
+export type AddressKind = 'static' | 'dhcp' | 'dhcp_reservation';
+export const ADDRESS_KIND_LABEL: Record<AddressKind, string> = {
+  static: 'Static',
+  dhcp: 'DHCP',
+  dhcp_reservation: 'DHCP reservation',
+};

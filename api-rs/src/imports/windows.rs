@@ -205,6 +205,7 @@ fn reservation(r: &Reservation) -> SrcReservation {
         mac: r.client_id.as_deref().and_then(mac),
         name: text(r.name.as_deref(), 253),
         description: text(r.description.as_deref(), 255),
+        static_outside_pools: false,
     }
 }
 

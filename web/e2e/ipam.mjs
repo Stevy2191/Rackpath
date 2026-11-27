@@ -73,8 +73,8 @@ export default function (test, { base, shots, allow }) {
     await page.getByRole('dialog').getByLabel('DNS name').fill('printer1.acme.lan');
     await page.getByRole('button', { name: 'Save' }).click();
     await page.getByText('Documented 10.30.5.2').waitFor();
-    await page.locator('.ip-grid .cell.addr-assigned').first().waitFor();
-    assert.match(await page.locator('.ip-grid .cell.addr-assigned').first().getAttribute('title'), /10\.30\.5\.2 · printer1/);
+    await page.locator('.ip-grid .cell.addr-static').first().waitFor();
+    assert.match(await page.locator('.ip-grid .cell.addr-static').first().getAttribute('title'), /10\.30\.5\.2 · printer1/);
     await snap(page, 'prefix');
   });
 

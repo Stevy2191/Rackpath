@@ -5,7 +5,8 @@ import { Plus } from 'lucide-react';
 import { api, qs } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
-import type { IpAddress, IpamWarning, Prefix, Space } from '../../types';
+import type { IpAddress, IpamWarning, Prefix, Space , AddressKind } from '../../types';
+import { ADDRESS_KIND_LABEL } from '../../types';
 import { Badge, Button, Empty, ErrorBox, PageHeader, SelectField, Spinner, Table, Tabs, TextField, message, useLoad } from '../../ui';
 import { AddressForm, PrefixForm, SpaceForm, useSpaces, useVlans } from './Forms';
 import { CsvButton } from '../Exports';
@@ -138,14 +139,14 @@ function AddressList() {
   const { project } = useProject();
   const nav = useNavigate();
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('');
+  const [kind, setKind] = useState('');
   const [rows, setRows] = useState<IpAddress[] | null>(null);
   const [next, setNext] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = async (after?: number) => {
     try {
       const r = await api.get<{ addresses: IpAddress[]; next_after_id: number | null }>(
-        `/api/projects/${project.id}/addresses${qs({ q, status, limit: 500, after_id: after })}`,
+        `/api/projects/${project.id}/addresses${qs({ q, kind, limit: 500, after_id: after })}`,
       );
       setRows((old) => (after ? [...(old ?? []), ...r.addresses] : r.addresses));
       setNext(r.next_after_id);
@@ -157,12 +158,17 @@ function AddressList() {
   useEffect(() => {
     const t = setTimeout(() => load(), 250);
     return () => clearTimeout(t);
-  }, [q, status, project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, kind, project.id]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="stack">
       <div className="filters">
         <TextField label="Search" placeholder="Address, DNS name, MAC…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <SelectField label="Status" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: 'Any status' }, ...['reserved', 'assigned', 'deprecated'].map((s) => ({ value: s, label: s }))]} />
+        <SelectField
+          label="Type"
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+          options={[{ value: '', label: 'Any type' }, ...(Object.keys(ADDRESS_KIND_LABEL) as AddressKind[]).map((k) => ({ value: k, label: ADDRESS_KIND_LABEL[k] }))]}
+        />
       </div>
       <ErrorBox error={error} />
       {!rows ? (
@@ -203,8 +209,23 @@ export function AddressTable({ rows, projectId, onOpen }: { rows: IpAddress[]; p
         },
         { key: 'mac', label: 'MAC', render: (a) => a.mac && <span className="mono small">{a.mac}</span> },
         { key: 'role', label: 'Role', render: (a) => a.role, sort: (a) => a.role },
-        { key: 'status', label: 'Status', render: (a) => <Badge tone={a.status === 'assigned' ? 'ok' : a.status === 'reserved' ? 'info' : 'neutral'}>{a.status}</Badge>, sort: (a) => a.status },
-        { key: 'src', label: 'Source', render: (a) => <span className="small">{a.source}{a.dhcp_reservation ? ' · reservation' : ''}</span> },
+        {
+          key: 'kind',
+          label: 'Type',
+          render: (a) => (
+            <>
+              <Badge tone={a.kind === 'static' ? 'ok' : a.kind === 'dhcp_reservation' ? 'accent' : 'info'}>{ADDRESS_KIND_LABEL[a.kind]}</Badge>
+              {a.missing_from_source_at && (
+                <>
+                  {' '}
+                  <Badge tone="warn">missing at source</Badge>
+                </>
+              )}
+            </>
+          ),
+          sort: (a) => a.kind,
+        },
+        { key: 'src', label: 'Source', render: (a) => <span className="small">{a.source}</span> },
       ]}
     />
   );

@@ -146,13 +146,28 @@ pub async fn apply(conn: &mut SqliteConnection, t: &Target, snap: &Snapshot) -> 
             } else {
                 None
             });
+            // Pools are applied above, so a fixed IP can be placed now.
+            let in_pool = !res.static_outside_pools || {
+                let found: Option<i64> = sqlx::query_scalar(
+                    "SELECT r.id FROM ip_ranges r JOIN prefixes p ON p.id = r.prefix_id
+                     WHERE r.kind = 'dhcp_pool' AND p.space_id = ? AND p.family = ?
+                     AND ? BETWEEN r.start_bin AND r.end_bin LIMIT 1",
+                )
+                .bind(t.space_id)
+                .bind(a.family().number())
+                .bind(a.bin())
+                .fetch_optional(&mut *conn)
+                .await?;
+                found.is_some()
+            };
             let facts = AddressFacts {
                 mac: res.mac.clone(),
-                reservation: true,
+                reservation: in_pool,
                 dns_name: name,
                 aliases: None,
                 description,
                 device_id: None,
+                not_reservation: !in_pool,
             };
             upsert_address(conn, t, a, facts, &now, &mut r).await?;
             seen_addresses.insert(a.to_string());
@@ -982,6 +997,9 @@ struct AddressFacts {
     aliases: Option<Vec<String>>,
     description: Option<String>,
     device_id: Option<i64>,
+    /// The source says this is not a DHCP reservation (a fixed IP outside
+    /// every pool): clears a reservation flag this import set before.
+    not_reservation: bool,
 }
 
 #[derive(FromRow)]
@@ -1051,7 +1069,7 @@ async fn upsert_address(
             .bind(a.bin())
             .bind(a.bin())
             .bind(auto_device)
-            .bind(if f.reservation { "reserved" } else { "assigned" })
+            .bind("assigned")
             .bind(&f.mac)
             .bind(&f.dns_name)
             .bind(f.aliases.as_ref().filter(|v| !v.is_empty()).map(|v| serde_json::to_string(v).unwrap_or_default()))
@@ -1102,7 +1120,13 @@ async fn upsert_address(
                 }
                 _ => row.dns_aliases.clone(),
             };
-            let reservation = row.dhcp_reservation || f.reservation;
+            // Another part of the source (a device's IP) saying nothing about
+            // a reservation leaves it; a static fixed IP clears our own flag.
+            let reservation = if f.not_reservation && ours {
+                false
+            } else {
+                row.dhcp_reservation || f.reservation
+            };
             let device_id = row.device_id.or(auto_device);
             let differs = mac != row.mac
                 || dns_name != row.dns_name

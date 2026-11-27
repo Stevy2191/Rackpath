@@ -200,7 +200,6 @@ export function AddressForm({
     device_id: String(existing?.device_id ?? deviceId ?? ''),
     port_id: String(existing?.port_id ?? ''),
     role: existing?.role ?? 'primary',
-    status: existing?.status ?? 'assigned',
     mac: existing?.mac ?? '',
     dns_name: existing?.dns_name ?? '',
     dns_aliases: existing?.dns_aliases.join(', ') ?? '',
@@ -241,7 +240,6 @@ export function AddressForm({
           {...f.bind('address')}
         />
         <SelectField label="Role" {...f.bind('role')} options={ADDRESS_ROLES.map((r) => ({ value: r, label: r === 'vip' ? 'Virtual IP' : cap(r) }))} />
-        <SelectField label="Status" {...f.bind('status')} options={['reserved', 'assigned', 'deprecated'].map((r) => ({ value: r, label: cap(r) }))} />
         <DevicePortPicker
           projectId={projectId}
           deviceId={v.device_id}

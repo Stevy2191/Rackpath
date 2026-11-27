@@ -1,3 +1,4 @@
+import { ADDRESS_KIND_LABEL } from '../../types';
 // One prefix: details, child prefixes, ranges, the IPv4 grid and its
 // addresses; the next free address in one click.
 import { useState } from 'react';
@@ -178,9 +179,9 @@ function AddressGrid({ prefixId, version, onCell }: { prefixId: number; version:
     const l = showLeases ? leases.get(o) : undefined;
     const r = rangeAt(o);
     const special = o === g.network ? 'network' : o === g.broadcast ? 'broadcast' : o === g.gateway ? 'gateway' : null;
-    const cls = ['cell', special ?? '', a ? `addr addr-${a.status}` : '', r ? `range-${r.kind}` : '', l && !a ? 'lease' : ''].filter(Boolean).join(' ');
+    const cls = ['cell', special ?? '', a ? `addr addr-${a.kind}` : '', r ? `range-${r.kind}` : '', l && !a ? 'lease' : ''].filter(Boolean).join(' ');
     const ip = offsetToIp(g.cidr, o);
-    const title = [ip, special, a ? `${a.dns_name ?? a.device_path?.split('/').pop() ?? a.status}` : null, r ? `${r.kind.replace('_', ' ')}${r.description ? `: ${r.description}` : ''}` : null, l && !a ? `lease: ${l.hostname ?? l.mac ?? ''}` : null]
+    const title = [ip, special, a ? `${a.dns_name ?? a.device_path?.split('/').pop() ?? ADDRESS_KIND_LABEL[a.kind]}` : null, r ? `${r.kind.replace('_', ' ')}${r.description ? `: ${r.description}` : ''}` : null, l && !a ? `lease: ${l.hostname ?? l.mac ?? ''}` : null]
       .filter(Boolean)
       .join(' · ');
     cells.push(
@@ -200,8 +201,9 @@ function AddressGrid({ prefixId, version, onCell }: { prefixId: number; version:
   return (
     <div className="stack">
       <div className="row small legend">
-        <span><i className="cell addr addr-assigned" /> assigned</span>
-        <span><i className="cell addr addr-reserved" /> reserved</span>
+        <span><i className="cell addr addr-static" /> static</span>
+        <span><i className="cell addr addr-dhcp_reservation" /> DHCP reservation</span>
+        <span><i className="cell addr addr-dhcp" /> DHCP</span>
         <span><i className="cell range-dhcp_pool" /> DHCP pool</span>
         <span><i className="cell range-reserved" /> reserved range</span>
         <span><i className="cell gateway" /> gateway</span>

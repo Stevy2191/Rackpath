@@ -1,3 +1,4 @@
+import { ADDRESS_KIND_LABEL } from '../../types';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
@@ -35,7 +36,7 @@ export function AddressPage() {
       </nav>
       <PageHeader
         title={<span className="mono">{a.address}{a.prefix_len != null ? `/${a.prefix_len}` : ''}</span>}
-        subtitle={<>{a.dns_name ?? 'no DNS name'} · <Badge tone={a.status === 'assigned' ? 'ok' : 'info'}>{a.status}</Badge></>}
+        subtitle={<>{a.dns_name ?? 'no DNS name'} · <Badge tone={a.kind === 'static' ? 'ok' : a.kind === 'dhcp_reservation' ? 'accent' : 'info'}>{ADDRESS_KIND_LABEL[a.kind]}</Badge></>}
         actions={
           a.can_edit && (
             <>

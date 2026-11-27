@@ -330,7 +330,7 @@ async fn ranges_addresses_and_next_free() {
     .await;
     assert_eq!(a["address"], "192.168.10.2");
     assert_eq!(a["device_id"], s.switch);
-    assert_eq!(a["status"], "assigned");
+    assert_eq!(a["kind"], "static", "outside every DHCP pool");
     assert_eq!(a["prefix_len"], 24);
     assert_eq!(a["port_path"], "ACME/HQ/0/MDF/RK01/SW01/1");
     assert_eq!(a["dns_aliases"], json!(["core"]));
@@ -368,10 +368,7 @@ async fn ranges_addresses_and_next_free() {
             .contains("isn't inside any"),
         "{stray}"
     );
-    assert_eq!(
-        stray["status"], "reserved",
-        "unassigned addresses default to reserved"
-    );
+    assert_eq!(stray["kind"], "static");
 
     // A static inside the DHCP pool warns; a reservation there doesn't.
     let st_in_pool = post_ok(
