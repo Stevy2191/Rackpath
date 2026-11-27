@@ -25,6 +25,26 @@ export default function (test, { base, shots }) {
     }
   };
 
+  test('the sidebar keeps the last project on account-wide pages', async (page) => {
+    const pid = (await call(page, 'get', '/api/projects')).find((p) => p.code === 'ACME').id;
+    await page.goto(`${base}/p/${pid}`);
+    await page.getByRole('heading', { name: 'Acme Corp' }).waitFor();
+    const rail = page.locator('.rail');
+    // Users is account-wide; the project's own links stay in the sidebar.
+    await rail.getByRole('link', { name: 'Users' }).click();
+    await page.waitForURL(/\/admin\/users$/);
+    assert.equal(await page.getByLabel('Project').inputValue(), String(pid));
+    await rail.getByRole('link', { name: 'Locations' }).click();
+    await page.waitForURL(new RegExp(`/p/${pid}/locations$`));
+    // Also after a reload of an account-wide page.
+    await page.goto(`${base}/activity`);
+    await rail.getByRole('link', { name: 'Devices' }).waitFor();
+    // Choosing "All projects" leaves no project in the sidebar.
+    await page.getByLabel('Project').selectOption('');
+    await page.waitForURL(/\/projects$/);
+    assert.equal(await rail.getByRole('link', { name: 'Devices' }).count(), 0);
+  });
+
   test('add a user and give them editor access to a project', async (page) => {
     s.pid = (await call(page, 'get', '/api/projects')).find((p) => p.code === 'ACME').id;
     await page.goto(`${base}/projects`);
