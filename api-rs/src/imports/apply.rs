@@ -9,7 +9,7 @@ use sqlx::{FromRow, SqliteConnection};
 
 use super::{Snapshot, SrcDevice, SrcNetwork, SrcWlan};
 use crate::domain::ip::{parse_addr, parse_cidr, Addr, Cidr};
-use crate::domain::naming::next_free_code;
+use crate::domain::naming::{code_from_name, is_auto_code, next_free_code, unique_variant};
 use crate::error::AppResult;
 use crate::hierarchy::{self, Subtree};
 use crate::routes::ipam::check_dns_name;
@@ -259,7 +259,16 @@ async fn devices(
                 r.c("device").restored += 1;
                 r.note(format!("device {} is back at the source", o.code));
             }
-            if differs {
+            // A device still on an automatic code (AP01) takes one from its
+            // source name; a code people chose is never changed.
+            let renamed = rename_from_name(conn, o.id, &o.code, d.name.as_deref(), now).await?;
+            if let Some(new) = &renamed {
+                if !differs {
+                    r.c("device").updated += 1;
+                }
+                r.note(format!("renamed device {} to {new}", o.code));
+            }
+            if differs || renamed.is_some() {
                 hierarchy::reindex_device_tree(conn, o.id).await?;
             }
             o.id
@@ -313,7 +322,12 @@ async fn devices(
                         .bind(format!("u:{}", t.project_id))
                         .fetch_all(&mut *conn)
                         .await?;
-                let code = next_free_code(&prefix, &taken);
+                // A code from the source's name ("Living Room AP" becomes
+                // LIVING-ROOM-AP), else the type's next code (AP01).
+                let code = match d.name.as_deref().and_then(code_from_name) {
+                    Some(c) => unique_variant(&c, &taken),
+                    None => next_free_code(&prefix, &taken),
+                };
                 let id = sqlx::query(
                     "INSERT INTO devices (project_id, device_type_id, code, name, hostname, mac, manufacturer, model,
                      serial_number, firmware, external_url, source, external_id, source_integration_id, created_at, updated_at)
@@ -372,6 +386,45 @@ async fn devices(
         }
     }
     Ok(())
+}
+
+/// Gives a device on an automatic code (its type's prefix and digits) a
+/// code made from `name`, unique among its siblings. Returns the new code.
+async fn rename_from_name(
+    conn: &mut SqliteConnection,
+    id: i64,
+    code: &str,
+    name: Option<&str>,
+    now: &str,
+) -> AppResult<Option<String>> {
+    let Some(wanted) = name.and_then(code_from_name) else {
+        return Ok(None);
+    };
+    let (parent_key, prefix): (String, String) = sqlx::query_as(
+        "SELECT d.parent_key, t.prefix FROM devices d JOIN device_types t ON t.id = d.device_type_id WHERE d.id = ?",
+    )
+    .bind(id)
+    .fetch_one(&mut *conn)
+    .await?;
+    if !is_auto_code(code, &prefix) {
+        return Ok(None);
+    }
+    let taken: Vec<String> = hierarchy::sibling_codes(conn, &parent_key)
+        .await?
+        .into_iter()
+        .filter(|c| !c.eq_ignore_ascii_case(code))
+        .collect();
+    let new = unique_variant(&wanted, &taken);
+    if new.eq_ignore_ascii_case(code) {
+        return Ok(None);
+    }
+    sqlx::query("UPDATE devices SET code = ?, updated_at = ? WHERE id = ?")
+        .bind(&new)
+        .bind(now)
+        .bind(id)
+        .execute(&mut *conn)
+        .await?;
+    Ok(Some(new))
 }
 
 async fn set_device_facts(

@@ -48,6 +48,8 @@ export interface SearchHit {
   project_id: number;
   path: string;
   detail?: string;
+  /** A device's (or location's, room's, rack's) name, beside the codes. */
+  name?: string;
 }
 
 export interface Location {
@@ -243,7 +245,7 @@ export interface CableOnPort {
   length_m: number | null;
   color: string | null;
   label: string | null;
-  far: { port_id: number; side: 'front' | 'rear'; path: string; device_id: number };
+  far: { port_id: number; side: 'front' | 'rear'; path: string; device_id: number; device_name?: string | null };
 }
 
 export type ChainState = 'complete' | 'incomplete' | 'unconnected';
@@ -325,6 +327,8 @@ export interface IpAddress {
   description: string | null;
   source: string;
   device_path: string | null;
+  /** The linked device's name, shown beside its code. */
+  device_name: string | null;
   port_path: string | null;
 }
 

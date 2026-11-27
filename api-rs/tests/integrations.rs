@@ -479,7 +479,8 @@ async fn zabbix_hosts() {
         .clone();
     assert_eq!(sw["device_type"]["key"], "switch");
     assert_eq!(sw["manufacturer"], "Cisco");
-    assert_eq!(sw["code"], "SW01");
+    // The code comes from the host's name in Zabbix.
+    assert_eq!(sw["code"], "CORE-SWITCH-1");
     let (_, d) = app.get(&c, &format!("/api/devices/{}", id(&sw))).await;
     assert!(
         d["external_url"]
@@ -898,4 +899,122 @@ async fn unifi_wifi_networks() {
     assert_eq!(r["counts"]["wlan"]["missing"], 1, "{r}");
     let things = find(&wlans_of(&app, &c, p).await, "Things");
     assert!(things["missing_from_source_at"].is_string(), "{things}");
+}
+
+#[tokio::test]
+async fn imported_devices_are_coded_from_their_names() {
+    let app = spawn().await;
+    let c = app.owner().await;
+    let p = app.project(&c, "NAMES").await;
+    let mut data = unifi_data();
+    data["devices"] = json!([
+        { "_id": "d1", "mac": "f0:9f:c2:00:00:01", "name": "Gateway", "type": "udm" },
+        { "_id": "d2", "mac": "f0:9f:c2:00:00:02", "ip": "192.168.1.20", "name": "Living Room AP", "type": "uap" },
+        { "_id": "d3", "mac": "f0:9f:c2:00:00:03", "name": "Living Room AP", "type": "uap" },
+        { "_id": "d4", "mac": "f0:9f:c2:00:00:04", "name": "📡", "type": "uap" },
+    ]);
+    let (url, mock) = unifi_mock(data).await;
+    let i = post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/integrations"),
+        json!({ "kind": "unifi", "name": "UDM", "base_url": url, "auth_kind": "api_key", "secret": "good-key" }),
+    )
+    .await;
+    let iid = id(&i);
+    let sync_path = format!("/api/integrations/{iid}/sync");
+    let sync = || app.post(&c, &sync_path, json!({}));
+    let (s, r) = sync().await;
+    assert_eq!(s, StatusCode::OK, "{r}");
+    let code_of = |devs: &Value, mac: &str| {
+        devs["devices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["mac"] == mac)
+            .unwrap()["code"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let (_, devs) = app
+        .get(&c, &format!("/api/projects/{p}/devices?unplaced=true"))
+        .await;
+    // From the name; a second device with the same name gets -2; a name with
+    // nothing usable falls back to the type's code.
+    assert_eq!(code_of(&devs, "f0:9f:c2:00:00:01"), "GATEWAY");
+    assert_eq!(code_of(&devs, "f0:9f:c2:00:00:02"), "LIVING-ROOM-AP");
+    assert_eq!(code_of(&devs, "f0:9f:c2:00:00:03"), "LIVING-ROOM-AP-2");
+    let fallback = code_of(&devs, "f0:9f:c2:00:00:04");
+    assert!(
+        fallback.starts_with("AP") && fallback[2..].chars().all(|c| c.is_ascii_digit()),
+        "{fallback}"
+    );
+
+    // The device's name shows beside its code: on its address and in search.
+    let (_, addrs) = app.get(&c, &format!("/api/projects/{p}/addresses")).await;
+    let a = addrs["addresses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["address"] == "192.168.1.20")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (a["device_name"].as_str(), a["device_path"].as_str()),
+        (
+            Some("Living Room AP"),
+            Some("NAMES/UNPLACED/LIVING-ROOM-AP")
+        ),
+        "{a}"
+    );
+    let (_, hits) = app.get(&c, "/api/search?q=living").await;
+    let hit = hits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["kind"] == "device")
+        .unwrap()
+        .clone();
+    assert_eq!(hit["name"], "Living Room AP", "{hits}");
+
+    // A device imported before this (still on an automatic code) takes its
+    // name's code on the next sync; a code people chose stays.
+    sqlx::query("UPDATE devices SET code = 'RT01' WHERE mac = 'f0:9f:c2:00:00:01'")
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    let gw = devs["devices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["mac"] == "f0:9f:c2:00:00:01")
+        .unwrap()
+        .clone();
+    let ap = devs["devices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["mac"] == "f0:9f:c2:00:00:02")
+        .unwrap()
+        .clone();
+    app.patch(
+        &c,
+        &format!("/api/devices/{}", id(&ap)),
+        json!({ "code": "LR-AP" }),
+    )
+    .await;
+    mock.data.lock().unwrap()["devices"][1]["name"] = json!("Den AP");
+    let (_, r) = sync().await;
+    assert!(
+        r["changes"]
+            .to_string()
+            .contains("renamed device RT01 to GATEWAY"),
+        "{r}"
+    );
+    let (_, g) = app.get(&c, &format!("/api/devices/{}", id(&gw))).await;
+    assert_eq!(g["code"], "GATEWAY");
+    assert!(g["path"].as_str().unwrap().ends_with("GATEWAY"), "{g}");
+    let (_, a) = app.get(&c, &format!("/api/devices/{}", id(&ap))).await;
+    assert_eq!(a["code"], "LR-AP", "a chosen code is never changed");
 }

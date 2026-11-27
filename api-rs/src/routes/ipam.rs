@@ -1380,6 +1380,8 @@ pub struct AddressRow {
     created_at: String,
     updated_at: String,
     device_path: Option<String>,
+    /// The linked device's name (its path shows only codes).
+    device_name: Option<String>,
     port_path: Option<String>,
 }
 
@@ -1387,7 +1389,8 @@ macro_rules! address_select {
     () => {
         "SELECT a.id, a.project_id, a.space_id, a.address, a.family, a.addr_bin, a.prefix_len, a.device_id, a.port_id, \
          a.role, a.status, a.mac, a.dns_name, a.dns_aliases, a.dhcp_reservation, a.description, a.notes, a.source, \
-         a.external_id, a.missing_from_source_at, a.created_at, a.updated_at, ds.path AS device_path, ps.path AS port_path \
+         a.external_id, a.missing_from_source_at, a.created_at, a.updated_at, ds.path AS device_path, \
+         (SELECT d.name FROM devices d WHERE d.id = a.device_id) AS device_name, ps.path AS port_path \
          FROM ip_addresses a \
          LEFT JOIN search_entries ds ON ds.kind = 'device' AND ds.ref_id = a.device_id \
          LEFT JOIN search_entries ps ON ps.kind = 'port' AND ps.ref_id = a.port_id "
@@ -1416,6 +1419,7 @@ impl AddressRow {
                 "created_at",
                 "updated_at",
                 "device_path",
+                "device_name",
             ] {
                 o.remove(k);
             }
