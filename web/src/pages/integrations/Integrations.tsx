@@ -225,7 +225,7 @@ function IntegrationForm({ projectId, existing, onClose, onSaved }: { projectId:
       </div>
       {remote && <Checkbox label="Check the server's certificate" hint="Untick only for a console with a self-signed certificate on a trusted network" checked={verifyTls} onChange={setVerifyTls} />}
       {kind === 'unifi' && <Checkbox label="Import DHCP ranges, DNS servers and fixed IPs" checked={importDhcp} onChange={setImportDhcp} />}
-      {(kind === 'unifi' || kind === 'windows_dhcp') && <Checkbox label="Keep the current DHCP leases as a separate layer" hint="Shown on the address map; never turned into documentation" checked={leases} onChange={setLeases} />}
+      {(kind === 'unifi' || kind === 'windows_dhcp') && <Checkbox label="Keep the current DHCP leases as a separate layer" hint="Shown on the address map and counted in each prefix's Used figure; never turned into documentation" checked={leases} onChange={setLeases} />}
       {remote && (
         <div className="grid-2">
           <Checkbox label="Sync automatically" checked={autoSync} onChange={setAutoSync} />
@@ -236,6 +236,8 @@ function IntegrationForm({ projectId, existing, onClose, onSaved }: { projectId:
     </FormModal>
   );
 }
+
+const RECORD_LABEL: Record<string, string> = { wlan: 'Wi-Fi network' };
 
 export function SyncSummary({ s }: { s: Summary }) {
   const rows = Object.entries(s.counts);
@@ -249,7 +251,7 @@ export function SyncSummary({ s }: { s: Summary }) {
           </thead>
           <tbody>
             {rows.map(([k, c]) => (
-              <tr key={k}><td>{k.replace(/_/g, ' ')}</td><td className="num">{c.created}</td><td className="num">{c.updated}</td><td className="num">{c.missing}</td><td className="num">{c.restored}</td></tr>
+              <tr key={k}><td>{RECORD_LABEL[k] ?? k.replace(/_/g, ' ')}</td><td className="num">{c.created}</td><td className="num">{c.updated}</td><td className="num">{c.missing}</td><td className="num">{c.restored}</td></tr>
             ))}
           </tbody>
         </table>

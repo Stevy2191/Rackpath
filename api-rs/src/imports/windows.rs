@@ -217,6 +217,7 @@ pub fn to_snapshot(p: &Push) -> (Snapshot, Vec<String>) {
             networks: true,
             reservations: true,
             dns: p.dns.is_some(),
+            wlans: false,
         },
         ..Default::default()
     };

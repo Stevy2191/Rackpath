@@ -271,13 +271,17 @@ pub struct Wlan {
     hidden: bool,
     vlan_id: Option<i64>,
     notes: Option<String>,
+    /// The integration that brought it in (None: typed in by people).
+    source_integration_id: Option<i64>,
+    missing_from_source_at: Option<String>,
     created_at: String,
     updated_at: String,
 }
 
 macro_rules! wlan_columns {
     () => {
-        "id, project_id, ssid, description, security, hidden, vlan_id, notes, created_at, updated_at"
+        "id, project_id, ssid, description, security, hidden, vlan_id, notes, source_integration_id, \
+         missing_from_source_at, created_at, updated_at"
     };
 }
 

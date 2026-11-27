@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde::Serialize;
 use sqlx::{FromRow, SqliteConnection};
 
-use super::{Snapshot, SrcDevice, SrcNetwork};
+use super::{Snapshot, SrcDevice, SrcNetwork, SrcWlan};
 use crate::domain::ip::{parse_addr, parse_cidr, Addr, Cidr};
 use crate::domain::naming::next_free_code;
 use crate::error::AppResult;
@@ -108,7 +108,8 @@ pub async fn owned_count(conn: &mut SqliteConnection, integration_id: i64) -> Ap
         "SELECT (SELECT COUNT(*) FROM devices WHERE source_integration_id = ?1)
               + (SELECT COUNT(*) FROM prefixes WHERE source_integration_id = ?1)
               + (SELECT COUNT(*) FROM ip_ranges WHERE source_integration_id = ?1)
-              + (SELECT COUNT(*) FROM ip_addresses WHERE source_integration_id = ?1)",
+              + (SELECT COUNT(*) FROM ip_addresses WHERE source_integration_id = ?1)
+              + (SELECT COUNT(*) FROM wlans WHERE source_integration_id = ?1)",
     )
     .bind(integration_id)
     .fetch_one(conn)
@@ -129,6 +130,9 @@ pub async fn apply(conn: &mut SqliteConnection, t: &Target, snap: &Snapshot) -> 
     }
     if snap.covers.networks {
         networks(conn, t, &snap.networks, &now, &mut r).await?;
+    }
+    if snap.covers.wlans {
+        wlans(conn, t, &snap.wlans, &now, &mut r).await?;
     }
     if snap.covers.reservations {
         for res in &snap.reservations {
@@ -391,6 +395,141 @@ async fn set_device_facts(
     .bind(id)
     .execute(conn)
     .await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------- Wi-Fi
+
+#[derive(FromRow)]
+struct OwnedWlan {
+    id: i64,
+    external_id: Option<String>,
+    missing_from_source_at: Option<String>,
+    ssid: String,
+    security: String,
+    hidden: bool,
+    vlan_id: Option<i64>,
+}
+
+/// Wi-Fi networks: matched by (integration, external id), else a WLAN
+/// people typed in with the same SSID is adopted. The import owns the SSID,
+/// security, hidden flag and VLAN; description and notes stay people's.
+/// A VLAN the project doesn't have yet is left unset (networks create
+/// VLANs, Wi-Fi only points at them).
+async fn wlans(
+    conn: &mut SqliteConnection,
+    t: &Target,
+    list: &[SrcWlan],
+    now: &str,
+    r: &mut Report,
+) -> AppResult<()> {
+    let mut seen: HashSet<i64> = HashSet::new();
+    for w in list {
+        let vlan_id: Option<i64> = match w.vlan {
+            Some(vid) => {
+                sqlx::query_scalar("SELECT id FROM vlans WHERE project_id = ? AND vid = ?")
+                    .bind(t.project_id)
+                    .bind(vid)
+                    .fetch_optional(&mut *conn)
+                    .await?
+            }
+            None => None,
+        };
+        let existing: Option<OwnedWlan> = match sqlx::query_as::<_, OwnedWlan>(
+            "SELECT id, external_id, missing_from_source_at, ssid, security, hidden, vlan_id FROM wlans
+             WHERE source_integration_id = ? AND external_id = ?",
+        )
+        .bind(t.integration_id)
+        .bind(&w.external_id)
+        .fetch_optional(&mut *conn)
+        .await?
+        {
+            Some(x) => Some(x),
+            None => {
+                sqlx::query_as::<_, OwnedWlan>(
+                    "SELECT id, external_id, missing_from_source_at, ssid, security, hidden, vlan_id FROM wlans
+                     WHERE project_id = ? AND ssid = ? AND source_integration_id IS NULL
+                     ORDER BY id LIMIT 1",
+                )
+                .bind(t.project_id)
+                .bind(&w.ssid)
+                .fetch_optional(&mut *conn)
+                .await?
+            }
+        };
+        match existing {
+            None => {
+                let id = sqlx::query(
+                    "INSERT INTO wlans (project_id, ssid, security, hidden, vlan_id, source_integration_id, external_id,
+                     created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(t.project_id)
+                .bind(&w.ssid)
+                .bind(&w.security)
+                .bind(w.hidden)
+                .bind(vlan_id)
+                .bind(t.integration_id)
+                .bind(&w.external_id)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *conn)
+                .await?
+                .last_insert_rowid();
+                seen.insert(id);
+                r.c("wlan").created += 1;
+                r.note(format!("added Wi-Fi network {}", w.ssid));
+            }
+            Some(old) => {
+                seen.insert(old.id);
+                let changed = old.ssid != w.ssid
+                    || old.security != w.security
+                    || old.hidden != w.hidden
+                    || old.vlan_id != vlan_id
+                    || old.external_id.as_deref() != Some(w.external_id.as_str());
+                if changed || old.missing_from_source_at.is_some() {
+                    sqlx::query(
+                        "UPDATE wlans SET ssid = ?, security = ?, hidden = ?, vlan_id = ?, source_integration_id = ?,
+                         external_id = ?, missing_from_source_at = NULL, updated_at = ? WHERE id = ?",
+                    )
+                    .bind(&w.ssid)
+                    .bind(&w.security)
+                    .bind(w.hidden)
+                    .bind(vlan_id)
+                    .bind(t.integration_id)
+                    .bind(&w.external_id)
+                    .bind(now)
+                    .bind(old.id)
+                    .execute(&mut *conn)
+                    .await?;
+                    if old.missing_from_source_at.is_some() {
+                        r.c("wlan").restored += 1;
+                        r.note(format!("Wi-Fi network {} is back at the source", w.ssid));
+                    } else {
+                        r.c("wlan").updated += 1;
+                        r.note(format!("updated Wi-Fi network {}", w.ssid));
+                    }
+                }
+            }
+        }
+    }
+    let owned: Vec<(i64, String, Option<String>)> = sqlx::query_as(
+        "SELECT id, ssid, missing_from_source_at FROM wlans WHERE source_integration_id = ?",
+    )
+    .bind(t.integration_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, ssid, missing) in owned {
+        if seen.contains(&id) || missing.is_some() {
+            continue;
+        }
+        sqlx::query("UPDATE wlans SET missing_from_source_at = ? WHERE id = ?")
+            .bind(now)
+            .bind(id)
+            .execute(&mut *conn)
+            .await?;
+        r.c("wlan").missing += 1;
+        r.note(format!("Wi-Fi network {ssid} is no longer at the source"));
+    }
     Ok(())
 }
 

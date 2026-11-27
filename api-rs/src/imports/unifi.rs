@@ -15,7 +15,9 @@ use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
 use serde_json::{json, Value};
 
 use super::http::{list, s, Http};
-use super::{mac, text, Covers, Snapshot, SrcDevice, SrcLease, SrcNetwork, SrcReservation};
+use super::{
+    mac, text, Covers, Snapshot, SrcDevice, SrcLease, SrcNetwork, SrcReservation, SrcWlan,
+};
 use crate::domain::ip::{parse_cidr, Addr, Cidr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -151,12 +153,21 @@ pub async fn fetch(cfg: &Config) -> Result<Snapshot, String> {
                     networks: true,
                     reservations: cfg.import_dhcp,
                     dns: false,
+                    // Set once the Wi-Fi list has been read (below).
+                    wlans: false,
                 },
                 ..Default::default()
             };
             if cfg.import_dhcp {
                 let users = first_json(&sess, &[site_path(&sess, site, "rest/user")]).await?;
                 snap.reservations = map_fixed_ips(&users);
+            }
+            // Wi-Fi networks. A controller that won't list them (an older
+            // version, or a key without that permission) doesn't stop the
+            // sync: Wi-Fi is then left as it is.
+            if let Ok(wlans) = first_json(&sess, &[site_path(&sess, site, "rest/wlanconf")]).await {
+                snap.wlans = map_wlans(&wlans, &networks);
+                snap.covers.wlans = true;
             }
             if cfg.lease_snapshot {
                 let clients = first_json(&sess, &[site_path(&sess, site, "stat/sta")]).await?;
@@ -335,6 +346,60 @@ pub fn map_networks(v: &Value, import_dhcp: bool) -> Vec<SrcNetwork> {
         .collect()
 }
 
+/// The Wi-Fi networks (WLANs), with the VLAN of the network each one
+/// puts its clients on. Passphrases are never read.
+pub fn map_wlans(v: &Value, networks: &Value) -> Vec<SrcWlan> {
+    let vlan_of = |n: &Value| -> Option<i64> {
+        let on = n
+            .get("vlan_enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        s(n, "vlan")
+            .and_then(|v| v.parse::<i64>().ok())
+            .filter(|v| on && (1..=4094).contains(v))
+    };
+    let flag = |w: &Value, k: &str| w.get(k).and_then(Value::as_bool).unwrap_or(false);
+    list(v)
+        .iter()
+        .filter_map(|w| {
+            let id = s(w, "_id").or(s(w, "id"))?;
+            let ssid = s(w, "name")?.trim().to_string();
+            if ssid.is_empty() || ssid.chars().count() > 32 {
+                return None;
+            }
+            let security = match s(w, "security").unwrap_or_default().as_str() {
+                "wpaeap" => "enterprise",
+                "wpapsk" | "wpa2" | "wpa3" => {
+                    match (flag(w, "wpa3_support"), flag(w, "wpa3_transition")) {
+                        (true, false) => "wpa3",
+                        (true, true) => "wpa2_wpa3",
+                        _ => "wpa2",
+                    }
+                }
+                _ if flag(w, "wpa3_enhanced_open") => "owe",
+                _ => "open",
+            };
+            // Newer controllers name the network; older ones put a VLAN
+            // on the WLAN itself.
+            let vlan = match s(w, "networkconf_id") {
+                Some(net) => list(networks)
+                    .iter()
+                    .find(|n| s(n, "_id").as_deref() == Some(net.as_str()))
+                    .and_then(vlan_of),
+                None => vlan_of(w),
+            };
+            Some(SrcWlan {
+                external_id: id,
+                ssid,
+                security: security.into(),
+                hidden: flag(w, "hide_ssid"),
+                vlan,
+                enabled: w.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+            })
+        })
+        .collect()
+}
+
 /// Clients with a fixed IP: UniFi's DHCP reservations.
 pub fn map_fixed_ips(v: &Value) -> Vec<SrcReservation> {
     list(v)
@@ -497,6 +562,47 @@ mod tests {
         assert_eq!(n[2].vlan, Some(99));
         let n = map_networks(&v, false);
         assert!(n[0].pools.is_empty() && n[0].dns_servers.is_empty() && n[0].domain.is_none());
+    }
+
+    #[test]
+    fn wlans() {
+        let networks = json!({ "data": [
+            { "_id": "n1", "name": "LAN" },
+            { "_id": "n2", "name": "IoT", "vlan_enabled": true, "vlan": 40 },
+        ] });
+        let v = json!({ "data": [
+            { "_id": "w1", "name": "Home", "security": "wpapsk", "networkconf_id": "n1", "x_passphrase": "secret" },
+            { "_id": "w2", "name": "Things", "security": "wpapsk", "wpa3_support": true, "wpa3_transition": true,
+              "networkconf_id": "n2", "hide_ssid": true },
+            { "_id": "w3", "name": "Office", "security": "wpaeap", "vlan_enabled": true, "vlan": "20", "enabled": false },
+            { "_id": "w4", "name": "Guests", "security": "open", "wpa3_enhanced_open": true },
+            { "_id": "w5", "name": "Lab", "security": "wpapsk", "wpa3_support": true },
+            { "_id": "w6", "name": "" },
+        ] });
+        let w = map_wlans(&v, &networks);
+        let got: Vec<_> = w
+            .iter()
+            .map(|w| {
+                (
+                    w.ssid.as_str(),
+                    w.security.as_str(),
+                    w.hidden,
+                    w.vlan,
+                    w.enabled,
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("Home", "wpa2", false, None, true),
+                ("Things", "wpa2_wpa3", true, Some(40), true),
+                ("Office", "enterprise", false, Some(20), false),
+                ("Guests", "owe", false, None, true),
+                ("Lab", "wpa3", false, None, true),
+            ]
+        );
+        assert!(!format!("{w:?}").contains("secret"), "never the passphrase");
     }
 
     #[test]

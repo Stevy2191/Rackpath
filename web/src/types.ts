@@ -357,6 +357,10 @@ export interface Prefix {
   missing_from_source_at: string | null;
   size: number | string;
   address_count: number;
+  /** Distinct addresses in the latest DHCP lease snapshot(s). */
+  lease_count: number;
+  /** Documented addresses plus leased ones (each address once). */
+  in_use: number;
   dhcp_pool_size: number;
   utilization?: number;
   parent_id?: number | null;
@@ -419,6 +423,9 @@ export interface Wlan {
   hidden: boolean;
   vlan_id: number | null;
   notes: string | null;
+  /** The integration that brought it in; null when typed in by people. */
+  source_integration_id: number | null;
+  missing_from_source_at: string | null;
   port_count: number;
 }
 

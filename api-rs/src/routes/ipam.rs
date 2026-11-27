@@ -522,6 +522,14 @@ pub struct PrefixQuery {
     space_id: Option<i64>,
 }
 
+/// Percentage (one decimal) of `usable` addresses in use, at most 100.
+fn utilization(in_use: u128, usable: u128) -> f64 {
+    if usable == 0 {
+        return 0.0;
+    }
+    (in_use.min(usable) * 1000 / usable) as f64 / 10.0
+}
+
 pub async fn list_prefixes(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -534,12 +542,20 @@ pub async fn list_prefixes(
         #[sqlx(flatten)]
         prefix: Prefix,
         addresses: i64,
+        leases: i64,
+        leased_only: i64,
     }
     let mut b: QueryBuilder<Sqlite> = QueryBuilder::new(concat!(
         "SELECT ",
         prefix_columns!(),
         ", (SELECT COUNT(*) FROM ip_addresses a WHERE a.space_id = p.space_id AND a.family = p.family
-             AND a.addr_bin BETWEEN p.net_start AND p.net_end) AS addresses
+             AND a.addr_bin BETWEEN p.net_start AND p.net_end) AS addresses,
+           (SELECT COUNT(DISTINCT l.addr_bin) FROM dhcp_lease_snapshots l WHERE l.space_id = p.space_id
+             AND l.family = p.family AND l.addr_bin BETWEEN p.net_start AND p.net_end) AS leases,
+           (SELECT COUNT(DISTINCT l.addr_bin) FROM dhcp_lease_snapshots l WHERE l.space_id = p.space_id
+             AND l.family = p.family AND l.addr_bin BETWEEN p.net_start AND p.net_end
+             AND NOT EXISTS (SELECT 1 FROM ip_addresses a WHERE a.space_id = l.space_id
+                             AND a.family = l.family AND a.addr_bin = l.addr_bin)) AS leased_only
          FROM prefixes p WHERE p.project_id = "
     ));
     b.push_bind(project_id);
@@ -583,10 +599,14 @@ pub async fn list_prefixes(
         v["depth"] = json!(depth);
         v["size"] = size_json(&c);
         v["address_count"] = json!(r.addresses);
+        v["lease_count"] = json!(r.leases);
         v["dhcp_pool_size"] = json!(pool as u64);
+        // In use: documented addresses plus DHCP leases (an address that is
+        // both counts once). A DHCP pool is room for clients, not usage.
+        let in_use = (r.addresses + r.leased_only) as u128;
+        v["in_use"] = json!(in_use as u64);
         if c.family() == Family::V4 {
-            let used = (r.addresses as u128 + pool).min(usable);
-            v["utilization"] = json!((used * 1000 / usable) as f64 / 10.0);
+            v["utilization"] = json!(utilization(in_use, usable));
         }
         stack.push((r.prefix.id, r.prefix.space_id, c));
         out.push(v);
@@ -799,11 +819,30 @@ pub async fn get_prefix(
         .filter_map(RangeRow::bounds)
         .map(|(s, e)| e.value - s.value + 1)
         .sum();
+    let (leases, leased_only): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT l.addr_bin),
+                COUNT(DISTINCT CASE WHEN NOT EXISTS (SELECT 1 FROM ip_addresses a WHERE a.space_id = l.space_id
+                     AND a.family = l.family AND a.addr_bin = l.addr_bin) THEN l.addr_bin END)
+         FROM dhcp_lease_snapshots l WHERE l.space_id = ? AND l.family = ? AND l.addr_bin BETWEEN ? AND ?",
+    )
+    .bind(p.space_id)
+    .bind(p.family)
+    .bind(c.start().bin())
+    .bind(c.end().bin())
+    .fetch_one(&mut *conn)
+    .await?;
+    let in_use = (total + leased_only) as u128;
     let chain = prefix_chain(&mut conn, p.project_id, p.location_id).await?;
     let mut v = serde_json::to_value(&p).unwrap_or_default();
     v["size"] = size_json(&c);
     v["address_count"] = json!(total);
+    v["lease_count"] = json!(leases);
+    v["in_use"] = json!(in_use as u64);
     v["dhcp_pool_size"] = json!(pool as u64);
+    if c.family() == Family::V4 {
+        let (first, last) = c.usable();
+        v["utilization"] = json!(utilization(in_use, last.value - first.value + 1));
+    }
     v["parent"] = json!(parent.map(|x| json!({ "id": x.id, "cidr": x.cidr })));
     v["children"] = json!(children);
     v["ranges"] = json!(ranges);
