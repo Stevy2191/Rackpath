@@ -137,8 +137,10 @@ export default function (test, { base, shots }) {
     await page.getByRole('heading', { level: 1, name: /SW01/ }).waitFor();
     assert.match(await page.locator('.kv').first().innerText(), /U5/);
     await page.getByRole('button', { name: 'Move' }).click();
-    await page.getByRole('dialog').getByLabel('Move to').selectOption('unplaced');
-    await page.getByRole('button', { name: 'Save' }).click();
+    const dlg = page.getByRole('dialog');
+    await dlg.getByLabel('Move to').selectOption('unplaced');
+    await dlg.getByText('→').waitFor();
+    await dlg.getByRole('button', { name: 'Move', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'detached' });
     await page.locator('.kv').getByText('Unplaced').waitFor();
     await snap(page, 'device');

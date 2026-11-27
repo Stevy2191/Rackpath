@@ -300,27 +300,40 @@ pub async fn update_rack(
     Path(id): Path<i64>,
     JsonBody(body): JsonBody<RackFields>,
 ) -> AppResult<Json<Value>> {
-    validate(&body)?;
     let mut tx = state.pool.begin().await?;
-    let placed = hierarchy::get(&mut tx, ScopeType::Rack, id).await?;
-    require(&current, Action::Write, &placed.chain)?;
-    let old = load_rack(&mut tx, id).await?;
+    let v = update_rack_in(&mut tx, &ctx, &current, id, body).await?;
+    tx.commit().await?;
+    Ok(Json(v))
+}
+
+/// The update itself, inside the caller's transaction (also used by moves).
+pub async fn update_rack_in(
+    tx: &mut SqliteConnection,
+    ctx: &RequestCtx,
+    current: &CurrentUser,
+    id: i64,
+    body: RackFields,
+) -> AppResult<Value> {
+    validate(&body)?;
+    let placed = hierarchy::get(&mut *tx, ScopeType::Rack, id).await?;
+    require(current, Action::Write, &placed.chain)?;
+    let old = load_rack(&mut *tx, id).await?;
     let room_id = body.room_id.unwrap_or(old.room_id);
     if room_id != old.room_id {
-        let target = hierarchy::get(&mut tx, ScopeType::Room, room_id).await?;
+        let target = hierarchy::get(&mut *tx, ScopeType::Room, room_id).await?;
         if target.project_id != placed.project_id {
             return Err(AppError::bad(
                 "Racks can't be moved to another project here",
             ));
         }
-        require(&current, Action::Write, &target.chain)?;
+        require(current, Action::Write, &target.chain)?;
     }
     let code = match &body.code {
         Some(c) => code_or_400(c)?,
         None => old.code.clone(),
     };
     if room_id != old.room_id || !code.eq_ignore_ascii_case(&old.code) {
-        let taken: Vec<String> = hierarchy::room_codes(&mut tx, room_id)
+        let taken: Vec<String> = hierarchy::room_codes(&mut *tx, room_id)
             .await?
             .into_iter()
             .filter(|c| !(room_id == old.room_id && c.eq_ignore_ascii_case(&old.code)))
@@ -334,7 +347,7 @@ pub async fn update_rack(
     }
     let u_height = body.u_height.unwrap_or(old.u_height);
     if u_height < old.u_height {
-        for slot in rack_slots(&mut tx, id, None).await? {
+        for slot in rack_slots(&mut *tx, id, None).await? {
             if check_fit(&slot, &[], u_height).is_err() {
                 return Err(AppError::Conflict(
                     "Some devices would no longer fit; move them first".into(),
@@ -343,7 +356,7 @@ pub async fn update_rack(
         }
     }
     let responsible = apply_nullable(body.responsible_user_id, old.responsible_user_id);
-    check_user_exists(&mut tx, responsible).await?;
+    check_user_exists(&mut *tx, responsible).await?;
     let name = merge_text(body.name, old.name.clone());
     check_len("Name", &name, 255)?;
     // Moving to another floor cuts cables to anything outside the rack.
@@ -355,8 +368,8 @@ pub async fn update_rack(
             .fetch_all(&mut *tx)
             .await?;
         if floors.len() == 2 && floors[0] != floors[1] {
-            let inside = hierarchy::devices_in(&mut tx, Subtree::Rack(id)).await?;
-            cables_removed = crate::cabling::cut(&mut tx, &inside, true).await?;
+            let inside = hierarchy::devices_in(&mut *tx, Subtree::Rack(id)).await?;
+            cables_removed = crate::cabling::cut(&mut *tx, &inside, true).await?;
         }
     }
     sqlx::query(
@@ -381,8 +394,8 @@ pub async fn update_rack(
     .bind(id)
     .execute(&mut *tx)
     .await?;
-    hierarchy::reindex(&mut tx, Subtree::Rack(id)).await?;
-    let new = load_rack(&mut tx, id).await?;
+    hierarchy::reindex(&mut *tx, Subtree::Rack(id)).await?;
+    let new = load_rack(&mut *tx, id).await?;
     let mut changes = audit::diff(
         &serde_json::to_value(&old).unwrap_or_default(),
         &serde_json::to_value(&new).unwrap_or_default(),
@@ -394,15 +407,15 @@ pub async fn update_rack(
             o.insert("cables_removed".into(), json!(cables_removed));
         }
     }
-    let v = rack_json(&mut tx, id).await?;
+    let v = rack_json(&mut *tx, id).await?;
     let action = if room_id != old.room_id {
         "move"
     } else {
         "update"
     };
     audit::record(
-        &mut tx,
-        &ctx,
+        &mut *tx,
+        ctx,
         Some(current.actor_ref()),
         Entry::new(action, "rack", Some(id))
             .path(v["path"].as_str().unwrap_or_default())
@@ -410,8 +423,7 @@ pub async fn update_rack(
             .changes(changes),
     )
     .await?;
-    tx.commit().await?;
-    Ok(Json(v))
+    Ok(v)
 }
 
 pub async fn delete_rack(

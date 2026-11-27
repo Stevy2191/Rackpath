@@ -2,7 +2,7 @@
 // floor-standing devices positioned on it (in plan pixels).
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ImagePlus, Pencil, PenLine, Plus, RotateCw, Trash2, X } from 'lucide-react';
+import { ImagePlus, MoveRight, Pencil, PenLine, Plus, RotateCw, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
@@ -12,6 +12,7 @@ import { Crumbs, DeleteModal } from './common';
 import { FloorForm } from './Locations';
 import { RackForm } from './Rack';
 import { RoomForm } from './Room';
+import { MoveFloor } from './Move';
 
 const DEFAULT_W = 1200;
 const DEFAULT_H = 800;
@@ -32,7 +33,7 @@ export function FloorPage() {
   const floor = useLoad(() => api.get<Floor>(`/api/floors/${id}`), [id]);
   const [mode, setMode] = useState<Mode>({ type: 'view' });
   const [selected, setSelected] = useState<{ kind: 'room' | 'rack' | 'device'; id: number } | null>(null);
-  const [modal, setModal] = useState<'edit' | 'delete' | 'room' | 'rack' | 'shape' | null>(null);
+  const [modal, setModal] = useState<'edit' | 'delete' | 'room' | 'rack' | 'shape' | 'move' | null>(null);
   const [moved, setMoved] = useState<Record<string, [number, number]>>({});
   const [drag, setDrag] = useState<{ item: Item; start: [number, number]; at: [number, number]; origin: [number, number] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +170,7 @@ export function FloorPage() {
                 </Button>
               )}
               <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
+              <Button icon={<MoveRight size={15} />} onClick={() => setModal('move')}>Move</Button>
               <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>
             </>
           )
@@ -373,6 +375,20 @@ export function FloorPage() {
           )}
         </aside>
       </div>
+      {modal === 'move' && (
+        <MoveFloor
+          projectId={project.id}
+          floorId={f.id}
+          locationId={f.location_id}
+          onClose={() => setModal(null)}
+          onMoved={(r) => {
+            toast.ok(`Moved to ${r.to.split('/').slice(1).join(' / ')}`);
+            setModal(null);
+            if (r.project_changed) nav(link.floor(r.project_id, f.id));
+            else reload();
+          }}
+        />
+      )}
       {modal === 'edit' && <FloorForm locationId={f.location_id} existing={f} onClose={() => setModal(null)} onSaved={reload} />}
       {modal === 'room' && <RoomForm floorId={f.id} onClose={() => setModal(null)} onSaved={reload} />}
       {modal === 'rack' && <RackForm rooms={rooms} projectId={project.id} onClose={() => setModal(null)} onSaved={reload} />}

@@ -2,7 +2,7 @@
 // sides, and devices added by clicking a free U or moved by dragging.
 import { useEffect, useState, type DragEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { MoveRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
@@ -12,6 +12,7 @@ import { DeviceForm, MoveDevice } from '../devices/DeviceForm';
 import { PortsPanel } from '../cabling/PortsPanel';
 import { RackPowerPanel } from '../power/Power';
 import { Crumbs, DeleteModal, KeyValues, num, useForm } from './common';
+import { MoveRack } from './Move';
 
 export function RackForm({ rooms, projectId, existing, onClose, onSaved }: { rooms: Room[]; projectId: number; existing?: Rack; onClose: () => void; onSaved: (r: Rack) => void }) {
   const f = useForm({
@@ -80,7 +81,7 @@ export function RackPage() {
   const [params, setParams] = useSearchParams();
   const view = (['patching', 'power'] as const).find((v) => v === params.get('view')) ?? 'elevation';
   const [selected, setSelected] = useState<number | null>(null);
-  const [modal, setModal] = useState<{ type: 'edit' | 'delete' | 'move' } | { type: 'add'; u: number | null } | null>(null);
+  const [modal, setModal] = useState<{ type: 'edit' | 'delete' | 'move' | 'move-rack' } | { type: 'add'; u: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   if (rack.error) return <ErrorBox error={rack.error} onRetry={rack.reload} />;
   if (!rack.data) return <Spinner />;
@@ -113,6 +114,7 @@ export function RackPage() {
             <>
               <Button variant="primary" icon={<Plus size={15} />} onClick={() => setModal({ type: 'add', u: null })}>Add device</Button>
               <Button icon={<Pencil size={15} />} onClick={() => setModal({ type: 'edit' })}>Edit</Button>
+              <Button icon={<MoveRight size={15} />} onClick={() => setModal({ type: 'move-rack' })}>Move</Button>
               <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal({ type: 'delete' })}>Delete</Button>
             </>
           )
@@ -201,6 +203,18 @@ export function RackPage() {
           )}
         </aside>
       </div>
+      )}
+      {modal?.type === 'move-rack' && (
+        <MoveRack
+          projectId={project.id}
+          rackId={r.id}
+          roomId={r.room_id}
+          onClose={() => setModal(null)}
+          onMoved={(m) => {
+            toast.ok(`Moved to ${m.to.split('/').slice(1, -1).join(' / ')}`);
+            rack.reload();
+          }}
+        />
       )}
       {modal?.type === 'edit' && (
         <RackEdit rack={r} projectId={project.id} onClose={() => setModal(null)} onSaved={rack.reload} />

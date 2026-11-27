@@ -60,7 +60,7 @@ let expectedFailures = 0;
 const allow = (pattern) => allowed.push(pattern);
 export const ctx = { base, password, shots, allow };
 
-const mods = process.env.E2E_ONLY ? process.env.E2E_ONLY.split(',') : ['auth', 'places', 'cabling', 'ipam', 'library', 'admin', 'sources'];
+const mods = process.env.E2E_ONLY ? process.env.E2E_ONLY.split(',') : ['auth', 'places', 'cabling', 'ipam', 'library', 'admin', 'sources', 'moves'];
 for (const m of mods) (await import(`./${m}.mjs`)).default(test, ctx);
 
 const browser = await chromium.launch();

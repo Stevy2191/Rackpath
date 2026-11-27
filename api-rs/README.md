@@ -310,6 +310,34 @@ shows it as the author of every imported record.
 
 **Diagrams** are saved whole (`PUT`), with `expected_version` to stop two people overwriting each other. Nodes can stand for devices; an edge can be backed by a cable, and then shows the cable's ends and chain state.
 
+## Moves (phase 8)
+
+`POST /api/moves` with `{ "resource": { "type", "id" }, "target": …, "code"?, "networks"?, "dry_run"? }`:
+
+| Resource | Target |
+|---|---|
+| `device` | `{ "placement": … }` (a rack position, a room, a tray or Unplaced) |
+| `rack` | `{ "room_id" }` |
+| `floor` | `{ "location_id" }`, also in another project |
+| `location` | `{ "project_id" }` |
+
+- **Dry runs** do the whole move in a transaction and roll it back, so the
+  report is exact: the new path, cables cut (moves that leave a floor cut
+  cables to anything that isn't moving along), and a code clash with a
+  suggested free code (a real move with a clash is a 409 until `code` is given).
+- **Between projects** (floors and locations): device types, project
+  templates and tags are reused by key or name, or copied; VLANs and WLANs
+  on the moved ports are reused when identical (same number, name and notes;
+  same SSID, security and notes), copied when the number is free, or
+  cleared (`networks`: `reuse` (default), `copy` or `clear`). IP addresses
+  stay in the old project's IP plan, unlinked; diagram boxes there become
+  labels; integrations stop updating the moved devices; responsible people
+  who can't see the target project are cleared; grants inside the moved
+  part follow it.
+- **Permissions:** edit rights on what moves and on the target. A target
+  project you can't see is a 404.
+- One transaction and one `move` entry in the change history.
+
 ## Development
 
 ```bash

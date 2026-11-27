@@ -5,6 +5,7 @@ import { api, qs } from '../../api';
 import type { Device, Mount, Placement } from '../../types';
 import { FormModal, SelectField, Spinner, Tabs, TextArea, TextField } from '../../ui';
 import { num, useDeviceTypes, useForm, useTemplates } from '../places/common';
+import { MoveDialog } from '../places/Move';
 
 export const STATUSES = ['planned', 'active', 'spare', 'faulty', 'retired'] as const;
 const statusOptions = STATUSES.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }));
@@ -236,7 +237,8 @@ export interface PlaceOption {
   path: string;
 }
 
-/** Moves a device to a rack position, a room, or the Unplaced list. */
+/** Moves a device to a rack position, a room, or the Unplaced list, with a
+ * preview of what the move does (cables cut, a code clash). */
 export function MoveDevice({ device, projectId, onClose, onSaved }: { device: Device; projectId: number; onClose: () => void; onSaved: () => void }) {
   const p = device.placement;
   const [kind, setKind] = useState<'rack' | 'room' | 'unplaced'>(p.type === 'room' ? 'room' : p.type === 'unplaced' ? 'unplaced' : 'rack');
@@ -252,21 +254,22 @@ export function MoveDevice({ device, projectId, onClose, onSaved }: { device: De
   }, [projectId]);
   const options = (places ?? []).filter((x) => x.kind === kind);
   const zeroU = f.values.mount.startsWith('zero');
+  const id = Number(target || options[0]?.id) || null;
+  const placement =
+    kind === 'unplaced'
+      ? { type: 'unplaced' }
+      : !id
+        ? null
+        : kind === 'room'
+          ? { type: 'room', room_id: id, x: null, y: null, rotation: null }
+          : { type: 'rack', rack_id: id, u: zeroU ? null : num(f.values.u), face: f.values.face, mount: f.values.mount };
   return (
-    <FormModal
+    <MoveDialog
       title={`Move ${device.code}`}
+      resource={{ type: 'device', id: device.id }}
+      target={placement ? { placement } : null}
       onClose={onClose}
-      onSubmit={async () => {
-        const id = Number(target || options[0]?.id);
-        const placement =
-          kind === 'unplaced'
-            ? { type: 'unplaced' }
-            : kind === 'room'
-              ? { type: 'room', room_id: id, x: null, y: null, rotation: null }
-              : { type: 'rack', rack_id: id, u: zeroU ? null : num(f.values.u), face: f.values.face, mount: f.values.mount };
-        await api.patch(`/api/devices/${device.id}`, { placement });
-        onSaved();
-      }}
+      onMoved={() => onSaved()}
     >
       <SelectField
         label="Move to"
@@ -294,7 +297,6 @@ export function MoveDevice({ device, projectId, onClose, onSaved }: { device: De
           {!zeroU && <SelectField label="Face" {...f.bind('face')} options={faceOptions} />}
         </div>
       )}
-      {kind === 'unplaced' && <p className="small muted">Cables between this device and others in its rack or room are kept only if it stays on the same floor; moving it to Unplaced removes them.</p>}
-    </FormModal>
+    </MoveDialog>
   );
 }

@@ -1463,6 +1463,21 @@ pub async fn duplicate(
     Ok((StatusCode::CREATED, Json(to_json(&new_row, &p, 0))))
 }
 
+/// Copies a project template into another project under `name` (for moves
+/// between projects). Returns the new template's id.
+pub async fn copy_to_project(
+    conn: &mut SqliteConnection,
+    id: i64,
+    project_id: i64,
+    name: &str,
+) -> AppResult<i64> {
+    let row = load_row(conn, id).await?;
+    let mut input = load_input(conn, &row).await?;
+    input.name = name.to_string();
+    let p = prepare(conn, Some(project_id), input).await?;
+    store(conn, None, Some(project_id), None, &p).await
+}
+
 /// Deletes a template. Devices made from it keep their ports and become
 /// independent.
 pub async fn remove(

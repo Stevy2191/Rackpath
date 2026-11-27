@@ -868,19 +868,32 @@ pub async fn update(
     Path(id): Path<i64>,
     JsonBody(body): JsonBody<DeviceFields>,
 ) -> AppResult<Json<Value>> {
+    let mut tx = state.pool.begin().await?;
+    let v = update_in(&mut tx, &ctx, &current, id, body).await?;
+    tx.commit().await?;
+    Ok(Json(v))
+}
+
+/// The update itself, inside the caller's transaction (also used by moves).
+pub async fn update_in(
+    tx: &mut SqliteConnection,
+    ctx: &RequestCtx,
+    current: &CurrentUser,
+    id: i64,
+    body: DeviceFields,
+) -> AppResult<Value> {
     if body.template_id.is_some() {
         return Err(AppError::bad(
             "A device's template is chosen when it's created",
         ));
     }
-    let mut tx = state.pool.begin().await?;
-    let placed = hierarchy::get(&mut tx, ScopeType::Device, id).await?;
-    require(&current, Action::Write, &placed.chain)?;
-    let old = load_device(&mut tx, id).await?;
+    let placed = hierarchy::get(&mut *tx, ScopeType::Device, id).await?;
+    require(current, Action::Write, &placed.chain)?;
+    let old = load_device(&mut *tx, id).await?;
     let project_id = old.project_id;
 
     let (type_id, type_key, prefix, type_placement) = match device_type(
-        &mut tx,
+        &mut *tx,
         project_id,
         body.device_type_id,
         body.device_type.as_deref(),
@@ -916,9 +929,9 @@ pub async fn update(
     };
     let moving = body.placement.is_some();
     let placement = body.placement.clone().unwrap_or(current_placement);
-    let target = resolve(&mut tx, project_id, &placement).await?;
+    let target = resolve(&mut *tx, project_id, &placement).await?;
     if moving {
-        require(&current, Action::Write, &target.chain)?;
+        require(current, Action::Write, &target.chain)?;
     }
     if !can_place(&type_key, type_placement, target.target) {
         return Err(AppError::bad(format!("A {type_key} can't be placed there")));
@@ -944,7 +957,7 @@ pub async fn update(
     let code = match (&body.code, moving) {
         (Some(c), _) => {
             choose_code(
-                &mut tx,
+                &mut *tx,
                 &target.parent_key,
                 Some(c),
                 &prefix,
@@ -955,7 +968,7 @@ pub async fn update(
         }
         (None, true) => {
             choose_code(
-                &mut tx,
+                &mut *tx,
                 &target.parent_key,
                 Some(&old.code),
                 &prefix,
@@ -966,7 +979,7 @@ pub async fn update(
         }
         (None, false) => old.code.clone(),
     };
-    check_rack_fit(&mut tx, &target, id, height_half.unwrap_or(2)).await?;
+    check_rack_fit(&mut *tx, &target, id, height_half.unwrap_or(2)).await?;
 
     let status = body.status.clone().unwrap_or(old.status.clone());
     if !STATUSES.contains(&status.as_str()) {
@@ -991,7 +1004,7 @@ pub async fn update(
         Some(Some(m)) => Some(normalize_mac(&m)?),
     };
     let responsible = apply_nullable(body.responsible_user_id, old.responsible_user_id);
-    check_user_exists(&mut tx, responsible).await?;
+    check_user_exists(&mut *tx, responsible).await?;
     let name = merge_text(body.name, old.name.clone());
     check_len("Name", &name, 255)?;
 
@@ -999,12 +1012,13 @@ pub async fn update(
     // anything that isn't moving with it are removed.
     let mut cables_removed = Vec::new();
     if moving {
-        let new_floor = target_floor(&mut tx, &target).await?;
+        let new_floor = target_floor(&mut *tx, &target).await?;
         if new_floor.is_none() || new_floor != old.floor_id {
             let mut moving_ids = vec![id];
-            moving_ids.extend(hierarchy::devices_in(&mut tx, Subtree::Device(id)).await?);
+            moving_ids.extend(hierarchy::devices_in(&mut *tx, Subtree::Device(id)).await?);
             // Unplaced devices aren't cabled at all.
-            cables_removed = crate::cabling::cut(&mut tx, &moving_ids, new_floor.is_some()).await?;
+            cables_removed =
+                crate::cabling::cut(&mut *tx, &moving_ids, new_floor.is_some()).await?;
         }
     }
 
@@ -1049,8 +1063,8 @@ pub async fn update(
     .bind(id)
     .execute(&mut *tx)
     .await?;
-    hierarchy::reindex_device_tree(&mut tx, id).await?;
-    let new = load_device(&mut tx, id).await?;
+    hierarchy::reindex_device_tree(&mut *tx, id).await?;
+    let new = load_device(&mut *tx, id).await?;
     let mut changes = audit::diff(&old.audit_view(), &new.audit_view(), &[]);
     if !cables_removed.is_empty() {
         if let Some(o) = changes.as_object_mut() {
@@ -1063,8 +1077,8 @@ pub async fn update(
         "update"
     };
     audit::record(
-        &mut tx,
-        &ctx,
+        &mut *tx,
+        ctx,
         Some(current.actor_ref()),
         Entry::new(action, "device", Some(id))
             .path(new.path.clone())
@@ -1072,8 +1086,7 @@ pub async fn update(
             .changes(changes),
     )
     .await?;
-    tx.commit().await?;
-    Ok(Json(new.to_json()))
+    Ok(new.to_json())
 }
 
 #[derive(Deserialize, Default)]

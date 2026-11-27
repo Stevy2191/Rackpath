@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Building2, MoveRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
 import type { Floor, Location } from '../../types';
 import { Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, Table, TextArea, TextField, useLoad, useToast } from '../../ui';
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
+import { MoveLocation } from './Move';
 
 type LocationRow = Location & { counts: NonNullable<Location['counts']> };
 
@@ -111,7 +112,7 @@ export function LocationPage() {
   const nav = useNavigate();
   const toast = useToast();
   const loc = useLoad(() => api.get<Location>(`/api/locations/${id}`), [id]);
-  const [modal, setModal] = useState<'edit' | 'delete' | 'floor' | null>(null);
+  const [modal, setModal] = useState<'edit' | 'delete' | 'floor' | 'move' | null>(null);
   if (loc.error) return <ErrorBox error={loc.error} onRetry={loc.reload} />;
   if (!loc.data) return <Spinner />;
   const l = loc.data;
@@ -126,6 +127,7 @@ export function LocationPage() {
           l.can_edit && (
             <>
               <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>
+              <Button icon={<MoveRight size={15} />} onClick={() => setModal('move')}>Move</Button>
               <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>Delete</Button>
             </>
           )
@@ -168,6 +170,17 @@ export function LocationPage() {
           />
         </Card>
       </div>
+      {modal === 'move' && (
+        <MoveLocation
+          projectId={project.id}
+          locationId={l.id}
+          onClose={() => setModal(null)}
+          onMoved={(r) => {
+            toast.ok(`Moved to ${r.to.split('/')[0]}`);
+            nav(link.location(r.project_id, l.id));
+          }}
+        />
+      )}
       {modal === 'edit' && <LocationForm projectId={project.id} existing={l} onClose={() => setModal(null)} onSaved={() => loc.reload()} />}
       {modal === 'floor' && (
         <FloorForm
