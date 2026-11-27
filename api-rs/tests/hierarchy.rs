@@ -1362,3 +1362,74 @@ async fn locations_can_be_grouped_by_site() {
         .await;
     assert_eq!(st, StatusCode::BAD_REQUEST, "{err}");
 }
+
+#[tokio::test]
+async fn phone_numbers_are_stored_formatted() {
+    let app = spawn().await;
+    let c = app.owner().await;
+    let p = app.project(&c, "PHONE").await;
+    let path = format!("/api/projects/{p}/locations");
+    let (_, loc) = app
+        .post(
+            &c,
+            &path,
+            json!({ "code": "hq", "contact_phone": "979.203.4748" }),
+        )
+        .await;
+    assert_eq!(loc["contact_phone"], "(979) 203-4748");
+    let id = loc["id"].as_i64().unwrap();
+    let (_, kept) = app
+        .patch(
+            &c,
+            &format!("/api/locations/{id}"),
+            json!({ "contact_phone": "+44 20 7946 0958" }),
+        )
+        .await;
+    assert_eq!(kept["contact_phone"], "+44 20 7946 0958");
+
+    // Migration 0009 formats saved numbers by the same rule as the API.
+    let samples = [
+        "9792034748",
+        "979-203-4748",
+        "(979)203-4748",
+        " 1 979 203 4748 ",
+        "+1 (979) 203-4748",
+        "+9792034748",
+        "+44 20 7946 0958",
+        "979-203-4748 x12",
+        "203-4748",
+        "29792034748",
+        "call the desk",
+    ];
+    for (i, s) in samples.iter().enumerate() {
+        sqlx::query("INSERT INTO locations (project_id, code, contact_phone, created_at, updated_at) VALUES (?, ?, ?, '', '')")
+            .bind(p)
+            .bind(format!("S{i}"))
+            .bind(s)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+    }
+    sqlx::raw_sql(include_str!("../migrations/0009_phone_format.sql"))
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    for (i, s) in samples.iter().enumerate() {
+        let stored: String = sqlx::query_scalar(
+            "SELECT contact_phone FROM locations WHERE project_id = ? AND code = ?",
+        )
+        .bind(p)
+        .bind(format!("S{i}"))
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+        let expected = rackpath::domain::phone::format(s);
+        // The migration keeps untouched values as they were (untrimmed).
+        let expected = if expected.starts_with('(') {
+            expected
+        } else {
+            s.to_string()
+        };
+        assert_eq!(stored, expected, "{s:?}");
+    }
+}

@@ -49,6 +49,11 @@ pub fn clean_text(value: Option<String>) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// A cleaned phone number in its stored form (see `domain::phone`).
+fn phone(value: Option<String>) -> Option<String> {
+    value.map(|v| crate::domain::phone::format(&v))
+}
+
 pub fn check_len(field: &str, value: &Option<String>, max: usize) -> AppResult<()> {
     if value.as_ref().is_some_and(|v| v.chars().count() > max) {
         return Err(AppError::bad(format!(
@@ -221,7 +226,7 @@ fn location_values(f: LocationFields, old: Option<&Location>) -> Vec<Option<Stri
         merge_text(f.address_postcode, o(|l| l.address_postcode.clone())),
         merge_text(f.address_country, o(|l| l.address_country.clone())),
         merge_text(f.contact_name, o(|l| l.contact_name.clone())),
-        merge_text(f.contact_phone, o(|l| l.contact_phone.clone())),
+        phone(merge_text(f.contact_phone, o(|l| l.contact_phone.clone()))),
         merge_text(f.contact_email, o(|l| l.contact_email.clone())),
         merge_text(f.isp_primary_name, o(|l| l.isp_primary_name.clone())),
         merge_text(f.isp_primary_circuit, o(|l| l.isp_primary_circuit.clone())),
@@ -902,7 +907,7 @@ pub async fn create_room(
     .bind(shape.as_ref().map(Value::to_string))
     .bind(clean_text(body.color))
     .bind(clean_text(body.contact_name))
-    .bind(clean_text(body.contact_phone))
+    .bind(phone(clean_text(body.contact_phone)))
     .bind(clean_text(body.contact_email))
     .bind(responsible)
     .bind(clean_text(body.notes))
@@ -993,7 +998,7 @@ pub async fn update_room(
     .bind(shape.as_ref().map(Value::to_string))
     .bind(merge_text(body.color, old.color.clone()))
     .bind(merge_text(body.contact_name, old.contact_name.clone()))
-    .bind(merge_text(body.contact_phone, old.contact_phone.clone()))
+    .bind(phone(merge_text(body.contact_phone, old.contact_phone.clone())))
     .bind(merge_text(body.contact_email, old.contact_email.clone()))
     .bind(responsible)
     .bind(merge_text(body.notes, old.notes.clone()))

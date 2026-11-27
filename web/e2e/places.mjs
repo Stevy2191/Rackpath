@@ -206,5 +206,13 @@ function png(w, h) {
     await main.getByRole('link', { name: 'CTHSE' }).click();
     await page.getByText('Main campus').waitFor();
     await snap(page, 'location-site');
+    // A US phone number is formatted when the field is left, and saved so.
+    await page.getByRole('button', { name: 'Edit' }).click();
+    const phone = page.getByLabel('Phone');
+    await phone.fill('979.203.4748');
+    await phone.press('Tab');
+    assert.equal(await phone.inputValue(), '(979) 203-4748');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByText('(979) 203-4748').waitFor();
   });
 }

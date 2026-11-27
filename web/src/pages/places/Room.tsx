@@ -10,6 +10,7 @@ import { DeviceForm } from '../devices/DeviceForm';
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
 import { RackForm } from './Rack';
 import { ReportButton } from '../Exports';
+import { formatPhone } from '../../phone';
 
 export function RoomForm({ floorId, existing, onClose, onSaved }: { floorId: number; existing?: Room; onClose: () => void; onSaved: (r: Room) => void }) {
   const f = useForm({
@@ -37,7 +38,13 @@ export function RoomForm({ floorId, existing, onClose, onSaved }: { floorId: num
         <TextField label="Name" {...f.bind('name')} />
         <TextField label="Colour on the plan" placeholder="#3b82f6" {...f.bind('color')} />
         <TextField label="Contact" {...f.bind('contact_name')} />
-        <TextField label="Phone" {...f.bind('contact_phone')} />
+        <TextField
+          label="Phone"
+          type="tel"
+          placeholder="(979) 203-4748"
+          {...f.bind('contact_phone')}
+          onBlur={() => f.set('contact_phone', formatPhone(f.values.contact_phone))}
+        />
         <TextField label="Email" type="email" {...f.bind('contact_email')} />
       </div>
       <TextArea label="Notes" {...f.bind('notes')} />
