@@ -105,13 +105,15 @@ fi
 
 # --------------------------------------------------------------- build and restart
 if $use_image; then
-  log "Pulling the published image"
-  docker compose pull rackpath || die "Couldn't pull the image"
+  log "Pulling the published images"
+  docker compose pull || die "Couldn't pull the images"
   log "Restarting Rackpath"
   docker compose up -d --no-build || die "Couldn't start the container"
 else
   log "Building Rackpath from the code (this takes a few minutes)"
   docker compose build --pull rackpath || die "The build failed; the running Rackpath was left as it was."
+  # Caddy, when it's used, comes from its published image.
+  docker compose pull --ignore-buildable >/dev/null 2>&1 || true
   log "Restarting Rackpath"
   docker compose up -d || die "Couldn't start the container"
 fi
