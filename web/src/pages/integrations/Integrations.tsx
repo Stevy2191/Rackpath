@@ -32,7 +32,7 @@ export interface Integration {
 }
 
 interface Summary {
-  counts: Record<string, { created: number; updated: number; missing: number; restored: number }>;
+  counts: Record<string, { created: number; updated: number; missing: number; restored: number; removed?: number }>;
   vlans_created: number;
   leases: number | null;
   owned_before: number;
@@ -153,6 +153,7 @@ function IntegrationForm({ projectId, existing, onClose, onSaved }: { projectId:
   const [site, setSite] = useState(String(existing?.options.site ?? ''));
   const [importDhcp, setImportDhcp] = useState(existing?.options.import_dhcp !== false);
   const [leases, setLeases] = useState(!!existing?.options.lease_snapshot);
+  const [removeMissing, setRemoveMissing] = useState(!!existing?.options.remove_missing);
   const [autoSync, setAutoSync] = useState(existing?.auto_sync ?? true);
   const [interval, setInterval] = useState(String(existing?.sync_interval_minutes ?? 60));
   const [hold, setHold] = useState(String(existing?.hold_threshold_pct ?? 50));
@@ -172,6 +173,7 @@ function IntegrationForm({ projectId, existing, onClose, onSaved }: { projectId:
         if (unifi && site) options.site = site;
         if (kind === 'unifi') options.import_dhcp = importDhcp;
         if (kind === 'unifi' || kind === 'windows_dhcp') options.lease_snapshot = leases;
+        options.remove_missing = removeMissing;
         const body: Record<string, unknown> = {
           name,
           space_id: num(space),
@@ -225,6 +227,12 @@ function IntegrationForm({ projectId, existing, onClose, onSaved }: { projectId:
       </div>
       {remote && <Checkbox label="Check the server's certificate" hint="Untick only for a console with a self-signed certificate on a trusted network" checked={verifyTls} onChange={setVerifyTls} />}
       {kind === 'unifi' && <Checkbox label="Import DHCP ranges, DNS servers and fixed IPs" checked={importDhcp} onChange={setImportDhcp} />}
+      <Checkbox
+        label="Delete records that are gone from the source"
+        hint="Off: they stay, marked “missing at source”. On: the next sync deletes them. A device with cables you documented, or devices on it, is kept and flagged. Big changes are still held for approval."
+        checked={removeMissing}
+        onChange={setRemoveMissing}
+      />
       {(kind === 'unifi' || kind === 'windows_dhcp') && <Checkbox label="Keep the current DHCP leases as a separate layer" hint="Shown on the address map and counted in each prefix's Used figure; never turned into documentation" checked={leases} onChange={setLeases} />}
       {remote && (
         <div className="grid-2">
@@ -247,11 +255,11 @@ export function SyncSummary({ s }: { s: Summary }) {
       {rows.length > 0 && (
         <table className="table small">
           <thead>
-            <tr><th>Records</th><th className="num">New</th><th className="num">Updated</th><th className="num">Gone at the source</th><th className="num">Back again</th></tr>
+            <tr><th>Records</th><th className="num">New</th><th className="num">Updated</th><th className="num">Gone at the source</th><th className="num">Back again</th><th className="num">Deleted</th></tr>
           </thead>
           <tbody>
             {rows.map(([k, c]) => (
-              <tr key={k}><td>{RECORD_LABEL[k] ?? k.replace(/_/g, ' ')}</td><td className="num">{c.created}</td><td className="num">{c.updated}</td><td className="num">{c.missing}</td><td className="num">{c.restored}</td></tr>
+              <tr key={k}><td>{RECORD_LABEL[k] ?? k.replace(/_/g, ' ')}</td><td className="num">{c.created}</td><td className="num">{c.updated}</td><td className="num">{c.missing}</td><td className="num">{c.restored}</td><td className="num">{c.removed ?? 0}</td></tr>
             ))}
           </tbody>
         </table>
@@ -359,6 +367,7 @@ export function IntegrationPage() {
               ['Site', i.options.site ? String(i.options.site) : null],
               ['DHCP', i.kind === 'unifi' ? (i.options.import_dhcp === false ? 'Not imported' : 'Ranges, DNS and fixed IPs imported') : null],
               ['Lease layer', i.options.lease_snapshot ? 'Kept' : null],
+              ['Gone from the source', i.options.remove_missing ? 'Deleted at the next sync' : 'Kept, marked missing'],
               ['Automatic sync', !windows ? (i.auto_sync ? `Every ${i.sync_interval_minutes} minutes` : 'Off') : null],
               ['Held above', `${i.hold_threshold_pct}% changed`],
             ]}

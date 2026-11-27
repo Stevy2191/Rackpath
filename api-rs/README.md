@@ -325,7 +325,7 @@ shows it as the author of every imported record.
 **Ownership rules:**
 - **An import owns only the facts it brings** (for a device: hostname, MAC, manufacturer, model, serial, firmware; for an address: MAC, DNS names, reservation flag). Codes, names you gave, placement, notes, roles and links are yours and never overwritten.
 - **Matching:** by integration and external id, so syncs update rather than duplicate. A hand-made device with the same MAC, a prefix with the same CIDR or an address already documented is adopted, not duplicated.
-- **Gone at the source:** marked `missing_from_source_at` and listed in the IPAM warnings. Nothing is deleted automatically.
+- **Gone at the source:** marked `missing_from_source_at` and listed in the IPAM warnings. With the integration option `remove_missing` (off by default) the sync deletes them instead, including records already marked. A device with documented cables or devices on it is kept, marked, with a warning. Deletions count toward the hold threshold, show in the dry run (`removed`), and are listed in the sync's change-history entry.
 - **Held imports:** if a sync would change more than `hold_threshold_pct` (default 50%) of the records the integration owns (and it owns at least 10), it's held; an admin approves or rejects it.
 - **Every sync** is one transaction and one grouped `sync` entry in the change history. `?dry_run=true` shows the result without saving.
 - **Leases** are a separate layer, replaced on every import, shown on the address grid, and never turned into documentation automatically.

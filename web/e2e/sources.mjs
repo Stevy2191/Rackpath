@@ -46,7 +46,7 @@ export default function (test, { base, shots, allow }) {
     await page.goto(`${base}/p/${s.pid}/integrations`);
     await page.getByRole('button', { name: 'Add integration' }).click();
     const dlg = page.getByRole('dialog');
-    await dlg.getByLabel('Source').selectOption('windows_dhcp');
+    await dlg.getByLabel('Source', { exact: true }).selectOption('windows_dhcp');
     await dlg.getByLabel('Name').fill('DHCP01');
     await page.getByRole('button', { name: 'Save' }).click();
     await page.getByRole('heading', { name: 'Import token' }).waitFor();

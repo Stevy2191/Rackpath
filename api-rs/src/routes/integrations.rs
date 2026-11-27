@@ -170,9 +170,10 @@ fn clean_options(kind: &str, v: &Value) -> AppResult<Value> {
         .as_object()
         .ok_or_else(|| AppError::bad("options must be an object"))?;
     let allowed: &[&str] = match kind {
-        "unifi" => &["site", "import_dhcp", "lease_snapshot"],
-        "windows_dhcp" => &["lease_snapshot", "dns_zones"],
-        "unifi_protect" | "unifi_access" => &["site"],
+        "unifi" => &["site", "import_dhcp", "lease_snapshot", "remove_missing"],
+        "windows_dhcp" => &["lease_snapshot", "dns_zones", "remove_missing"],
+        "unifi_protect" | "unifi_access" => &["site", "remove_missing"],
+        "zabbix" => &["remove_missing"],
         _ => &[],
     };
     for k in o.keys() {
@@ -191,7 +192,7 @@ fn clean_options(kind: &str, v: &Value) -> AppResult<Value> {
             return Err(AppError::bad("site is a UniFi site name such as default"));
         }
     }
-    for k in ["import_dhcp", "lease_snapshot"] {
+    for k in ["import_dhcp", "lease_snapshot", "remove_missing"] {
         if o.get(k).is_some_and(|v| !v.is_boolean()) {
             return Err(AppError::bad(format!("{k} must be true or false")));
         }
@@ -588,6 +589,7 @@ pub async fn run_import(
         project_id: i.project_id,
         space_id,
         full_addresses,
+        remove_missing: i.opt_bool("remove_missing", false),
     };
     let report = apply(&mut tx, &target, snap).await?;
     let hold = !force

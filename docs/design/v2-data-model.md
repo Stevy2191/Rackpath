@@ -690,7 +690,7 @@ Integrations follow one rule: **Rackpath reads from systems that already hold th
 ### Ownership rules (all imports)
 - Every imported record carries `source`, `source_integration_id` and an `external_id` (for Windows: server name plus scope ID, reservation IP and so on), so later imports update the same record instead of creating duplicates.
 - **An import owns only the facts it brought in** (for an address: MAC, DNS name, reservation flag, description from Windows). **People own everything else** (notes, the device and port it's linked to, location, role). A sync never overwrites people's fields.
-- **When a record disappears at the source**, Rackpath sets `missing_from_source_at` and shows a warning. It is never deleted automatically; a person confirms the removal.
+- **When a record disappears at the source**, Rackpath sets `missing_from_source_at` and shows a warning. By default it is never deleted automatically. An admin can turn on `remove_missing` for an integration; syncs then delete the records it owns that are gone, except devices with documented cables or devices on them (kept and flagged). Deletions count toward the hold threshold and are listed in the sync's audit entry.
 - An import is processed in one transaction and writes one grouped `sync` entry in the audit log, with counts and the changed records.
 - An import that would change more than a set share of a source's records at once (default 50%) is held for an admin to approve, so a broken script or wrong token can't wipe the documentation.
 
