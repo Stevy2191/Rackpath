@@ -8,6 +8,7 @@ import { PrefixPage } from './pages/ipam/Prefix';
 import { VlansPage } from './pages/network/Vlans';
 import { TemplatePage } from './pages/templates/Designer';
 import { TemplatesPage } from './pages/templates/Templates';
+import { ProjectSettingsPage } from './pages/ProjectSettings';
 import { DevicePage, DevicesPage } from './pages/devices/Devices';
 import { FloorPage } from './pages/places/Floor';
 import { LocationPage, LocationsPage } from './pages/places/Locations';
@@ -30,5 +31,6 @@ export const projectRoutes: ReactNode = (
     <Route path="vlans" element={<VlansPage />} />
     <Route path="templates" element={<TemplatesPage />} />
     <Route path="templates/:id" element={<TemplatePage />} />
+    <Route path="settings" element={<ProjectSettingsPage />} />
   </>
 );

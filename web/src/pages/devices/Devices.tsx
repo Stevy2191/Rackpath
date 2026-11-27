@@ -7,6 +7,7 @@ import { link } from '../../links';
 import type { Device, IpAddress } from '../../types';
 import { PortsPanel } from '../cabling/PortsPanel';
 import { DevicePowerPanel } from '../power/Power';
+import { DeviceTagsForm, TagChip, useTags } from '../ProjectSettings';
 import { Badge, Button, Card, ErrorBox, PageHeader, SelectField, Spinner, Table, Tabs, TextField, fmtTime, message, useLoad, useToast } from '../../ui';
 import { Crumbs, DeleteModal, KeyValues, useDeviceTypes } from '../places/common';
 import { DeviceEdit, DeviceForm, MoveDevice, STATUSES, type PlaceOption } from './DeviceForm';
@@ -36,6 +37,7 @@ export function DevicesPage() {
   const [params, setParams] = useSearchParams();
   const types = useDeviceTypes(project.id);
   const places = useLoad(() => api.get<PlaceOption[]>(`/api/projects/${project.id}/places`), [project.id]);
+  const tags = useTags(project.id);
   const [q, setQ] = useState(params.get('q') ?? '');
   const [rows, setRows] = useState<Device[] | null>(null);
   const [next, setNext] = useState<number | null>(null);
@@ -47,6 +49,7 @@ export function DevicesPage() {
     status: params.get('status') ?? undefined,
     location_id: params.get('location') ?? undefined,
     unplaced: params.get('unplaced') === '1' ? true : undefined,
+    tag: params.get('tag') ?? undefined,
   };
   const key = JSON.stringify(filters);
 
@@ -100,6 +103,14 @@ export function DevicesPage() {
           onChange={(e) => setParam('status', e.target.value)}
           options={[{ value: '', label: 'Any status' }, ...STATUSES.map((s) => ({ value: s, label: s }))]}
         />
+        {(tags.data?.length ?? 0) > 0 && (
+          <SelectField
+            label="Tag"
+            value={params.get('tag') ?? ''}
+            onChange={(e) => setParam('tag', e.target.value)}
+            options={[{ value: '', label: 'Any tag' }, ...(tags.data ?? []).map((t) => ({ value: t.name, label: t.name }))]}
+          />
+        )}
         <SelectField
           label="Where"
           value={params.get('unplaced') === '1' ? 'unplaced' : (params.get('location') ?? '')}
@@ -157,7 +168,7 @@ export function DevicePage() {
   const nav = useNavigate();
   const toast = useToast();
   const dev = useLoad(() => api.get<Device>(`/api/devices/${id}`), [id]);
-  const [modal, setModal] = useState<'edit' | 'move' | 'delete' | null>(null);
+  const [modal, setModal] = useState<'edit' | 'move' | 'delete' | 'tags' | null>(null);
   const [params, setParams] = useSearchParams();
   const tab = (params.get('tab') ?? 'overview') as 'overview' | 'ports' | 'power' | 'addresses';
   if (dev.error) return <ErrorBox error={dev.error} onRetry={dev.reload} />;
@@ -210,7 +221,15 @@ export function DevicePage() {
                   ['MAC', d.mac && <span className="mono">{d.mac}</span>],
                   ['OS', d.os],
                   ['Firmware', d.firmware],
-                  ['Tags', d.tags.length > 0 && <span className="row">{d.tags.map((t) => <Badge key={t.id}>{t.name}</Badge>)}</span>],
+                  [
+                'Tags',
+                (d.tags.length > 0 || d.can_edit) && (
+                  <span className="row">
+                    {d.tags.map((t) => <TagChip key={t.id} tag={t} />)}
+                    {d.can_edit && <Button variant="ghost" onClick={() => setModal('tags')}>{d.tags.length ? 'Change' : 'Add tags'}</Button>}
+                  </span>
+                ),
+              ],
                 ]}
               />
             </Card>
@@ -244,6 +263,7 @@ export function DevicePage() {
         {tab === 'power' && <DevicePowerPanel projectId={project.id} deviceId={d.id} typeKey={d.device_type.key} canEdit={!!d.can_edit} />}
         {tab === 'addresses' && <DeviceAddresses projectId={project.id} deviceId={d.id} />}
       </div>
+      {modal === 'tags' && <DeviceTagsForm projectId={project.id} deviceId={d.id} current={d.tags.map((t) => t.id)} onClose={() => setModal(null)} onSaved={dev.reload} />}
       {modal === 'edit' && <DeviceEdit device={d} onClose={() => setModal(null)} onSaved={dev.reload} />}
       {modal === 'move' && <MoveDevice device={d} projectId={project.id} onClose={() => setModal(null)} onSaved={dev.reload} />}
       {modal === 'delete' && (

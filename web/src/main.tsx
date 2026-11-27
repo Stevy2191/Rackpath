@@ -14,6 +14,8 @@ import { InvitePage } from './pages/Invite';
 import { ProjectsPage } from './pages/Projects';
 import { ProjectHome } from './pages/ProjectHome';
 import { projectRoutes } from './routes';
+import { UsersPage } from './pages/admin/Users';
+import { ActivityPage } from './pages/Activity';
 
 applyTheme(currentTheme());
 
@@ -52,6 +54,8 @@ function App() {
                 <Route index element={<Navigate to="/projects" replace />} />
                 <Route path="projects" element={<ProjectsPage />} />
                 <Route path="account" element={<AccountPage />} />
+                <Route path="admin/users" element={<UsersPage />} />
+                <Route path="activity" element={<ActivityPage />} />
                 <Route path="p/:projectId">
                   <Route index element={<ProjectHome />} />
                   {projectRoutes}
