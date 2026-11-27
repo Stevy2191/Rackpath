@@ -240,6 +240,8 @@ async fn serve(config: Config, pool: sqlx::SqlitePool) -> ExitCode {
     let state = AppState::new(pool, config);
     // Scheduled syncs of UniFi and Zabbix integrations, checked every minute.
     rackpath::routes::integrations::start_auto_sync(state.clone());
+    // Scheduled ping sweeps and SNMP polls (only where an admin set them up).
+    rackpath::discovery::start_schedule(state.clone());
     let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
     };

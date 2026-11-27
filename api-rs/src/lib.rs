@@ -5,6 +5,7 @@ pub mod auth;
 pub mod cabling;
 pub mod config;
 pub mod db;
+pub mod discovery;
 pub mod domain;
 pub mod error;
 pub mod export;
@@ -67,6 +68,7 @@ pub async fn ensure_owner(pool: &SqlitePool) -> Result<Option<String>, error::Ap
 /// and the built-in device templates.
 pub async fn prepare(pool: &SqlitePool) -> Result<(), error::AppError> {
     routes::device_types::seed_all(pool).await?;
+    discovery::close_interrupted_runs(pool).await?;
     routes::templates::seed_builtins(pool).await
 }
 

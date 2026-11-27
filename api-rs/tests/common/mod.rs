@@ -20,6 +20,13 @@ pub struct TestApp {
 }
 
 pub async fn spawn() -> TestApp {
+    spawn_with_network(std::sync::Arc::new(rackpath::discovery::net::RealNetwork)).await
+}
+
+/// Starts a server whose discovery talks to `network` (a fake, in tests).
+pub async fn spawn_with_network(
+    network: std::sync::Arc<dyn rackpath::discovery::net::Network>,
+) -> TestApp {
     let dir = tempfile::tempdir().unwrap();
     let config = Config {
         data_dir: dir.path().to_path_buf(),
@@ -41,7 +48,7 @@ pub async fn spawn() -> TestApp {
         .expect("owner created on first start");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr: SocketAddr = listener.local_addr().unwrap();
-    let state = AppState::new(pool.clone(), config);
+    let state = AppState::with_network(pool.clone(), config, network);
     tokio::spawn(rackpath::serve(listener, state, std::future::pending()));
     TestApp {
         base: format!("http://{addr}"),

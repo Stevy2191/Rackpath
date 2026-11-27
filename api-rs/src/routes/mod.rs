@@ -9,6 +9,7 @@ pub mod connections;
 pub mod csv_import;
 pub mod device_types;
 pub mod devices;
+pub mod discovery;
 pub mod exports;
 pub mod floor_plans;
 pub mod integrations;
@@ -279,6 +280,30 @@ pub fn router(state: AppState) -> Router {
         .route("/api/prefixes/{id}/next-free", get(ipam::next_free))
         .route("/api/prefixes/{id}/grid", get(ipam::grid))
         .route("/api/prefixes/{id}/free", get(ipam::free_addresses))
+        .route(
+            "/api/prefixes/{id}/discovery",
+            get(discovery::prefix_discovery).patch(discovery::update_prefix_discovery),
+        )
+        .route("/api/prefixes/{id}/scan", post(discovery::scan_prefix))
+        .route("/api/discovery-runs/{id}", get(discovery::get_run))
+        .route("/api/projects/{id}/discovered", get(discovery::list_hosts))
+        .route("/api/discovered/{id}", delete(discovery::delete_host))
+        .route(
+            "/api/discovered/{id}/document",
+            post(discovery::document_host),
+        )
+        .route("/api/discovered/{id}/ignore", post(discovery::ignore_host))
+        .route(
+            "/api/projects/{id}/snmp-sources",
+            get(discovery::list_sources).post(discovery::create_source),
+        )
+        .route(
+            "/api/snmp-sources/{id}",
+            patch(discovery::update_source).delete(discovery::delete_source),
+        )
+        .route("/api/snmp-sources/{id}/test", post(discovery::test_source))
+        .route("/api/snmp-sources/{id}/poll", post(discovery::poll_source))
+        .route("/api/snmp-sources/{id}/runs", get(discovery::source_runs))
         .route("/api/prefixes/{id}/ranges", post(ipam::create_range))
         .route(
             "/api/ranges/{id}",

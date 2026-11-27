@@ -544,6 +544,7 @@ pub async fn list_prefixes(
         addresses: i64,
         leases: i64,
         leased_only: i64,
+        found_only: i64,
     }
     let mut b: QueryBuilder<Sqlite> = QueryBuilder::new(concat!(
         "SELECT ",
@@ -555,7 +556,11 @@ pub async fn list_prefixes(
            (SELECT COUNT(DISTINCT l.addr_bin) FROM dhcp_lease_snapshots l WHERE l.space_id = p.space_id
              AND l.family = p.family AND l.addr_bin BETWEEN p.net_start AND p.net_end
              AND NOT EXISTS (SELECT 1 FROM ip_addresses a WHERE a.space_id = l.space_id
-                             AND a.family = l.family AND a.addr_bin = l.addr_bin)) AS leased_only
+                             AND a.family = l.family AND a.addr_bin = l.addr_bin)) AS leased_only,
+           (SELECT COUNT(*) FROM discovered_hosts d WHERE d.space_id = p.space_id AND d.family = p.family
+             AND d.addr_bin BETWEEN p.net_start AND p.net_end
+             AND NOT EXISTS (SELECT 1 FROM dhcp_lease_snapshots l WHERE l.space_id = d.space_id
+                             AND l.family = d.family AND l.addr_bin = d.addr_bin)) AS found_only
          FROM prefixes p WHERE p.project_id = "
     ));
     b.push_bind(project_id);
@@ -601,9 +606,11 @@ pub async fn list_prefixes(
         v["address_count"] = json!(r.addresses);
         v["lease_count"] = json!(r.leases);
         v["dhcp_pool_size"] = json!(pool as u64);
-        // In use: documented addresses plus DHCP leases (an address that is
-        // both counts once). A DHCP pool is room for clients, not usage.
-        let in_use = (r.addresses + r.leased_only) as u128;
+        v["discovered_count"] = json!(r.found_only);
+        // In use: documented addresses, DHCP leases and live hosts found by
+        // discovery (an address counts once). A DHCP pool is room for
+        // clients, not usage.
+        let in_use = (r.addresses + r.leased_only + r.found_only) as u128;
         v["in_use"] = json!(in_use as u64);
         if c.family() == Family::V4 {
             v["utilization"] = json!(utilization(in_use, usable));
@@ -962,7 +969,8 @@ pub async fn delete_prefix(
 }
 
 /// Address intervals a new address can't take in `p`: documented
-/// addresses, DHCP pools and reserved ranges, and the gateway.
+/// addresses, live hosts found by discovery, DHCP pools and reserved
+/// ranges, and the gateway.
 async fn taken_in(
     conn: &mut SqliteConnection,
     p: &Prefix,
@@ -971,8 +979,9 @@ async fn taken_in(
     let c = p.cidr();
     // One JSON value instead of one decoded row per address.
     let addrs: Option<String> = sqlx::query_scalar(
-        "SELECT json_group_array(hex(addr_bin)) FROM ip_addresses
-         WHERE space_id = ? AND family = ? AND addr_bin BETWEEN ? AND ?",
+        "SELECT json_group_array(hex(addr_bin)) FROM (
+           SELECT addr_bin FROM ip_addresses WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4
+           UNION SELECT addr_bin FROM discovered_hosts WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4)",
     )
     .bind(p.space_id)
     .bind(p.family)
@@ -1110,7 +1119,8 @@ pub async fn grid(
 }
 
 /// The free addresses in a prefix as runs, each inside a DHCP pool or not.
-/// Taken: documented addresses, current DHCP leases, the gateway, held
+/// Taken: documented addresses, current DHCP leases, live hosts found by
+/// discovery, the gateway, held
 /// ranges and smaller prefixes inside it (they have their own free list).
 pub async fn free_addresses(
     State(state): State<AppState>,
@@ -1125,7 +1135,8 @@ pub async fn free_addresses(
     let v6 = c.family() == Family::V6;
     let bins: Vec<Vec<u8>> = sqlx::query_scalar(
         "SELECT addr_bin FROM ip_addresses WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4
-         UNION SELECT addr_bin FROM dhcp_lease_snapshots WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4",
+         UNION SELECT addr_bin FROM dhcp_lease_snapshots WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4
+         UNION SELECT addr_bin FROM discovered_hosts WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4",
     )
     .bind(p.space_id)
     .bind(p.family)
