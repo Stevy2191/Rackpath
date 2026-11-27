@@ -30,7 +30,7 @@ export default function (test, { base, password, shots }) {
     await page.keyboard.type('acme');
     await page.getByLabel('Name').click();
     await page.keyboard.type('Acme Corp');
-    assert.equal(await page.getByLabel('Code').inputValue(), 'acme');
+    assert.equal(await page.getByLabel('Code').inputValue(), 'ACME'); // codes are capitals
     assert.equal(await page.getByLabel('Name').inputValue(), 'Acme Corp');
     await page.getByRole('button', { name: 'Create' }).click();
     await page.getByRole('heading', { name: 'Acme Corp' }).waitFor();
