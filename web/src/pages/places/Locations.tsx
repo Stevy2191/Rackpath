@@ -12,6 +12,18 @@ import { ReportButton } from '../Exports';
 
 type LocationRow = Location & { counts: NonNullable<Location['counts']> };
 
+/** Locations grouped by site, in the server's order (by site, then code;
+ * those without a site last). */
+function bySite(rows: LocationRow[]): { site: string | null; rows: LocationRow[] }[] {
+  const groups: { site: string | null; rows: LocationRow[] }[] = [];
+  for (const l of rows) {
+    const last = groups[groups.length - 1];
+    if (last && last.site === l.site) last.rows.push(l);
+    else groups.push({ site: l.site, rows: [l] });
+  }
+  return groups;
+}
+
 export function LocationsPage() {
   const { project, canWrite } = useProject();
   const nav = useNavigate();
@@ -21,27 +33,36 @@ export function LocationsPage() {
     <div>
       <PageHeader
         title="Locations"
-        subtitle="Sites, with their floors, rooms and racks"
+        subtitle="Each location is a building, with its floors, rooms and racks. Give buildings a site to group them."
         actions={canWrite && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>Add location</Button>}
       />
       <ErrorBox error={list.error} onRetry={list.reload} />
       {list.loading && !list.data && <Spinner />}
-      {list.data && (
-        <Table
-          rows={list.data}
-          rowKey={(l) => l.id}
-          onRowClick={(l) => nav(link.location(project.id, l.id))}
-          empty="No locations yet"
-          columns={[
-            { key: 'code', label: 'Code', render: (l) => <Link to={link.location(project.id, l.id)} className="mono">{l.code}</Link>, sort: (l) => l.code },
-            { key: 'name', label: 'Name', render: (l) => l.name, sort: (l) => l.name ?? '' },
-            { key: 'city', label: 'City', render: (l) => l.address_city, sort: (l) => l.address_city ?? '' },
-            { key: 'floors', label: 'Floors', render: (l) => l.counts.floors, sort: (l) => l.counts.floors, className: 'num' },
-            { key: 'racks', label: 'Racks', render: (l) => l.counts.racks, sort: (l) => l.counts.racks, className: 'num' },
-            { key: 'devices', label: 'Devices', render: (l) => l.counts.devices, sort: (l) => l.counts.devices, className: 'num' },
-          ]}
-        />
-      )}
+      {list.data &&
+        (() => {
+          const groups = bySite(list.data);
+          // No sites in use: one plain list, as before.
+          const grouped = groups.some((g) => g.site !== null);
+          return groups.map((g) => (
+            <section key={g.site ?? ''} className={grouped ? 'site-group' : undefined} aria-label={grouped ? g.site ?? 'No site' : undefined}>
+              {grouped && <h3 className="site-heading">{g.site ?? 'No site'}</h3>}
+              <Table
+                rows={g.rows}
+                rowKey={(l) => l.id}
+                onRowClick={(l) => nav(link.location(project.id, l.id))}
+                empty="No locations yet"
+                columns={[
+                  { key: 'code', label: 'Code', render: (l) => <Link to={link.location(project.id, l.id)} className="mono">{l.code}</Link>, sort: (l) => l.code },
+                  { key: 'name', label: 'Name', render: (l) => l.name, sort: (l) => l.name ?? '' },
+                  { key: 'city', label: 'City', render: (l) => l.address_city, sort: (l) => l.address_city ?? '' },
+                  { key: 'floors', label: 'Floors', render: (l) => l.counts.floors, sort: (l) => l.counts.floors, className: 'num' },
+                  { key: 'racks', label: 'Racks', render: (l) => l.counts.racks, sort: (l) => l.counts.racks, className: 'num' },
+                  { key: 'devices', label: 'Devices', render: (l) => l.counts.devices, sort: (l) => l.counts.devices, className: 'num' },
+                ]}
+              />
+            </section>
+          ));
+        })()}
       {adding && (
         <LocationForm
           projectId={project.id}
@@ -57,12 +78,16 @@ const LOCATION_FIELDS = [
   'code', 'name', 'address_street', 'address_city', 'address_state', 'address_postcode', 'address_country',
   'contact_name', 'contact_phone', 'contact_email',
   'isp_primary_name', 'isp_primary_circuit', 'isp_primary_contact',
-  'isp_secondary_name', 'isp_secondary_circuit', 'isp_secondary_contact', 'notes',
+  'isp_secondary_name', 'isp_secondary_circuit', 'isp_secondary_contact', 'notes', 'site',
 ] as const;
 
 function LocationForm({ projectId, existing, onClose, onSaved }: { projectId: number; existing?: Location; onClose: () => void; onSaved: (l: Location) => void }) {
   const init = Object.fromEntries(LOCATION_FIELDS.map((k) => [k, (existing?.[k] as string | null) ?? ''])) as Record<(typeof LOCATION_FIELDS)[number], string>;
   const f = useForm(init);
+  // Sites already used in the project, offered as suggestions so a campus's
+  // buildings end up under one spelling.
+  const all = useLoad(() => api.get<Location[]>(`/api/projects/${projectId}/locations`), [projectId]);
+  const sites = [...new Set((all.data ?? []).map((l) => l.site).filter((s): s is string => !!s))];
   return (
     <FormModal
       title={existing ? `Edit ${existing.code}` : 'Add location'}
@@ -79,6 +104,18 @@ function LocationForm({ projectId, existing, onClose, onSaved }: { projectId: nu
         <TextField label="Code" required maxLength={16} hint="Short and unique, e.g. HQ" {...f.bind('code')} />
         <TextField label="Name" {...f.bind('name')} />
       </div>
+      <TextField
+        label="Site"
+        maxLength={100}
+        list="location-sites"
+        hint="Optional. Buildings with the same site are grouped together, e.g. the buildings of one campus."
+        {...f.bind('site')}
+      />
+      <datalist id="location-sites">
+        {sites.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
       <h4 className="form-section">Address</h4>
       <TextField label="Street" {...f.bind('address_street')} />
       <div className="grid-2">
@@ -165,6 +202,7 @@ export function LocationPage() {
         <Card title="Details">
           <KeyValues
             rows={[
+              ['Site', l.site],
               ['Address', addr],
               ['Contact', [l.contact_name, l.contact_phone, l.contact_email].filter(Boolean).join(' · ')],
               ['Primary ISP', [l.isp_primary_name, l.isp_primary_circuit, l.isp_primary_contact].filter(Boolean).join(' · ')],

@@ -11,6 +11,7 @@ interface LocationSummary {
   code: string;
   name: string | null;
   address_city: string | null;
+  site: string | null;
   counts: { floors: number; rooms: number; racks: number; devices: number };
 }
 
@@ -36,7 +37,9 @@ export function ProjectHome() {
             <Card title="Placed devices"><div className="stat">{totals.devices}</div></Card>
           </div>
           {locations.data.length === 0 ? (
-            <Empty title="No locations yet">Add the first site to start documenting.</Empty>
+            <Empty title="No locations yet">
+              Add a location for each building under <Link to={`/p/${project.id}/locations`}>Locations</Link> to start documenting.
+            </Empty>
           ) : (
             <div className="grid-3">
               {locations.data.map((l) => (
@@ -47,6 +50,7 @@ export function ProjectHome() {
                       <strong className="mono">{l.code}</strong>
                     </div>
                     <div>{l.name}</div>
+                    {l.site && <div className="small muted">{l.site}</div>}
                     <div className="small muted">
                       {l.counts.floors} floor(s) · {l.counts.racks} rack(s) · {l.counts.devices} device(s)
                     </div>

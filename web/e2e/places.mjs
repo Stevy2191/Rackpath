@@ -29,6 +29,33 @@ export default function (test, { base, shots }) {
     assert.match(await page.locator('.crumbs').innerText(), /HQ/);
   });
 
+  test('buildings grouped by site on the locations list', async (page) => {
+    // In a project of its own, so ACME's list stays ungrouped for later tests.
+    const r = await page.request.post(`${base}/api/projects`, { data: { code: 'campus', name: 'Campus' } });
+    assert.equal(r.status(), 201, await r.text());
+    const cid = (await r.json()).id;
+    const add = async (code, site) => {
+      await page.goto(`${base}/p/${cid}/locations`);
+      await page.getByRole('button', { name: 'Add location' }).click();
+      await page.getByLabel('Code').fill(code);
+      if (site) await page.getByLabel('Site').fill(site);
+      await page.getByRole('button', { name: 'Save' }).click();
+      await page.getByRole('heading', { name: new RegExp(code.toUpperCase()) }).waitFor();
+    };
+    await add('cthse', 'Main campus');
+    await add('annex', 'Main campus');
+    await add('barn');
+    // The site shows on the location's page.
+    await page.goto(`${base}/p/${cid}/locations`);
+    await page.locator('.site-group').first().waitFor();
+    assert.deepEqual(await page.locator('.site-heading').allTextContents(), ['Main campus', 'No site']);
+    const main = page.getByRole('region', { name: 'Main campus' });
+    assert.deepEqual(await main.locator('tbody tr td:first-child').allTextContents(), ['ANNEX', 'CTHSE']);
+    await main.getByRole('link', { name: 'CTHSE' }).click();
+    await page.getByText('Main campus').waitFor();
+    await snap(page, 'location-site');
+  });
+
   test('upload a floor plan image', async (page) => {
     await page.locator('input[type=file]').setInputFiles({ name: 'plan.png', mimeType: 'image/png', buffer: png(1000, 600) });
     await page.locator('svg.plan image').waitFor();

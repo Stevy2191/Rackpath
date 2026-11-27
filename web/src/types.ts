@@ -71,6 +71,8 @@ export interface Location {
   isp_secondary_circuit: string | null;
   isp_secondary_contact: string | null;
   notes: string | null;
+  /** Groups a campus's buildings; display only. */
+  site: string | null;
   path?: string;
   can_edit?: boolean;
   counts?: { floors: number; rooms: number; racks: number; devices: number };

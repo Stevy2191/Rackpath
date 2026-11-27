@@ -1262,3 +1262,103 @@ async fn upgrades_a_phase_1_database() {
     assert_eq!(st, StatusCode::CREATED);
     assert_eq!(d["path"], "HOME/UNPLACED/USW-24");
 }
+
+#[tokio::test]
+async fn locations_can_be_grouped_by_site() {
+    let app = spawn().await;
+    let c = app.owner().await;
+    let p = app.project(&c, "CAMPUS").await;
+    let loc = |code: &str, site: Option<&str>| {
+        let mut body = json!({ "code": code });
+        if let Some(s) = site {
+            body["site"] = json!(s);
+        }
+        body
+    };
+    let path = format!("/api/projects/{p}/locations");
+    let (st, annex) = app
+        .post(&c, &path, loc("ANNEX", Some("  Main campus ")))
+        .await;
+    assert_eq!(st, StatusCode::CREATED, "{annex}");
+    assert_eq!(annex["site"], "Main campus");
+    let (_, ch) = app.post(&c, &path, loc("CTHSE", Some("Main campus"))).await;
+    let (_, barn) = app.post(&c, &path, loc("BARN", None)).await;
+    let (_, depot) = app.post(&c, &path, loc("DEPOT", Some("Annex yard"))).await;
+    assert_eq!(barn["site"], Value::Null);
+
+    // Listed by site, then code; buildings without a site last.
+    let (_, list) = app.get(&c, &path).await;
+    let order: Vec<_> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| {
+            (
+                l["site"].as_str().unwrap_or("-").to_string(),
+                l["code"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        order,
+        [
+            ("Annex yard", "DEPOT"),
+            ("Main campus", "ANNEX"),
+            ("Main campus", "CTHSE"),
+            ("-", "BARN")
+        ]
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+    );
+
+    // The site doesn't change paths.
+    assert_eq!(ch["path"], "CAMPUS/CTHSE");
+
+    // Changing and clearing it; other fields stay; the change is in the history.
+    let id = depot["id"].as_i64().unwrap();
+    let (st, moved) = app
+        .patch(
+            &c,
+            &format!("/api/locations/{id}"),
+            json!({ "site": "Main campus" }),
+        )
+        .await;
+    assert_eq!(
+        (st, moved["site"].as_str()),
+        (StatusCode::OK, Some("Main campus"))
+    );
+    let (_, cleared) = app
+        .patch(&c, &format!("/api/locations/{id}"), json!({ "site": "" }))
+        .await;
+    assert_eq!(cleared["site"], Value::Null);
+    let (_, kept) = app
+        .patch(
+            &c,
+            &format!("/api/locations/{id}"),
+            json!({ "name": "Depot" }),
+        )
+        .await;
+    assert_eq!(
+        (kept["site"].clone(), kept["name"].as_str()),
+        (Value::Null, Some("Depot"))
+    );
+    let (_, log) = app
+        .get(
+            &c,
+            &format!("/api/audit?resource_type=location&resource_id={id}"),
+        )
+        .await;
+    assert!(
+        log["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["changes"]["site"].is_array()),
+        "{log}"
+    );
+
+    // At most 100 characters.
+    let (st, err) = app
+        .post(&c, &path, loc("LONG", Some(&"x".repeat(101))))
+        .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST, "{err}");
+}
