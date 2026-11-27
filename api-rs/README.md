@@ -56,20 +56,23 @@ With Docker:
 
 ```bash
 # from the repository root: builds the web app and the server into one image
-docker build -t rackpath-v2 .
-docker run -p 8080:8080 -v rackpath-data:/data -e RACKPATH_ENCRYPTION_KEY=... rackpath-v2
+docker build -t rackpath .
+docker run -p 8080:8080 -v rackpath-data:/data -e RACKPATH_ENCRYPTION_KEY=... rackpath
 ```
+
+The published image is `ghcr.io/stevy2191/rackpath` (built from `main`); the
+root [README](../README.md#-install) covers installing it with Compose.
 
 ### Settings (environment variables)
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `RACKPATH_ENCRYPTION_KEY` | **required** | 64 hex characters. Encrypts stored credentials (two-factor secrets and integration API keys, tokens and passwords). Same format and key as the v1 API. **Back it up with the database**: without it, two-factor secrets and integration credentials can't be read (users re-enrol; credentials are entered again) |
-| `RACKPATH_DATA_DIR` | `./data` | Holds `rackpath.db` (and uploads in later phases) |
+| `RACKPATH_ENCRYPTION_KEY` | **required** | 64 hex characters. Encrypts stored credentials (two-factor secrets and integration API keys, tokens and passwords). Same format and setting as v1 builds that encrypted their own secrets, so use v1's key when importing from one. **Back it up with the database**: without it, two-factor secrets and integration credentials can't be read (users re-enrol; credentials are entered again) |
+| `RACKPATH_DATA_DIR` | `./data` | Holds `rackpath.db` and uploaded floor plans |
 | `RACKPATH_DATABASE` | `<data dir>/rackpath.db` | Database file |
 | `RACKPATH_BIND` | `0.0.0.0:8080` | Listen address |
 | `RACKPATH_WEB_DIR` | `./web` (`/app/web` in the image) | The built web app (`web/dist`). Without it, only the API is served |
-| `RACKPATH_PUBLIC_URL` | none | e.g. `https://rackpath.example.com`. Used for invitation links |
+| `RACKPATH_PUBLIC_URL` | the request's address | e.g. `https://rackpath.example.com`. Used for invitation links, short links and the QR codes in PDF reports |
 | `RACKPATH_COOKIE_SECURE` | `false` | Set `true` when served over HTTPS |
 | `RACKPATH_TRUST_PROXY` | `false` | Take the client IP from `X-Forwarded-For` (only behind your own reverse proxy) |
 | `RACKPATH_AUDIT_RETENTION_DAYS` | keep forever | Delete change history older than this |
@@ -84,23 +87,38 @@ rackpath                         # same as: rackpath serve
 rackpath reset-password admin    # new temporary password; signs the user out everywhere
 rackpath backup /backups/rp.db   # consistent copy, safe while the server runs
 rackpath import-v1 --from mysql://user:pass@host:3306/rackpath [--dry-run]
+                                 # reads RACKPATH_V1_JWT_SECRET (see below)
 rackpath version
 ```
 
 ### Bringing v1 data across
 
 `rackpath import-v1` reads a v1 (Node + MariaDB) database and writes it into
-a **fresh** v2 database (it refuses one that already has projects). Run it
-with the same `RACKPATH_ENCRYPTION_KEY` v1 used, so integration secrets stay
-readable. `--dry-run` runs the whole import on a throwaway copy and prints
-what it would bring across. The v1 database must be at its last migration
-(0068): start the latest v1 once first.
+a **fresh** v2 database (it refuses one that already has projects).
+`--dry-run` runs the whole import on a throwaway copy and prints what it
+would bring across. Running `deploy.sh` in a v1 install folder does all of
+this for you (see the root [README](../README.md#coming-from-rackpath-v1)).
+
+- **Which v1:** the last v1 release or later (v1 migration 0064 applied). If
+  it's older, start the latest v1 once so its database migrates.
+- **Integration secrets:** the last v1 release kept them encrypted with its
+  JWT secret. Set `RACKPATH_V1_JWT_SECRET` to v1's `RACKPATH_JWT_SECRET` (from
+  v1's `.env`) and they're decrypted and stored with v2's key. (v1 builds that
+  had their own `RACKPATH_ENCRYPTION_KEY` used v2's format: run v2 with that
+  same key instead.) A secret that can't be read is left out and listed, to
+  be entered again; the rest of the import carries on.
+- **Reaching v1's database:** the URL is as seen from where `rackpath` runs.
+  In Docker, in the same Compose project as v1 (as `deploy.sh` sets it up),
+  that's `rackpath-db:3306`; otherwise use the v1 host's address and v1's
+  published `DB_PORT`. Percent-encode special characters in the password.
 
 Everything goes through the v2 API, with its checks, so the result is what
 you'd get typing it in. What it maps:
 
 - **Users** keep their passwords (v1 hashes are upgraded at their next
   sign-in) and become account admins, as everyone in v1 could do everything.
+  A v1 user whose name is already taken in v2 (usually `admin`, v2's owner)
+  is matched to that account, which keeps its v2 password.
 - **Projects** get a code from their name. Site details (address, contact,
   ISPs) move to the first location; LAN and WAN become prefixes with their
   gateway, and the WAN address is documented.
@@ -114,11 +132,17 @@ you'd get typing it in. What it maps:
 - **Power:** UPS and PDU figures and runtime curves, outlets from outlet
   groups, an inlet and a power cord for each recorded feed, battery modules
   joined to their UPS.
+- **Integrations** from platforms v2 doesn't have (NetBox, LibreNMS, SNMP,
+  custom) are listed and skipped.
 - **Ports and connections** (one cable per pair; Cat5e/Cat6/Cat6a types kept),
   VLANs (their subnet becomes a prefix), tags, cameras and Access devices,
   custom rack devices and catalogue entries (as templates), diagrams (nodes,
-  links, labels, zones), integrations (secrets copied; automatic sync off)
+  links, labels, zones), integrations (secrets as above; automatic sync off)
   and the activity log (as history entries at their original times).
+
+Not brought across: pictures uploaded in v1 (rack device and slot images,
+diagram icons; they stay in v1's uploads volume), scans, SNMP credential
+macros and camera stream logins, which v2 doesn't keep.
 
 Anything v2 refuses is listed at the end, and the rest carries on. The work
 is done by a temporary `v1-import` account, removed afterwards; the history
