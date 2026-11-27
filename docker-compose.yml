@@ -1,5 +1,9 @@
 # Rackpath: one container. The server serves the web app and the API, and
 # keeps everything in one SQLite file in the rackpath-data volume.
+#
+# Optional: a Caddy container in front for HTTPS with a self-signed
+# certificate. It runs when .env has COMPOSE_PROFILES=caddy (deploy.sh sets
+# this when you choose it).
 services:
   rackpath:
     image: ${GHCR_NAMESPACE:-ghcr.io/stevy2191}/rackpath:${IMAGE_TAG:-latest}
@@ -8,7 +12,9 @@ services:
     container_name: rackpath
     restart: unless-stopped
     ports:
-      - "${RACKPATH_PORT:-8080}:8080"
+      # deploy.sh sets RACKPATH_BIND_ADDRESS=127.0.0.1 with Caddy, so only
+      # Caddy (and this machine) can reach Rackpath directly.
+      - "${RACKPATH_BIND_ADDRESS:-0.0.0.0}:${RACKPATH_PORT:-8080}:8080"
     environment:
       # Required: 64 hex characters (openssl rand -hex 32). Encrypts the
       # integration secrets you store. Keep it with your backups.
@@ -25,5 +31,31 @@ services:
     volumes:
       - rackpath-data:/data
 
+  # HTTPS with a certificate from Caddy's own local certificate authority.
+  # Browsers warn until they trust that authority's root certificate (see
+  # the README). Plain HTTP on RACKPATH_HTTP_PORT redirects to HTTPS.
+  caddy:
+    image: caddy:2
+    profiles: ["caddy"]
+    container_name: rackpath-caddy
+    restart: unless-stopped
+    command:
+      - caddy
+      - reverse-proxy
+      - --from
+      - https://${RACKPATH_HOSTNAME:-localhost}:${RACKPATH_HTTPS_PORT:-443}
+      - --to
+      - rackpath:8080
+      - --internal-certs
+    ports:
+      - "${RACKPATH_HTTP_PORT:-80}:80"
+      - "${RACKPATH_HTTPS_PORT:-443}:${RACKPATH_HTTPS_PORT:-443}"
+    volumes:
+      # Caddy's certificate authority and certificates.
+      - caddy-data:/data
+    depends_on:
+      - rackpath
+
 volumes:
   rackpath-data:
+  caddy-data:

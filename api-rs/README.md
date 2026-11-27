@@ -74,7 +74,7 @@ root [README](../README.md#-install) covers installing it with Compose.
 | `RACKPATH_WEB_DIR` | `./web` (`/app/web` in the image) | The built web app (`web/dist`). Without it, only the API is served |
 | `RACKPATH_PUBLIC_URL` | the request's address | e.g. `https://rackpath.example.com`. Used for invitation links, short links and the QR codes in PDF reports |
 | `RACKPATH_COOKIE_SECURE` | `false` | Set `true` when served over HTTPS |
-| `RACKPATH_TRUST_PROXY` | `false` | Take the client IP from `X-Forwarded-For` (only behind your own reverse proxy) |
+| `RACKPATH_TRUST_PROXY` | `false` | Take the client IP from the last `X-Forwarded-For` entry, the one your proxy added (only behind your own reverse proxy, with Rackpath's port reachable only by it) |
 | `RACKPATH_AUDIT_RETENTION_DAYS` | keep forever | Delete change history older than this |
 | `RACKPATH_LOG` | `info` | Log filter, e.g. `debug` |
 

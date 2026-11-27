@@ -30,17 +30,22 @@ impl RequestCtx {
     }
 }
 
+/// The client's address. Behind a trusted proxy it's the last
+/// X-Forwarded-For entry: the one the proxy itself added. Earlier entries
+/// come from the client (Nginx and most proxies append to what the client
+/// sent), so they could be anything. Behind a chain of proxies this is the
+/// nearest one's client, i.e. the previous proxy.
 fn client_ip(headers: &HeaderMap, peer: Option<SocketAddr>, trust_proxy: bool) -> Option<String> {
     if trust_proxy {
-        if let Some(forwarded) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-            if let Some(first) = forwarded
-                .split(',')
-                .next()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-            {
-                return Some(first.to_string());
-            }
+        let last = headers
+            .get_all("x-forwarded-for")
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .flat_map(|v| v.split(','))
+            .map(str::trim)
+            .rfind(|s| !s.is_empty());
+        if let Some(ip) = last.and_then(|s| s.parse::<std::net::IpAddr>().ok()) {
+            return Some(ip.to_string());
         }
     }
     peer.map(|p| p.ip().to_string())
@@ -132,4 +137,53 @@ pub fn security_headers() -> Vec<(header::HeaderName, HeaderValue)> {
             HeaderValue::from_static("same-origin"),
         ),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headers(values: &[&str]) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        for v in values {
+            h.append("x-forwarded-for", HeaderValue::from_str(v).unwrap());
+        }
+        h
+    }
+
+    fn peer() -> Option<SocketAddr> {
+        Some("10.0.0.5:4000".parse().unwrap())
+    }
+
+    #[test]
+    fn behind_a_proxy_the_last_entry_is_the_client() {
+        // The proxy appended the real address to one the client made up.
+        let h = headers(&["6.6.6.6, 203.0.113.7"]);
+        assert_eq!(client_ip(&h, peer(), true).as_deref(), Some("203.0.113.7"));
+        // Across several header lines too.
+        let h = headers(&["6.6.6.6", "203.0.113.7"]);
+        assert_eq!(client_ip(&h, peer(), true).as_deref(), Some("203.0.113.7"));
+        // A single entry, as Caddy sends.
+        let h = headers(&["2001:db8::1"]);
+        assert_eq!(client_ip(&h, peer(), true).as_deref(), Some("2001:db8::1"));
+    }
+
+    #[test]
+    fn falls_back_to_the_connection() {
+        assert_eq!(
+            client_ip(&headers(&[]), peer(), true).as_deref(),
+            Some("10.0.0.5")
+        );
+        // Not an address: ignored rather than recorded.
+        let h = headers(&["1.2.3.4, not-an-ip"]);
+        assert_eq!(client_ip(&h, peer(), true).as_deref(), Some("10.0.0.5"));
+        let h = headers(&["1.2.3.4, "]);
+        assert_eq!(client_ip(&h, peer(), true).as_deref(), Some("1.2.3.4"));
+    }
+
+    #[test]
+    fn without_a_trusted_proxy_the_header_is_ignored() {
+        let h = headers(&["203.0.113.7"]);
+        assert_eq!(client_ip(&h, peer(), false).as_deref(), Some("10.0.0.5"));
+    }
 }

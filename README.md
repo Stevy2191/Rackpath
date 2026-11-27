@@ -77,10 +77,10 @@ curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/deploy.sh |
 ```
 
 This creates a `rackpath/` folder with `docker-compose.yml` and `.env` (with a
-new encryption key), asks for the web port and the address people will use,
-starts Rackpath, and prints the first password for `admin`. You choose your
-own password at the first sign-in. Run it again any time: it keeps your `.env`
-and key.
+new encryption key), asks how people will reach Rackpath (see
+[HTTPS](#https)), starts Rackpath, and prints the first password for `admin`.
+You choose your own password at the first sign-in. Run it again any time: it
+keeps your `.env` and key, and lets you change your answers.
 
 ### By hand
 
@@ -116,13 +116,45 @@ instead of building). Set the port and address in `.env` (see below).
 | Setting | Default | |
 |---|---|---|
 | `RACKPATH_ENCRYPTION_KEY` | required | 64 hex characters (`openssl rand -hex 32`). Encrypts stored integration secrets. **Back it up with your data.** |
-| `RACKPATH_PORT` | `8080` | Host port (Compose) |
+| `RACKPATH_HTTPS_MODE` | `http` | `caddy`, `proxy` or `http` (see [HTTPS](#https)); `deploy.sh` sets the rest to match |
+| `RACKPATH_PORT` | `8080` | Host port for Rackpath (Compose) |
+| `RACKPATH_BIND_ADDRESS` | `0.0.0.0` | Where that port is published; `127.0.0.1` with Caddy |
+| `COMPOSE_PROFILES` | empty | `caddy` runs the Caddy container |
+| `RACKPATH_HOSTNAME` | | Caddy: the name or IP address its certificate is for |
+| `RACKPATH_HTTPS_PORT`, `RACKPATH_HTTP_PORT` | `443`, `80` | Caddy's ports (HTTP redirects to HTTPS) |
 | `RACKPATH_PUBLIC_URL` | the request's address | The address people use, for invitation links and report QR codes |
 | `RACKPATH_COOKIE_SECURE` | `false` | `true` when Rackpath is reached over HTTPS |
-| `RACKPATH_TRUST_PROXY` | `false` | `true` behind a reverse proxy that sets `X-Forwarded-For` |
+| `RACKPATH_TRUST_PROXY` | `false` | `true` behind a reverse proxy that sets `X-Forwarded-For`; the last entry (the one the proxy added) is used |
 | `RACKPATH_AUDIT_RETENTION_DAYS` | keep forever | Delete change history older than this |
 
 All settings are in [api-rs/README.md](api-rs/README.md#settings-environment-variables).
+
+### HTTPS
+
+The install script asks which of these you want:
+
+1. **Caddy with a self-signed certificate.** A Caddy container serves HTTPS
+   on port 443 (HTTP on 80 redirects), with a certificate from Caddy's own
+   certificate authority for the name or IP address you give. Rackpath itself
+   is then published only on `127.0.0.1`. Browsers warn until they trust that
+   authority; to stop the warnings, copy its root certificate out and install
+   it as a trusted root on the computers that use Rackpath (or through Group
+   Policy):
+
+   ```bash
+   docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt rackpath-ca.crt
+   ```
+
+2. **Your own reverse proxy** (Nginx Proxy Manager, Traefik, …). Point it at
+   `http://<this server>:<RACKPATH_PORT>` and give it the certificate; the
+   script asks for the HTTPS address people will use. Rackpath trusts the
+   proxy's `X-Forwarded-For`, so let only the proxy reach that port (a
+   firewall rule).
+
+3. **Plain HTTP, for testing only.** Passwords travel unencrypted.
+
+To change later, run `deploy.sh` again (or edit `.env` and
+`docker compose up -d`).
 
 ### Backups
 
