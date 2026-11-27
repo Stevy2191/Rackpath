@@ -12,6 +12,7 @@ import { Badge, Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, T
 import { KeyValues } from '../places/common';
 import { AddressForm, PrefixForm, RANGE_KINDS, RangeForm, useVlans } from './Forms';
 import { AddressTable, Utilization, usageDetail } from './Ipam';
+import { DiscoveryCard } from './Discovery';
 
 type Modal = { t: 'edit' } | { t: 'delete' } | { t: 'range'; r?: IpRange } | { t: 'address'; address?: string; next?: boolean } | { t: 'child' };
 
@@ -121,6 +122,7 @@ export function PrefixPage() {
           />
         </Card>
       )}
+      <DiscoveryCard prefixId={p.id} onChanged={reload} />
       <FreeAddresses prefixId={p.id} version={version} canEdit={p.can_edit} onUse={(address) => setModal({ t: 'address', address })} />
       <Card title={`Addresses${p.addresses_truncated ? ' (first ones)' : ''}`} className="mt" actions={p.can_edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal({ t: 'address' })}>Add address</Button>}>
         {p.addresses.length === 0 ? <Empty title="No addresses documented here" /> : <AddressTable rows={p.addresses} projectId={project.id} onOpen={(a: IpAddress) => nav(link.address(project.id, a.id))} />}

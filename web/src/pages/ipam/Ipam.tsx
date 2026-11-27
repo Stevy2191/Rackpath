@@ -10,8 +10,9 @@ import { ADDRESS_KIND_LABEL } from '../../types';
 import { Badge, Button, Empty, ErrorBox, PageHeader, SelectField, Spinner, Table, Tabs, TextField, message, useLoad } from '../../ui';
 import { AddressForm, PrefixForm, SpaceForm, useSpaces, useVlans } from './Forms';
 import { CsvButton } from '../Exports';
+import { DiscoveredList, SnmpSources } from './Discovery';
 
-type Tab = 'prefixes' | 'addresses' | 'warnings' | 'spaces';
+type Tab = 'prefixes' | 'addresses' | 'discovered' | 'snmp' | 'warnings' | 'spaces';
 
 export function IpamPage() {
   const { project, canWrite } = useProject();
@@ -23,7 +24,7 @@ export function IpamPage() {
     <div>
       <PageHeader
         title="IP addresses"
-        subtitle="Prefixes, ranges and addresses as documented; nothing here pings or scans"
+        subtitle="Prefixes, ranges and addresses as documented. Nothing is scanned unless an admin turns it on for a prefix"
         actions={
           <>
             <CsvButton projectId={project.id} table="prefixes" label="Prefixes CSV" />
@@ -41,6 +42,8 @@ export function IpamPage() {
         tabs={[
           { id: 'prefixes', label: 'Prefixes' },
           { id: 'addresses', label: 'Addresses' },
+          { id: 'discovered', label: 'Discovered' },
+          { id: 'snmp', label: 'SNMP devices' },
           { id: 'warnings', label: 'Warnings' },
           { id: 'spaces', label: 'Spaces' },
         ]}
@@ -50,6 +53,8 @@ export function IpamPage() {
       <div className="tab-panel">
         {tab === 'prefixes' && <PrefixTree />}
         {tab === 'addresses' && <AddressList />}
+        {tab === 'discovered' && <DiscoveredList />}
+        {tab === 'snmp' && <SnmpSources />}
         {tab === 'warnings' && <WarningList />}
         {tab === 'spaces' && <SpaceList />}
       </div>
@@ -70,11 +75,13 @@ export function Utilization({ value, detail }: { value?: number; detail?: string
   );
 }
 
-/** "12 in use: 5 documented, 9 leased (2 both); DHCP pool of 249". */
-export function usageDetail(p: { in_use: number; address_count: number; lease_count: number; dhcp_pool_size: number }): string {
-  const both = p.address_count + p.lease_count - p.in_use;
+/** "12 in use: 5 documented, 9 leased (2 both), 1 found by scans; DHCP pool of 249". */
+export function usageDetail(p: { in_use: number; address_count: number; lease_count: number; dhcp_pool_size: number; discovered_count?: number }): string {
+  const found = p.discovered_count ?? 0;
+  const both = p.address_count + p.lease_count + found - p.in_use;
   let s = `${p.in_use} in use: ${p.address_count} documented, ${p.lease_count} leased`;
   if (both > 0) s += ` (${both} both)`;
+  if (found > 0) s += `, ${found} found by scans`;
   if (p.dhcp_pool_size) s += `; DHCP pool of ${p.dhcp_pool_size}`;
   return s;
 }

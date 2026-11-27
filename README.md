@@ -21,10 +21,13 @@ records what you have, where it is and how it's connected: sites, floors and
 rooms, racks and the devices in them, every port and cable, IP plans, VLANs
 and Wi-Fi, power, and network diagrams.
 
-Rackpath documents your network; it doesn't probe or monitor it. It never
-scans your LAN, polls devices or stores device logins. Inventory comes from
-you and from systems you already run: UniFi, Zabbix and your Windows DHCP/DNS
-servers, which push to Rackpath rather than being logged in to.
+Rackpath documents your network; it isn't a monitoring system. Inventory
+comes from you and from systems you already run: UniFi, Zabbix and your
+Windows DHCP/DNS servers, which push to Rackpath rather than being logged in
+to. To find what nobody wrote down, an admin can turn on **discovery**: a
+gentle ping sweep of a prefix and read-only SNMP reads of your routers' ARP
+tables and switches' MAC address tables. Nothing is scanned until you turn it
+on, and what it finds waits for you to review it.
 
 It's one small container (or one binary) with its data in one SQLite file.
 
@@ -39,7 +42,10 @@ It's one small container (or one binary) with its data in one SQLite file.
   SFP/SFP+/SFP28/QSFP, LC/SC/MPO, Cat5e–Cat8, OM1–OM5, OS1/OS2, DAC/AOC), and
   end-to-end tracing of every chain
 - 🌐 **IP address management**: prefixes that nest by themselves, DHCP pools
-  and reserved ranges, an address map, next free address, and warnings
+  and reserved ranges, an address map, free addresses, and warnings
+- 📡 **Discovery** (opt-in): ping sweeps of a prefix and SNMP reads of ARP and
+  MAC address tables, by hand or on a schedule; found hosts are listed for
+  you to document or ignore, with their MAC and switch port
 - 🏷️ **VLANs and Wi-Fi networks** on ports, and **tags** on devices
 - 🧩 **Device templates** with a port layout designer; editing a template
   updates every device made from it, after showing exactly what changes
@@ -204,9 +210,21 @@ Leave out `--dry-run` to import. Details are in
 
 ## 🔒 Security
 
-- **Nothing probes your network**, and no device logins are stored. The only
-  secrets are the integration keys you give it, encrypted with AES-256-GCM
-  and never sent back to the browser.
+- **Nothing probes your network unless you turn on discovery.** Scanning is
+  off for every prefix until an admin turns it on, and then it only sweeps
+  private IPv4 prefixes of /22 or smaller (never IPv6, never public
+  addresses), one ping per address, 32 at a time, at most hourly on a
+  schedule. SNMP is read-only (no SET anywhere in Rackpath), only sent to
+  private IP addresses you add, and SNMPv3 with encryption is the default;
+  v2c works with a warning. Scans never add documentation: what they find
+  goes to a review list. Every scan, poll and setting change is in the
+  activity log.
+- **Secrets** (integration keys, SNMP communities and SNMPv3 passwords) are
+  encrypted with AES-256-GCM and never sent back to the browser.
+- **No extra container privileges**: pings use unprivileged ICMP sockets
+  (the `net.ipv4.ping_group_range` sysctl in `docker-compose.yml`, which only
+  affects the container's own network namespace); no `NET_RAW` or
+  `NET_ADMIN` capability.
 - **Passwords** are hashed with argon2id. Sign-in attempts are rate limited;
   two-factor sign-in (TOTP, with recovery codes) can be required for everyone.
 - **Permissions** are checked on the server for every request; what you can't

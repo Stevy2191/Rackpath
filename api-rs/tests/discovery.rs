@@ -360,6 +360,14 @@ async fn snmp_sources_keep_credentials_secret_and_feed_the_review_list() {
         json!({ "address": "192.168.60.9", "mac": "00-AA-BB-CC-DD-EE" }),
     )
     .await;
+    // Documented with another MAC than the router sees.
+    post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/addresses"),
+        json!({ "address": "192.168.60.41", "mac": "00:11:22:33:44:99" }),
+    )
+    .await;
     let list = format!("/api/projects/{p}/snmp-sources");
 
     // Safety and validation.
@@ -468,9 +476,9 @@ async fn snmp_sources_keep_credentials_secret_and_feed_the_review_list() {
     assert_eq!(s, StatusCode::ACCEPTED, "{v}");
     let run = finished(&app, &c, v["run_id"].as_i64().unwrap()).await;
     assert_eq!(run["status"], "success", "{run}");
-    assert_eq!(run["new_hosts"], 2);
+    assert_eq!(run["new_hosts"], 1);
     let found = hosts(&app, &c, p, "new").await;
-    assert_eq!(found.len(), 2, "{found:?}");
+    assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0]["address"], "192.168.60.40");
     assert_eq!(found[0]["mac"], "00:11:22:33:44:55");
     assert_eq!(found[0]["switch_port"], "core-sw Gi1/0/4");
@@ -482,6 +490,17 @@ async fn snmp_sources_keep_credentials_secret_and_feed_the_review_list() {
     .await
     .unwrap();
     assert_eq!(port.as_deref(), Some("core-sw Gi1/0/9"));
+    let (_, w) = app
+        .get(&c, &format!("/api/projects/{p}/ipam/warnings"))
+        .await;
+    assert!(
+        w["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x["kind"] == "mac_changed" && x["path"] == "192.168.60.41"),
+        "{w}"
+    );
     let (_, src) = app.get(&c, &list).await;
     let core = src["sources"]
         .as_array()

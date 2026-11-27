@@ -332,6 +332,10 @@ export interface IpAddress {
   /** The linked device's name, shown beside its code. */
   device_name: string | null;
   port_path: string | null;
+  /** What discovery (ping sweeps, SNMP) last saw at this address. */
+  last_seen_at?: string | null;
+  last_seen_mac?: string | null;
+  last_seen_port?: string | null;
 }
 
 export interface Space {
@@ -368,6 +372,8 @@ export interface Prefix {
   /** Documented addresses plus leased ones (each address once). */
   in_use: number;
   dhcp_pool_size: number;
+  /** Live hosts found by discovery that aren't documented or leased. */
+  discovered_count?: number;
   utilization?: number;
   parent_id?: number | null;
   depth?: number;
@@ -541,3 +547,71 @@ export const ADDRESS_KIND_LABEL: Record<AddressKind, string> = {
   dhcp: 'DHCP',
   dhcp_reservation: 'DHCP reservation',
 };
+
+// ---------------------------------------------------------------- discovery
+
+export interface DiscoveryRun {
+  id: number;
+  prefix_id: number | null;
+  snmp_source_id: number | null;
+  trigger: 'manual' | 'schedule';
+  status: 'running' | 'success' | 'failed';
+  started_at: string;
+  finished_at: string | null;
+  probed: number;
+  found: number;
+  new_hosts: number;
+  message: string | null;
+}
+
+export interface PrefixDiscovery {
+  prefix_id: number;
+  scan_enabled: boolean;
+  scan_interval_minutes: number | null;
+  last_scan_at: string | null;
+  scannable: boolean;
+  not_scannable_reason: string | null;
+  runs: DiscoveryRun[];
+  can_manage: boolean;
+}
+
+export interface DiscoveredHost {
+  id: number;
+  address: string;
+  mac: string | null;
+  dns_name: string | null;
+  switch_port: string | null;
+  seen_by_ping: boolean;
+  seen_by_snmp: boolean;
+  state: 'new' | 'ignored';
+  first_seen_at: string;
+  last_seen_at: string;
+  prefix_id: number | null;
+  prefix: string | null;
+  /** A documented address that already has this host's MAC. */
+  mac_documented_at: string | null;
+}
+
+export interface SnmpSource {
+  id: number;
+  name: string;
+  host: string;
+  port: number;
+  version: '2c' | '3';
+  security: 'v2c' | 'v3_auth_priv' | 'v3_auth_no_priv';
+  warnings: string[];
+  has_community: boolean;
+  v3_username: string | null;
+  v3_auth_protocol: string | null;
+  has_auth_password: boolean;
+  v3_priv_protocol: string | null;
+  has_priv_password: boolean;
+  space_id: number | null;
+  read_arp: boolean;
+  read_mac_table: boolean;
+  enabled: boolean;
+  poll_interval_minutes: number | null;
+  last_poll_at: string | null;
+  last_status: string | null;
+  last_message: string | null;
+}

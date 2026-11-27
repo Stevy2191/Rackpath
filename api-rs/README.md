@@ -257,14 +257,14 @@ shows it as the author of every imported record.
 | Search | `GET /api/search?q=10.20.30` (also `kind=prefix` or `kind=address`) |
 
 **How it behaves:**
-- **IPAM records the plan; it never pings or scans.** IPv4 and IPv6 throughout.
+- **IPAM records the plan.** It only touches the network through the opt-in discovery below. IPv4 and IPv6 throughout.
 - **Spaces:** every project has `Default`. Add another only when the same private range really exists twice (separate routing domains).
 - **Prefixes** are written as CIDR (`10.20.30.0/24`); host bits must be zero (`10.20.30.7/24` is refused with "did you mean 10.20.30.0/24?"). Nesting is computed: a prefix's parent is the smallest prefix containing it. Each has a role, status, optional VLAN, location, gateway, DNS servers and domain.
 - **Ranges** (`dhcp_pool`, `reserved`, `static`) sit inside one prefix and don't overlap.
 - **Addresses** belong to the smallest prefix containing them. Give `port_id` (the device follows) or `device_id`, or neither for a documented spare. Omit `address` and give `prefix_id` to take the next free one. The network and broadcast addresses are refused.
-- **Next free** skips documented addresses, DHCP pools, reserved ranges, the gateway, and the network and broadcast addresses. `range_id` looks inside one range, e.g. your static range.
+- **Next free** skips documented addresses, live hosts found by discovery, DHCP pools, reserved ranges, the gateway, and the network and broadcast addresses. `range_id` looks inside one range, e.g. your static range.
 - **The grid** (IPv4 up to /22) returns offsets for the network, broadcast, gateway, ranges and addresses, for drawing one cell per address.
-- **Warnings** (on save and in the warnings list): an address outside every prefix; a static address inside a DHCP pool; the same MAC on two DHCP reservations; a port's address in a prefix whose VLAN isn't on that port; a users/servers/voice/printers/IoT prefix without a VLAN; records missing from their import source.
+- **Warnings** (on save and in the warnings list): an address outside every prefix; a static address inside a DHCP pool; the same MAC on two DHCP reservations; a port's address in a prefix whose VLAN isn't on that port; a users/servers/voice/printers/IoT prefix without a VLAN; records missing from their import source; from discovery, a different MAC answering at a documented address, and documented addresses in a scanned prefix that haven't answered for 30 days.
 - **Deleting** a device or port keeps its addresses, unassigned. Deleting a prefix removes its ranges and keeps the addresses.
 - **Permissions:** prefixes on a location need edit rights on that location (otherwise on the project); ranges follow their prefix; an address on a device needs edit rights on that device (otherwise on the project). Reading is project-wide.
 
@@ -336,6 +336,27 @@ shows it as the author of every imported record.
 **CSV import** checks every row with the same rules as the API, in one transaction: if any row fails, nothing is saved and the errors are listed by row number. Paths are relative to the project (`HQ/2/MDF/RK01/SW01/24`; the project code in front is optional). Unknown columns are refused.
 
 **Diagrams** are saved whole (`PUT`), with `expected_version` to stop two people overwriting each other. Nodes can stand for devices; an edge can be backed by a cable, and then shows the cable's ends and chain state.
+
+## Network discovery
+
+| Area | Endpoints |
+|---|---|
+| Prefix scanning | `GET/PATCH /api/prefixes/{id}/discovery` (`scan_enabled`, `scan_interval_minutes`), `POST /api/prefixes/{id}/scan` |
+| SNMP devices | `GET/POST /api/projects/{id}/snmp-sources`, `PATCH/DELETE /api/snmp-sources/{id}`, `POST /api/snmp-sources/{id}/test`, `POST /api/snmp-sources/{id}/poll`, `GET /api/snmp-sources/{id}/runs` |
+| Runs | `GET /api/discovery-runs/{id}` (scans and polls start in the background and answer `202 {run_id}`) |
+| Review list | `GET /api/projects/{id}/discovered?state=new\|ignored\|all&prefix_id=`, `POST /api/discovered/{id}/document`, `POST /api/discovered/{id}/ignore` (`{"ignored": true\|false}`), `DELETE /api/discovered/{id}` |
+
+**How it behaves:**
+- **Off until turned on.** Each prefix has `scan_enabled` (default off). A schedule is optional: by hand only, or every 60 minutes to every week.
+- **Ping sweeps** only cover private IPv4 prefixes (10/8, 172.16/12, 192.168/16, 100.64/10) of /22 or smaller, never IPv6. Each usable address gets one ICMP echo request with a 1 second timeout, 32 in flight at a time; hosts that answer get a reverse DNS lookup. Rackpath runs one sweep or poll at a time; a second "Scan now" answers 409.
+- **SNMP** is read-only: GET and GETBULK of sysName, `ipNetToPhysicalTable` / `ipNetToMediaTable` (ARP: IP → MAC), and `dot1qTpFdbTable` / `dot1dTpFdbTable` with `dot1dBasePortIfIndex` and `ifName` (MAC → switch port). Ports carrying more than 16 MACs count as uplinks and aren't reported as where a device is plugged in. Devices are given by private IP address (not a host name, so DNS can't redirect polling). SNMPv3 (SHA-2 authentication, AES privacy) is the default; v2c is allowed with a warning; v1 and MD5 aren't offered. Each request times out after 5 seconds and a poll after 2 minutes.
+- **Credentials** are encrypted with `RACKPATH_ENCRYPTION_KEY`, write-only (the API says only whether one is set), and recorded in the audit log as changed without their values. Changing the version drops the other version's credentials.
+- **Results never become documentation by themselves.** A live address that is documented gets `last_seen_at`, `last_seen_mac` and `last_seen_port`. Anything else goes to `discovered_hosts` for review: **document** creates the address (with the MAC and reverse DNS name) and takes it off the list; **ignore** keeps it off the list for good (until restored). Hosts waiting for review that aren't seen for 30 days are forgotten. SNMP results are kept only for addresses inside a documented prefix.
+- **Live hosts count as used**: prefix usage, next free and the free address list include discovered hosts.
+- **Permissions:** scan settings, scanning, and SNMP devices need admin rights on the project; documenting and ignoring need edit rights; reading is project-wide.
+- **Audit:** every run writes one `sync` entry (what was probed, found and new) in the same transaction as its results; settings, SNMP devices and review actions are audited too.
+- **Containers:** the image runs as a non-root user, so `docker-compose.yml` sets `net.ipv4.ping_group_range` to allow unprivileged ICMP sockets (namespaced to the container). No extra capabilities. Without it, a scan fails with a message saying so.
+- **Tests:** `tests/discovery.rs` runs against a fake network. `tests/snmp_live.rs` reads a real agent when `RACKPATH_TEST_SNMP=host:port` is set (see the file for the snmpd set-up) and pings loopback when `RACKPATH_TEST_PING=1`.
 
 ## Moves (phase 8)
 

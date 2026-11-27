@@ -34,7 +34,7 @@ use crate::error::{AppError, AppResult};
 use crate::hierarchy::{self, Subtree};
 use crate::middleware::RequestCtx;
 use crate::state::AppState;
-use crate::util::now_ts;
+use crate::util::{now_ts, ts_in};
 
 fn unique(e: sqlx::Error, msg: String) -> AppError {
     match &e {
@@ -838,12 +838,24 @@ pub async fn get_prefix(
     .bind(c.end().bin())
     .fetch_one(&mut *conn)
     .await?;
-    let in_use = (total + leased_only) as u128;
+    let found_only: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM discovered_hosts d WHERE d.space_id = ?1 AND d.family = ?2 AND d.addr_bin BETWEEN ?3 AND ?4
+         AND NOT EXISTS (SELECT 1 FROM dhcp_lease_snapshots l WHERE l.space_id = d.space_id
+                         AND l.family = d.family AND l.addr_bin = d.addr_bin)",
+    )
+    .bind(p.space_id)
+    .bind(p.family)
+    .bind(c.start().bin())
+    .bind(c.end().bin())
+    .fetch_one(&mut *conn)
+    .await?;
+    let in_use = (total + leased_only + found_only) as u128;
     let chain = prefix_chain(&mut conn, p.project_id, p.location_id).await?;
     let mut v = serde_json::to_value(&p).unwrap_or_default();
     v["size"] = size_json(&c);
     v["address_count"] = json!(total);
     v["lease_count"] = json!(leases);
+    v["discovered_count"] = json!(found_only);
     v["in_use"] = json!(in_use as u64);
     v["dhcp_pool_size"] = json!(pool as u64);
     if c.family() == Family::V4 {
@@ -1466,6 +1478,10 @@ pub struct AddressRow {
     missing_from_source_at: Option<String>,
     created_at: String,
     updated_at: String,
+    /// What discovery last saw here.
+    last_seen_at: Option<String>,
+    last_seen_mac: Option<String>,
+    last_seen_port: Option<String>,
     device_path: Option<String>,
     /// The linked device's name (its path shows only codes).
     device_name: Option<String>,
@@ -1479,7 +1495,8 @@ macro_rules! address_select {
     () => {
         "SELECT a.id, a.project_id, a.space_id, a.address, a.family, a.addr_bin, a.prefix_len, a.device_id, a.port_id, \
          a.role, a.status, a.mac, a.dns_name, a.dns_aliases, a.dhcp_reservation, a.description, a.notes, a.source, \
-         a.external_id, a.missing_from_source_at, a.created_at, a.updated_at, ds.path AS device_path, \
+         a.external_id, a.missing_from_source_at, a.created_at, a.updated_at, a.last_seen_at, a.last_seen_mac, \
+         a.last_seen_port, ds.path AS device_path, \
          (SELECT d.name FROM devices d WHERE d.id = a.device_id) AS device_name, ps.path AS port_path, \
          EXISTS (SELECT 1 FROM ip_ranges r JOIN prefixes p ON p.id = r.prefix_id WHERE r.kind = 'dhcp_pool' \
                  AND p.space_id = a.space_id AND p.family = a.family \
@@ -1530,6 +1547,9 @@ impl AddressRow {
                 "device_path",
                 "device_name",
                 "kind",
+                "last_seen_at",
+                "last_seen_mac",
+                "last_seen_port",
             ] {
                 o.remove(k);
             }
@@ -2142,6 +2162,9 @@ pub async fn delete_address(
 // ---------------------------------------------------------------- warnings
 
 /// Everything in a project's address plan worth a second look.
+/// A documented address that a scanned prefix hasn't seen for this long is flagged.
+const STALE_AFTER_DAYS: i64 = 30;
+
 pub async fn warnings(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -2276,6 +2299,49 @@ pub async fn warnings(
             id,
             &what,
             format!("{what} is no longer in the source it was imported from"),
+        );
+    }
+
+    // From discovery: another MAC answering at a documented address, and
+    // documented addresses that stopped answering.
+    let mac_changed: Vec<(i64, String, String, String)> = sqlx::query_as(
+        "SELECT id, address, mac, last_seen_mac FROM ip_addresses WHERE project_id = ?
+         AND mac IS NOT NULL AND last_seen_mac IS NOT NULL AND mac <> last_seen_mac
+         ORDER BY addr_bin LIMIT 500",
+    )
+    .bind(project_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, addr, mac, seen) in mac_changed {
+        push(
+            "mac_changed",
+            "ip_address",
+            id,
+            &addr,
+            format!("{addr} is documented with MAC {mac}, but discovery saw {seen} there"),
+        );
+    }
+    let stale: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT a.id, a.address, a.last_seen_at FROM ip_addresses a WHERE a.project_id = ?
+         AND a.last_seen_at IS NOT NULL AND a.last_seen_at < ?
+         AND EXISTS (SELECT 1 FROM prefixes p WHERE p.space_id = a.space_id AND p.family = a.family
+                     AND a.addr_bin BETWEEN p.net_start AND p.net_end AND p.scan_enabled = 1)
+         ORDER BY a.addr_bin LIMIT 500",
+    )
+    .bind(project_id)
+    .bind(ts_in(time::Duration::days(-STALE_AFTER_DAYS)))
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, addr, at) in stale {
+        push(
+            "not_seen",
+            "ip_address",
+            id,
+            &addr,
+            format!(
+                "{addr} hasn't answered a scan since {} (over {STALE_AFTER_DAYS} days)",
+                at.get(..10).unwrap_or(&at)
+            ),
         );
     }
     Ok(Json(json!({ "warnings": out })))
