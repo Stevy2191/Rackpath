@@ -24,8 +24,14 @@ export default function (test, { base, password, shots }) {
 
   test('create a project and land on it', async (page) => {
     await page.getByRole('button', { name: 'New project' }).click();
-    await page.getByLabel('Code').fill('acme');
-    await page.getByLabel('Name').fill('Acme Corp');
+    // Typed key by key, as a person does: every keystroke re-renders the
+    // form, and focus must stay in the field being typed in.
+    await page.getByLabel('Code').click();
+    await page.keyboard.type('acme');
+    await page.getByLabel('Name').click();
+    await page.keyboard.type('Acme Corp');
+    assert.equal(await page.getByLabel('Code').inputValue(), 'ACME'); // codes are capitals
+    assert.equal(await page.getByLabel('Name').inputValue(), 'Acme Corp');
     await page.getByRole('button', { name: 'Create' }).click();
     await page.getByRole('heading', { name: 'Acme Corp' }).waitFor();
     assert.equal(await page.getByLabel('Project').inputValue(), page.url().split('/p/')[1]);
