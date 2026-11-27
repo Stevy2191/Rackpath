@@ -67,7 +67,9 @@ export default function (test, { base, shots }) {
     await page.getByRole('dialog').waitFor({ state: 'detached' });
     await page.getByRole('button', { name: 'Place', exact: true }).click();
     const box = await page.locator('svg.plan').boundingBox();
+    const reloaded = page.waitForResponse((res) => res.url().endsWith(`/api/floors/${floorId}`) && res.request().method() === 'GET');
     await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.4);
+    await reloaded;
     const rack = page.locator('g[data-rack=RK01]');
     await rack.waitFor();
     let f = await api(page, `/api/floors/${floorId}`);

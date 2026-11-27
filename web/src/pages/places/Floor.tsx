@@ -49,10 +49,8 @@ export function FloorPage() {
   const H = f.plan_height ?? DEFAULT_H;
   const scale = f.scale_px_per_m ?? Math.min(W, H) / 15;
   const edit = !!f.can_edit;
-  const reload = () => {
-    setMoved({});
-    floor.reload();
-  };
+  // Keep the positions just saved until the reloaded floor has them.
+  const reload = () => floor.reload().then(() => setMoved({}));
   const totalDevices = devices.length + racks.reduce((n, r) => n + r.device_count, 0);
 
   const toPlan = (e: { clientX: number; clientY: number }): [number, number] => {
