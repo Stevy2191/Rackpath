@@ -78,8 +78,46 @@ The process refuses to start with a missing or malformed required setting.
 rackpath                         # same as: rackpath serve
 rackpath reset-password admin    # new temporary password; signs the user out everywhere
 rackpath backup /backups/rp.db   # consistent copy, safe while the server runs
+rackpath import-v1 --from mysql://user:pass@host:3306/rackpath [--dry-run]
 rackpath version
 ```
+
+### Bringing v1 data across
+
+`rackpath import-v1` reads a v1 (Node + MariaDB) database and writes it into
+a **fresh** v2 database (it refuses one that already has projects). Run it
+with the same `RACKPATH_ENCRYPTION_KEY` v1 used, so integration secrets stay
+readable. `--dry-run` runs the whole import on a throwaway copy and prints
+what it would bring across. The v1 database must be at its last migration
+(0068): start the latest v1 once first.
+
+Everything goes through the v2 API, with its checks, so the result is what
+you'd get typing it in. What it maps:
+
+- **Users** keep their passwords (v1 hashes are upgraded at their next
+  sign-in) and become account admins, as everyone in v1 could do everything.
+- **Projects** get a code from their name. Site details (address, contact,
+  ISPs) move to the first location; LAN and WAN become prefixes with their
+  gateway, and the WAN address is documented.
+- **Locations** use the building number as their code. **Rooms'** free-text
+  floor becomes floors ("Ground" is floor 0). **Racks** with no room go to
+  their location's floor 0, or to an `IMPORTED` location.
+- **Devices and rack slots** merge into devices with their rack position,
+  face and mount (half width, zero-U PDUs). A position v2 refuses (an
+  overlap) leaves the device Unplaced, with the reason in its notes. Rack
+  items without an inventory device (blanking panels, UPSes…) become devices.
+- **Power:** UPS and PDU figures and runtime curves, outlets from outlet
+  groups, an inlet and a power cord for each recorded feed, battery modules
+  joined to their UPS.
+- **Ports and connections** (one cable per pair; Cat5e/Cat6/Cat6a types kept),
+  VLANs (their subnet becomes a prefix), tags, cameras and Access devices,
+  custom rack devices and catalogue entries (as templates), diagrams (nodes,
+  links, labels, zones), integrations (secrets copied; automatic sync off)
+  and the activity log (as history entries at their original times).
+
+Anything v2 refuses is listed at the end, and the rest carries on. The work
+is done by a temporary `v1-import` account, removed afterwards; the history
+shows it as the author of every imported record.
 
 ## Security model (phase 1)
 

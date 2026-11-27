@@ -8,6 +8,7 @@ pub mod db;
 pub mod domain;
 pub mod error;
 pub mod hierarchy;
+pub mod import_v1;
 pub mod imports;
 pub mod middleware;
 pub mod passwords;

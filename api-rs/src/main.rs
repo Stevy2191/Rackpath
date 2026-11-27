@@ -13,7 +13,7 @@ use rackpath::state::AppState;
 use rackpath::{audit, db};
 
 fn usage() -> ExitCode {
-    eprintln!("usage: rackpath [serve | reset-password <username> | backup <file> | version]");
+    eprintln!("usage: rackpath [serve | reset-password <username> | backup <file> | import-v1 --from mysql://user:pass@host/db [--dry-run] | version]");
     ExitCode::from(2)
 }
 
@@ -84,7 +84,93 @@ async fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        ("import-v1", Some(flag)) if flag == "--from" => match args.get(2) {
+            Some(url) => import_v1(config, pool, url, args.iter().any(|a| a == "--dry-run")).await,
+            None => usage(),
+        },
         _ => usage(),
+    }
+}
+
+/// Imports a v1 database. With --dry-run the import runs against a copy of
+/// the database, which is then thrown away.
+async fn import_v1(config: Config, pool: sqlx::SqlitePool, url: &str, dry_run: bool) -> ExitCode {
+    if let Err(e) = rackpath::prepare(&pool).await {
+        eprintln!("Startup data preparation failed: {e}");
+        return ExitCode::FAILURE;
+    }
+    match rackpath::ensure_owner(&pool).await {
+        Ok(Some(password)) => {
+            eprintln!("Created the owner account: admin / {password} (change it at first sign-in)")
+        }
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("Could not create the owner account: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+    let from = match sqlx::mysql::MySqlPoolOptions::new()
+        .max_connections(2)
+        .connect(url)
+        .await
+    {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Could not connect to the v1 database: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let (pool, copy) = if dry_run {
+        let copy = config
+            .data_dir
+            .join(format!("import-v1-dry-run-{}.db", std::process::id()));
+        if let Err(e) = db::backup(&pool, &copy).await {
+            eprintln!("Could not copy the database for a dry run: {e}");
+            return ExitCode::FAILURE;
+        }
+        match db::connect(&copy).await {
+            Ok(p) => (p, Some(copy)),
+            Err(e) => {
+                eprintln!("Could not open the copy: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        (pool, None)
+    };
+    let state = rackpath::state::AppState::new(pool.clone(), config);
+    let result = rackpath::import_v1::run(&pool, state, &from).await;
+    pool.close().await;
+    if let Some(copy) = &copy {
+        for ext in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{ext}", copy.display()));
+        }
+    }
+    match result {
+        Ok(report) => {
+            println!(
+                "{}",
+                if dry_run {
+                    "Dry run: nothing was saved. It would import:"
+                } else {
+                    "Imported from v1:"
+                }
+            );
+            for (what, count) in &report.counts {
+                println!("  {count:>6}  {what}");
+            }
+            if !report.skipped.is_empty() {
+                println!("Not imported ({}):", report.skipped.len());
+                for s in &report.skipped {
+                    println!("  - {s}");
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("Import failed: {e}");
+            ExitCode::FAILURE
+        }
     }
 }
 
