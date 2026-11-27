@@ -12,15 +12,16 @@ use reqwest::StatusCode;
 use serde_json::Value;
 use sqlx::mysql::MySqlPoolOptions;
 
-async fn v1_database() -> Option<sqlx::MySqlPool> {
+async fn v1_database(tag: &str) -> Option<sqlx::MySqlPool> {
     let url = std::env::var("RACKPATH_TEST_MYSQL_URL").ok()?;
     let admin = MySqlPoolOptions::new()
         .max_connections(1)
         .connect(&url)
         .await
         .expect("MySQL reachable");
-    let name = format!("rackpath_v1_{}", std::process::id());
-    // The database name is made here from the process id: safe to splice.
+    let name = format!("rackpath_v1_{}_{tag}", std::process::id());
+    // The database name is made here from the process id and a fixed tag:
+    // safe to splice.
     let setup =
         format!("DROP DATABASE IF EXISTS {name}; CREATE DATABASE {name} CHARACTER SET utf8mb4");
     sqlx::raw_sql(sqlx::AssertSqlSafe(setup))
@@ -62,13 +63,13 @@ fn config(app: &TestApp) -> Config {
 
 #[tokio::test]
 async fn imports_a_v1_site() {
-    let Some(v1) = v1_database().await else {
+    let Some(v1) = v1_database("current").await else {
         eprintln!("RACKPATH_TEST_MYSQL_URL not set: skipping the v1 import test");
         return;
     };
     let app = spawn().await;
     let state = AppState::new(app.pool.clone(), config(&app));
-    let report = rackpath::import_v1::run(&app.pool, state.clone(), &v1)
+    let report = rackpath::import_v1::run(&app.pool, state.clone(), &v1, None)
         .await
         .unwrap();
     assert!(report.skipped.is_empty(), "{:?}", report.skipped);
@@ -76,7 +77,7 @@ async fn imports_a_v1_site() {
     assert_eq!(report.counts["devices"], 10);
 
     // A second run is refused: the import is for a fresh Rackpath.
-    let again = rackpath::import_v1::run(&app.pool, state, &v1).await;
+    let again = rackpath::import_v1::run(&app.pool, state, &v1, None).await;
     assert!(again.unwrap_err().contains("already has projects"));
 
     let c = app.owner().await;
@@ -274,4 +275,92 @@ async fn imports_a_v1_site() {
         )
         .await;
     assert_eq!(created["entries"][0]["username"], "v1-import");
+}
+
+/// The last published v1 stops at migration 0064, where integration secrets
+/// are MariaDB AES_ENCRYPT keyed by v1's JWT secret.
+async fn last_release(tag: &str) -> Option<sqlx::MySqlPool> {
+    let v1 = v1_database(tag).await?;
+    sqlx::raw_sql(
+        "DELETE FROM schema_migrations WHERE name >= '0065';
+         UPDATE project_integrations SET api_key = TO_BASE64(AES_ENCRYPT('legacy-key-456', 'old-jwt-secret')) WHERE id = 1;
+         INSERT INTO project_integrations (id, project_id, name, platform, base_url, verify_ssl, auto_sync, sync_interval_minutes)
+           VALUES (2, 1, 'Old NetBox', 'netbox', 'https://netbox.example', 1, 0, 60);",
+    )
+    .execute(&v1)
+    .await
+    .unwrap();
+    Some(v1)
+}
+
+async fn imported_secret(app: &TestApp) -> Option<String> {
+    sqlx::query_scalar("SELECT secret_enc FROM integrations WHERE kind = 'unifi'")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn imports_the_last_v1_release_with_its_jwt_secret() {
+    let Some(v1) = last_release("legacy").await else {
+        return;
+    };
+    let app = spawn().await;
+    let state = AppState::new(app.pool.clone(), config(&app));
+    let report = rackpath::import_v1::run(&app.pool, state, &v1, Some("old-jwt-secret"))
+        .await
+        .unwrap();
+    assert_eq!(report.counts["devices"], 10);
+    assert_eq!(
+        report.skipped,
+        vec!["Integration Old NetBox: platform netbox isn't supported in v2".to_string()]
+    );
+    let secret = imported_secret(&app).await.unwrap();
+    let box_ = rackpath::domain::crypto::SecretBox::new(&[7u8; 32]);
+    assert_eq!(box_.decrypt(&secret).unwrap(), "legacy-key-456");
+}
+
+#[tokio::test]
+async fn leaves_out_old_secrets_it_cant_read() {
+    let Some(v1) = last_release("nokey").await else {
+        return;
+    };
+    // Without v1's JWT secret, and with the wrong one: the import carries
+    // on, the secret is left out and listed.
+    for (key, tag) in [
+        (None, "set RACKPATH_V1_JWT_SECRET"),
+        (Some("wrong"), "can't be read"),
+    ] {
+        let app = spawn().await;
+        let state = AppState::new(app.pool.clone(), config(&app));
+        let report = rackpath::import_v1::run(&app.pool, state, &v1, key)
+            .await
+            .unwrap();
+        assert!(
+            report
+                .skipped
+                .iter()
+                .any(|s| s.starts_with("Integration Office UniFi: its secret") && s.contains(tag)),
+            "{:?}",
+            report.skipped
+        );
+        assert_eq!(imported_secret(&app).await, None);
+    }
+}
+
+#[tokio::test]
+async fn refuses_a_v1_older_than_its_last_release() {
+    let Some(v1) = v1_database("old").await else {
+        return;
+    };
+    sqlx::query("DELETE FROM schema_migrations WHERE name >= '0064'")
+        .execute(&v1)
+        .await
+        .unwrap();
+    let app = spawn().await;
+    let state = AppState::new(app.pool.clone(), config(&app));
+    let err = rackpath::import_v1::run(&app.pool, state, &v1, None)
+        .await
+        .unwrap_err();
+    assert!(err.contains("migration 0064"), "{err}");
 }

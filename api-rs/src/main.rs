@@ -139,7 +139,12 @@ async fn import_v1(config: Config, pool: sqlx::SqlitePool, url: &str, dry_run: b
         (pool, None)
     };
     let state = rackpath::state::AppState::new(pool.clone(), config);
-    let result = rackpath::import_v1::run(&pool, state, &from).await;
+    // v1's JWT secret, for integration secrets from v1 releases before its
+    // migration 0065. An environment variable, so it isn't in `ps` output.
+    let legacy_key = std::env::var("RACKPATH_V1_JWT_SECRET")
+        .ok()
+        .filter(|k| !k.is_empty());
+    let result = rackpath::import_v1::run(&pool, state, &from, legacy_key.as_deref()).await;
     pool.close().await;
     if let Some(copy) = &copy {
         for ext in ["", "-wal", "-shm"] {

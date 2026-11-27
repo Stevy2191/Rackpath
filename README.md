@@ -79,7 +79,8 @@ curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/deploy.sh |
 This creates a `rackpath/` folder with `docker-compose.yml` and `.env` (with a
 new encryption key), asks for the web port and the address people will use,
 starts Rackpath, and prints the first password for `admin`. You choose your
-own password at the first sign-in.
+own password at the first sign-in. Run it again any time: it keeps your `.env`
+and key.
 
 ### By hand
 
@@ -99,7 +100,16 @@ docker run -d --name rackpath -p 8080:8080 -v rackpath-data:/data \
   -e RACKPATH_ENCRYPTION_KEY=$(openssl rand -hex 32) ghcr.io/stevy2191/rackpath:latest
 ```
 
-To build the image yourself: `docker build -t rackpath .` from this folder.
+### From a clone of this repository
+
+```bash
+git clone https://github.com/Stevy2191/Rackpath.git && cd Rackpath
+sudo ./update.sh
+```
+
+`update.sh` writes `.env` with a new encryption key the first time, builds
+the image from the code and starts it (`--image` uses the published image
+instead of building). Set the port and address in `.env` (see below).
 
 ### Settings
 
@@ -125,7 +135,21 @@ docker compose exec rackpath rackpath backup /data/rackpath-backup.db
 
 Keep `.env` (the encryption key) with your backups.
 
-### Upgrading
+### Updating
+
+From a clone of this repository, as root:
+
+```bash
+sudo ./update.sh
+```
+
+It pulls the latest code (as the clone's owner, so git's ownership check is
+happy), backs up the database, rebuilds, restarts and checks Rackpath answers
+again. It stops without changing anything if you have local edits to the
+code. Options: `--image` pulls the published image instead of building (much
+quicker on a small server), `--no-backup`, `--no-pull`.
+
+Installed with `deploy.sh` (no clone):
 
 ```bash
 docker compose pull && docker compose up -d
@@ -133,19 +157,17 @@ docker compose pull && docker compose up -d
 
 Database changes are applied automatically at start.
 
-### Coming from Rackpath v1
+### Data from Rackpath v1
 
-Version 2 replaces the Node API, the nginx frontend and MariaDB with a single
-container. Your v1 data can be brought across into a fresh v2:
+Version 2 replaces v1's Node API, nginx frontend and MariaDB, and starts with
+a fresh database. To bring data from a v1 database into a new, empty v2:
 
 ```bash
-# v1 must be at its latest version (so its database is fully migrated).
-docker compose exec rackpath rackpath import-v1 --from "mysql://rackpath:PASSWORD@v1-db-host:3306/rackpath" --dry-run
-docker compose exec rackpath rackpath import-v1 --from "mysql://rackpath:PASSWORD@v1-db-host:3306/rackpath"
+export RACKPATH_V1_JWT_SECRET=...   # v1's RACKPATH_JWT_SECRET, for integration secrets
+docker compose exec -e RACKPATH_V1_JWT_SECRET rackpath rackpath import-v1 --from "mysql://rackpath:PASSWORD@v1-host:3306/rackpath" --dry-run
 ```
 
-Use the same `RACKPATH_ENCRYPTION_KEY` as v1 so integration secrets stay
-readable. v1 users keep their passwords. What maps to what is described in
+Leave out `--dry-run` to import. Details are in
 [api-rs/README.md](api-rs/README.md#bringing-v1-data-across).
 
 ## 🔒 Security
@@ -169,7 +191,7 @@ Rackpath/
 ├── web/      # The web app: React + TypeScript (Vite), browser tests
 ├── tools/    # Windows DHCP/DNS push script
 ├── docs/     # Design notes and screenshots
-└── Dockerfile, docker-compose.yml, deploy.sh
+└── Dockerfile, docker-compose.yml, deploy.sh, update.sh
 ```
 
 - Server: see [api-rs/README.md](api-rs/README.md). `cargo test`,

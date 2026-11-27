@@ -174,7 +174,7 @@ fn j(v: &Value, k: &str) -> Value {
 }
 
 /// Every v1 table the importer reads, as JSON rows. The column lists are
-/// literal: they are v1's schema at its last migration (0068).
+/// literal: they exist in v1's schema from migration 0064 on.
 async fn read_v1(db: &MySqlPool) -> Result<HashMap<&'static str, Vec<Value>>, sqlx::Error> {
     // One literal query per table (sqlx takes only literal SQL).
     macro_rules! table {
@@ -385,6 +385,11 @@ fn joined(parts: &[Option<String>]) -> Option<String> {
 struct Ctx<'a> {
     api: Api,
     pool: &'a SqlitePool,
+    from: &'a MySqlPool,
+    secrets: crate::domain::crypto::SecretBox,
+    /// v1's RACKPATH_JWT_SECRET, which keyed integration secrets before
+    /// v1's migration 0065.
+    legacy_key: Option<&'a str>,
     owner: (i64, String),
     report: Report,
     /// v1 id → v2 id, per kind.
@@ -507,10 +512,16 @@ impl Ctx<'_> {
 
 /// Runs the import into `pool` (a migrated v2 database with an owner and
 /// no projects yet).
+///
+/// `legacy_key` is v1's `RACKPATH_JWT_SECRET`: v1 releases before its
+/// migration 0065 kept integration secrets in MariaDB's AES_ENCRYPT keyed by
+/// it. Without it those secrets are left out (and listed), to be entered
+/// again.
 pub async fn run(
     pool: &SqlitePool,
     state: crate::state::AppState,
     from: &MySqlPool,
+    legacy_key: Option<&str>,
 ) -> Result<Report, String> {
     let projects: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects")
         .fetch_one(pool)
@@ -550,7 +561,7 @@ pub async fn run(
             .map_err(|e| e.to_string())?;
         (id, "v1-import".to_string())
     };
-    let result = import_as(pool, state, from, owner.clone()).await;
+    let result = import_as(pool, state, from, legacy_key, owner.clone()).await;
     let _ = sqlx::query("DELETE FROM users WHERE id = ?")
         .bind(owner.0)
         .execute(pool)
@@ -562,15 +573,18 @@ async fn import_as(
     pool: &SqlitePool,
     state: crate::state::AppState,
     from: &MySqlPool,
+    legacy_key: Option<&str>,
     owner: (i64, String),
 ) -> Result<Report, String> {
+    // 0064 is the last migration of the last published v1; 0065 to 0068
+    // only widened and dropped columns, which the importer doesn't read.
     let applied: Option<String> =
-        sqlx::query_scalar("SELECT name FROM schema_migrations WHERE name LIKE '0068%' LIMIT 1")
+        sqlx::query_scalar("SELECT name FROM schema_migrations WHERE name LIKE '0064%' LIMIT 1")
             .fetch_optional(from)
             .await
             .unwrap_or(None);
     if applied.is_none() {
-        return Err("The v1 database isn't at its last migration (0068). Start the latest v1 once so it migrates, then import.".into());
+        return Err("The v1 database is older than the last v1 release (migration 0064 isn't applied). Start the latest v1 once so it migrates, then import.".into());
     }
     let v1 = read_v1(from)
         .await
@@ -582,6 +596,7 @@ async fn import_as(
             .await
             .map_err(|e| e.to_string())?
     };
+    let secrets = state.secrets.clone();
     let api = Api {
         router: crate::routes::router(state),
         cookie: format!("{COOKIE_NAME}={token}"),
@@ -589,6 +604,9 @@ async fn import_as(
     let mut c = Ctx {
         api,
         pool,
+        from,
+        secrets,
+        legacy_key,
         owner,
         report: Report::default(),
         projects: HashMap::new(),
@@ -1717,8 +1735,39 @@ async fn topologies(c: &mut Ctx<'_>, v1: &HashMap<&'static str, Vec<Value>>) {
     }
 }
 
-/// Integrations keep their secrets as stored: v1 and v2 use the same
-/// encrypted format and key. They start with automatic sync off.
+/// Integrations start with automatic sync off. Secrets v1 encrypted itself
+/// (from its migration 0065 on) use v2's format and key and are kept as
+/// they are; older ones, in MariaDB's AES_ENCRYPT, are decrypted with v1's
+/// JWT secret and encrypted again. A secret that can't be read is left out
+/// and listed.
+/// A stored v1 integration secret in v2's form.
+async fn carry_secret(c: &Ctx<'_>, stored: &str) -> Result<String, String> {
+    if stored.starts_with("v1:") {
+        return c
+            .secrets
+            .decrypt(stored)
+            .map(|_| stored.to_string())
+            .map_err(|_| "it can't be read with this RACKPATH_ENCRYPTION_KEY; use v1's".into());
+    }
+    let Some(key) = c.legacy_key else {
+        return Err(
+            "it's in v1's older format: set RACKPATH_V1_JWT_SECRET to v1's RACKPATH_JWT_SECRET"
+                .into(),
+        );
+    };
+    let plain: Option<String> =
+        sqlx::query_scalar("SELECT CAST(AES_DECRYPT(FROM_BASE64(?), ?) AS CHAR)")
+            .bind(stored)
+            .bind(key)
+            .fetch_one(c.from)
+            .await
+            .map_err(|e| e.to_string())?;
+    match plain {
+        Some(p) if !p.is_empty() => Ok(c.secrets.encrypt(&p)),
+        _ => Err("it can't be read with that RACKPATH_V1_JWT_SECRET".into()),
+    }
+}
+
 async fn integrations(c: &mut Ctx<'_>, rows: &[Value]) -> Result<(), String> {
     let mut tx = c.pool.begin().await.map_err(|e| e.to_string())?;
     for i in rows {
@@ -1738,6 +1787,7 @@ async fn integrations(c: &mut Ctx<'_>, rows: &[Value]) -> Result<(), String> {
                 continue;
             }
         };
+        let name = s(i, "name").unwrap_or_else(|| kind.into());
         let (secret, auth) = match (s(i, "api_key"), s(i, "password")) {
             (Some(k), _) => (Some(k), if kind == "zabbix" { "token" } else { "api_key" }),
             (None, Some(pw)) => (Some(pw), "password"),
@@ -1765,8 +1815,19 @@ async fn integrations(c: &mut Ctx<'_>, rows: &[Value]) -> Result<(), String> {
                 .filter(|(_, v)| !v.is_null())
                 .collect(),
         );
+        let secret = match secret {
+            Some(stored) => match carry_secret(c, &stored).await {
+                Ok(v) => Some(v),
+                Err(why) => {
+                    c.report.skip(format!(
+                        "Integration {name}: its secret wasn't brought across ({why}); enter it again"
+                    ));
+                    None
+                }
+            },
+            None => None,
+        };
         let now = now_ts();
-        let name = s(i, "name").unwrap_or_else(|| kind.into());
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO integrations (project_id, kind, name, base_url, username, secret_enc, auth_kind, verify_tls, options,
              auto_sync, sync_interval_minutes, hold_threshold_pct, created_at, updated_at)
