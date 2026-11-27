@@ -712,7 +712,7 @@ All automation follows one rule: **Rackpath reads from systems that already hold
 
 ## 17. What happens to today's tables
 
-**v2 starts with a fresh schema** rather than an in-place migration. A one-off `rackpath import-v1 --from mysql://…` command (reading the v1 MariaDB, writing the v2 SQLite file) brings v1 data across on a best-effort basis, and `deploy.sh` run in a v1 install folder does the whole upgrade (section 19 notes):
+There are no production installs, so **v2 starts with a fresh schema** rather than an in-place migration, and there is no upgrade path from v1. A one-off `rackpath import-v1 --from mysql://…` command (reading the v1 MariaDB, writing the v2 SQLite file) brings across development or test data on a best-effort basis:
 
 | v1 table | v2 |
 |---|---|
@@ -887,7 +887,6 @@ All resolved by the project owner.
 - **Moves** reuse the device and rack update logic inside one transaction; a dry run performs the whole move and rolls it back, so the preview is exact.
 - **The v1 importer** drives the v2 API in-process as a temporary account, so imported data passes every v2 rule. It is tested against a real MariaDB with v1's schema (kept as a test fixture).
 - **Which v1 it reads.** The last published v1 images stop at v1 migration 0064; 0065 to 0068 (v1's own clean-up before it was retired) were never released, and only widen or drop columns the importer doesn't read. So it accepts a v1 database from 0064 on. Integration secrets from 0065 on are already in v2's AES-256-GCM format and key and are kept as they are; older ones are MariaDB `AES_ENCRYPT` keyed by v1's JWT secret, so the importer decrypts them with `RACKPATH_V1_JWT_SECRET` and encrypts them again. A secret it can't read is left out and listed, never stored unreadable.
-- **Upgrading an install.** `deploy.sh` recognises a v1 folder, keeps its compose file and `.env` as `docker-compose.v1.yml` and `.env.v1`, stops v1's API, web and scanner containers but keeps `rackpath-db` running, starts v2 in the same Compose project (so v2 reaches `rackpath-db` by name on the shared network) on v1's web port, then runs the import as a dry run and for real. v1's volumes are never removed by the script.
 
 ---
 

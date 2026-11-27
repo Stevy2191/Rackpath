@@ -80,8 +80,7 @@ This creates a `rackpath/` folder with `docker-compose.yml` and `.env` (with a
 new encryption key), asks for the web port and the address people will use,
 starts Rackpath, and prints the first password for `admin`. You choose your
 own password at the first sign-in. Run it again any time: it keeps your `.env`
-and key. Run in a folder with Rackpath v1, it upgrades it (see
-[Coming from Rackpath v1](#coming-from-rackpath-v1)).
+and key.
 
 ### By hand
 
@@ -135,55 +134,17 @@ docker compose pull && docker compose up -d
 
 Database changes are applied automatically at start.
 
-### Coming from Rackpath v1
+### Data from Rackpath v1
 
-Version 2 replaces the Node API, the nginx frontend and MariaDB with a single
-container, with its own database. Your v1 data is copied across; v1's
-database itself is left as it was.
-
-**The easy way:** run the install script again from where you first ran it
-(the folder that holds v1's `rackpath/` folder; set `RACKPATH_DEPLOY_DIR` if
-you used another name):
+Version 2 replaces v1's Node API, nginx frontend and MariaDB, and starts with
+a fresh database. To bring data from a v1 database into a new, empty v2:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Stevy2191/Rackpath/main/deploy.sh | bash
-```
-
-It finds v1 there and asks before changing anything (with no terminal to
-ask on, set `RACKPATH_UPGRADE_V1=yes`). Then it:
-
-1. keeps v1's files as `docker-compose.v1.yml` and `.env.v1`;
-2. stops v1's API, web and scanner containers, leaving v1's database running;
-3. starts v2 on v1's web port, so the address people use doesn't change;
-4. checks the import with a dry run, then imports: users (with their v1
-   passwords), projects, locations, rooms, racks, devices, power, ports and
-   cables, VLANs, tags, cameras and Access devices, templates, diagrams,
-   integrations and the activity log.
-
-v1's `admin` becomes v2's owner account, `admin`, which signs in with the
-password the script prints (or yours, once you've set it). Integrations come
-across with automatic sync off: check each one and turn it back on. Pictures
-uploaded in v1 (rack device images, diagram icons) aren't brought across;
-they stay in v1's `rackpath-uploads` volume.
-
-When you're happy with v2, remove v1's containers. Their volumes (v1's
-database) stay until you delete them yourself:
-
-```bash
-docker compose up -d --remove-orphans
-```
-
-**By hand**, with v1 running elsewhere: install v2, then
-
-```bash
-export RACKPATH_V1_JWT_SECRET=...   # RACKPATH_JWT_SECRET from v1's .env, for integration secrets
+export RACKPATH_V1_JWT_SECRET=...   # v1's RACKPATH_JWT_SECRET, for integration secrets
 docker compose exec -e RACKPATH_V1_JWT_SECRET rackpath rackpath import-v1 --from "mysql://rackpath:PASSWORD@v1-host:3306/rackpath" --dry-run
-docker compose exec -e RACKPATH_V1_JWT_SECRET rackpath rackpath import-v1 --from "mysql://rackpath:PASSWORD@v1-host:3306/rackpath"
 ```
 
-`v1-host:3306` is v1's database as seen from the v2 container: the v1
-server's address and its published `DB_PORT`. v1 must be its last release or
-later; the import goes into a v2 with no projects yet. What maps to what is in
+Leave out `--dry-run` to import. Details are in
 [api-rs/README.md](api-rs/README.md#bringing-v1-data-across).
 
 ## 🔒 Security

@@ -96,8 +96,7 @@ rackpath version
 `rackpath import-v1` reads a v1 (Node + MariaDB) database and writes it into
 a **fresh** v2 database (it refuses one that already has projects).
 `--dry-run` runs the whole import on a throwaway copy and prints what it
-would bring across. Running `deploy.sh` in a v1 install folder does all of
-this for you (see the root [README](../README.md#coming-from-rackpath-v1)).
+would bring across.
 
 - **Which v1:** the last v1 release or later (v1 migration 0064 applied). If
   it's older, start the latest v1 once so its database migrates.
@@ -108,9 +107,8 @@ this for you (see the root [README](../README.md#coming-from-rackpath-v1)).
   same key instead.) A secret that can't be read is left out and listed, to
   be entered again; the rest of the import carries on.
 - **Reaching v1's database:** the URL is as seen from where `rackpath` runs.
-  In Docker, in the same Compose project as v1 (as `deploy.sh` sets it up),
-  that's `rackpath-db:3306`; otherwise use the v1 host's address and v1's
-  published `DB_PORT`. Percent-encode special characters in the password.
+  In Docker, that's v1's host address and its published `DB_PORT` (or
+  `rackpath-db:3306` if both share a Docker network). Percent-encode special characters in the password.
 
 Everything goes through the v2 API, with its checks, so the result is what
 you'd get typing it in. What it maps:
