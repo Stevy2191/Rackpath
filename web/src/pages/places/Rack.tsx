@@ -2,22 +2,39 @@
 // sides, and devices added by clicking a free U or moved by dragging.
 import { useEffect, useState, type DragEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { MoveRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, MoveRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
 import type { Device, Placement, Rack, Room } from '../../types';
-import { Badge, Button, Card, ErrorBox, FormModal, PageHeader, SelectField, Spinner, Tabs, TextArea, TextField, message, useLoad, useToast } from '../../ui';
+import { Badge, Button, Card, ErrorBox, FormModal, Modal, PageHeader, SelectField, Spinner, Tabs, TextArea, TextField, message, useLoad, useToast } from '../../ui';
 import { DeviceForm, MoveDevice } from '../devices/DeviceForm';
 import { PortsPanel } from '../cabling/PortsPanel';
 import { RackPowerPanel } from '../power/Power';
 import { Crumbs, DeleteModal, KeyValues, num, useForm } from './common';
 import { MoveRack } from './Move';
 import { BomButton, ReportButton } from '../Exports';
+import { PlaceInRack, useUnplaced, type RoomChoice } from './Quick';
 
-export function RackForm({ rooms, projectId, existing, onClose, onSaved }: { rooms: Room[]; projectId: number; existing?: Rack; onClose: () => void; onSaved: (r: Rack) => void }) {
+export function RackForm({
+  rooms,
+  choices,
+  projectId,
+  existing,
+  onClose,
+  onSaved,
+}: {
+  rooms: Room[];
+  /** "Where" choices across the project (instead of one floor's rooms). */
+  choices?: RoomChoice[];
+  projectId: number;
+  existing?: Rack;
+  onClose: () => void;
+  onSaved: (r: Rack) => void;
+}) {
+  const where = choices ?? rooms.map((r) => ({ id: r.id, label: `${r.code}${r.name ? ` (${r.name})` : ''}`, locationId: null }));
   const f = useForm({
-    room_id: String(existing?.room_id ?? rooms.find((r) => !r.is_default)?.id ?? rooms[0]?.id ?? ''),
+    room_id: String(existing?.room_id ?? (choices ? choices[0]?.id : (rooms.find((r) => !r.is_default) ?? rooms[0])?.id) ?? ''),
     code: existing?.code ?? '',
     name: existing?.name ?? '',
     u_height: String(existing?.u_height ?? 42),
@@ -48,9 +65,10 @@ export function RackForm({ rooms, projectId, existing, onClose, onSaved }: { roo
         onSaved(saved);
       }}
     >
-      {rooms.length > 1 && (
-        <SelectField label="Room" {...f.bind('room_id')} options={rooms.map((r) => ({ value: String(r.id), label: `${r.code}${r.name ? ` (${r.name})` : ''}` }))} />
+      {where.length > 1 && (
+        <SelectField label={choices ? 'Where' : 'Room'} {...f.bind('room_id')} options={where.map((r) => ({ value: String(r.id), label: r.label }))} />
       )}
+      {choices && where.length === 1 && <p className="small muted">In {where[0].label}</p>}
       <div className="grid-2">
         <TextField label="Code" required maxLength={16} {...f.bind('code')} />
         <TextField label="Name" {...f.bind('name')} />
@@ -82,7 +100,10 @@ export function RackPage() {
   const [params, setParams] = useSearchParams();
   const view = (['patching', 'power'] as const).find((v) => v === params.get('view')) ?? 'elevation';
   const [selected, setSelected] = useState<number | null>(null);
-  const [modal, setModal] = useState<{ type: 'edit' | 'delete' | 'move' | 'move-rack' } | { type: 'add'; u: number | null } | null>(null);
+  const [modal, setModal] = useState<{ type: 'edit' | 'delete' | 'move' | 'move-rack' } | { type: 'add' | 'place' | 'choose'; u: number | null } | null>(null);
+  const [placed, setPlaced] = useState(0);
+  const unplaced = useUnplaced(project.id, 'rack', placed);
+  const waiting = unplaced.devices?.length ?? 0;
   const [error, setError] = useState<string | null>(null);
   if (rack.error) return <ErrorBox error={rack.error} onRetry={rack.reload} />;
   if (!rack.data) return <Spinner />;
@@ -117,6 +138,11 @@ export function RackPage() {
             {edit && (
               <>
                 <Button variant="primary" icon={<Plus size={15} />} onClick={() => setModal({ type: 'add', u: null })}>Add device</Button>
+                {waiting > 0 && (
+                  <Button icon={<ArrowDownToLine size={15} />} onClick={() => setModal({ type: 'place', u: null })}>
+                    Place a device ({waiting} unplaced)
+                  </Button>
+                )}
                 <Button icon={<Pencil size={15} />} onClick={() => setModal({ type: 'edit' })}>Edit</Button>
                 <Button icon={<MoveRight size={15} />} onClick={() => setModal({ type: 'move-rack' })}>Move</Button>
                 <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal({ type: 'delete' })}>Delete</Button>
@@ -167,7 +193,7 @@ export function RackPage() {
               face={face}
               selected={selected}
               onSelect={setSelected}
-              onAdd={edit ? (u) => setModal({ type: 'add', u }) : undefined}
+              onAdd={edit ? (u) => setModal({ type: waiting > 0 ? 'choose' : 'add', u }) : undefined}
               onMove={edit ? move : undefined}
             />
             <ZeroU devices={zero('zero_u_right')} label="Right" onSelect={setSelected} selected={selected} />
@@ -203,7 +229,7 @@ export function RackPage() {
                   ['Notes', r.notes && <span className="pre">{r.notes}</span>],
                 ]}
               />
-              {edit && <p className="small muted">Click a free U to add a device there; drag a device to move it.</p>}
+              {edit && <p className="small muted">Click a free U to add a device there{waiting > 0 ? ' or place one from Unplaced' : ''}; drag a device to move it.</p>}
             </Card>
           )}
         </aside>
@@ -235,6 +261,32 @@ export function RackPage() {
           }}
         />
       )}
+      {modal?.type === 'choose' && (
+        <Modal title={`U${uLabel(r, modal.u)}`} onClose={() => setModal(null)}>
+          <div className="stack">
+            <p className="small muted">What goes at U{uLabel(r, modal.u)}?</p>
+            <Button variant="primary" icon={<Plus size={15} />} onClick={() => setModal({ type: 'add', u: modal.u })}>A new device</Button>
+            <Button icon={<ArrowDownToLine size={15} />} onClick={() => setModal({ type: 'place', u: modal.u })}>
+              A device from Unplaced ({waiting})
+            </Button>
+          </div>
+        </Modal>
+      )}
+      {modal?.type === 'place' && (
+        <PlaceInRack
+          projectId={project.id}
+          rackId={r.id}
+          u={modal.u}
+          face={face}
+          topDown={r.numbering === 'top_down'}
+          onClose={() => setModal(null)}
+          onSaved={(d) => {
+            setSelected(d.id);
+            setPlaced((n) => n + 1);
+            rack.reload();
+          }}
+        />
+      )}
       {modal?.type === 'move' && sel && <MoveDevice device={sel} projectId={project.id} onClose={() => setModal(null)} onSaved={rack.reload} />}
       {modal?.type === 'delete' && (
         <DeleteModal
@@ -261,6 +313,12 @@ function RackEdit({ rack, projectId, onClose, onSaved }: { rack: Rack; projectId
   );
   if (!rooms.data) return null;
   return <RackForm rooms={rooms.data} projectId={projectId} existing={rack} onClose={onClose} onSaved={onSaved} />;
+}
+
+/** A position as people read it on the rack (U1 at the top for top-down racks). */
+function uLabel(rack: Rack, u: number | null): string {
+  if (u == null) return '';
+  return String(rack.numbering === 'bottom_up' ? u : rack.u_height - Math.floor(u) + 1);
 }
 
 function describe(p: RackSlot, h: number | null, rack: Rack): string {

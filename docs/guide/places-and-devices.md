@@ -11,6 +11,26 @@ Project
             └── Floor-standing devices (access points, wall outlets, printers…)
 ```
 
+## The quick way
+
+A new project's **Overview** shows three **Get started** steps: add a
+location, add a rack, put devices in it. Each has its button, and the card
+disappears once they're done.
+
+- **Add rack** is on the Overview, the Locations page and each location. Its
+  **Where** picker lists every place a rack can go ("HOUSE", or
+  "HQ / floor 2 / MDF" once you have floors and rooms). With no location yet,
+  it asks you to add one first.
+- A location with **one floor and no rooms drawn** shows its racks and
+  devices right on the location page; you never need to open the floor or
+  room. Floors and rooms come into play when you add a second floor or draw
+  rooms on a floor plan.
+- Devices waiting in **Unplaced** (for example from UniFi) are listed on
+  the Overview. Open a rack and click a free U, then choose **A device from
+  Unplaced**, or use **Place a device**. In a room, or on a one-floor
+  location, use **Place from Unplaced** for access points, desktops and other
+  things that don't go in a rack.
+
 ## Locations and sites
 
 A **location** is a building. Open **Locations** → **Add location** and give
@@ -39,10 +59,11 @@ location's page (code, name, level: 0 is ground, negative is below).
 
 ## Racks
 
-Add a rack to a room (height in U, default 42). The rack page shows the
-**front and rear elevations**:
+**Add rack** (height in U, default 42; the code is suggested). The rack page
+shows the **front and rear elevations**:
 
-- **Click a free U** to add a device there; **drag** a device to move it.
+- **Click a free U** to add a new device there, or to place one waiting in
+  Unplaced; **drag** a device to move it.
 - Positions go in **half-U** steps. A device can be full depth or front/rear
   only, full width or a left/right half.
 - **Zero-U** devices (vertical PDUs, cable managers) mount on the sides.
@@ -67,8 +88,9 @@ Add devices from a rack, a room, or **Devices** → **Add device**:
 - **Tags** (set up in project settings) group devices across places.
 
 Devices with nowhere to go yet (for example, ones an integration brought in)
-wait in the project's **Unplaced** list. Edit one and choose a place to put
-it in a rack or room.
+wait in the project's **Unplaced** list. Put them in place from the rack
+(**Place a device**, or click a free U) or the room (**Place from
+Unplaced**), or edit one and choose its place.
 
 ## Deleting
 

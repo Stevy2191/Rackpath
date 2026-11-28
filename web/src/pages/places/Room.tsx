@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Pencil, Plus, Server, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, Pencil, Plus, Server, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
@@ -9,6 +9,7 @@ import { Badge, Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, T
 import { DeviceForm } from '../devices/DeviceForm';
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
 import { RackForm } from './Rack';
+import { PlaceInRoom } from './Quick';
 import { ReportButton } from '../Exports';
 import { formatPhone } from '../../phone';
 
@@ -58,7 +59,7 @@ export function RoomPage() {
   const nav = useNavigate();
   const toast = useToast();
   const room = useLoad(() => api.get<Room>(`/api/rooms/${id}`), [id]);
-  const [modal, setModal] = useState<'edit' | 'delete' | 'rack' | 'device' | null>(null);
+  const [modal, setModal] = useState<'edit' | 'delete' | 'rack' | 'device' | 'place' | null>(null);
   if (room.error) return <ErrorBox error={room.error} onRetry={room.reload} />;
   if (!room.data) return <Spinner />;
   const r = room.data;
@@ -115,7 +116,14 @@ export function RoomPage() {
       <Card
         title="Devices in the room (not in a rack)"
         className="mt"
-        actions={r.can_edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('device')}>Add device</Button>}
+        actions={
+          r.can_edit && (
+            <>
+              <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('device')}>Add device</Button>
+              <Button variant="ghost" icon={<ArrowDownToLine size={15} />} onClick={() => setModal('place')}>Place from Unplaced</Button>
+            </>
+          )
+        }
       >
         <Table
           rows={devices}
@@ -135,6 +143,7 @@ export function RoomPage() {
       {modal === 'device' && (
         <DeviceForm projectId={project.id} placement={{ type: 'room', room_id: r.id, x: null, y: null, rotation: null }} onClose={() => setModal(null)} onSaved={room.reload} />
       )}
+      {modal === 'place' && <PlaceInRoom projectId={project.id} roomId={r.id} onClose={() => setModal(null)} onSaved={room.reload} />}
       {modal === 'delete' && (
         <DeleteModal
           kind="room"
