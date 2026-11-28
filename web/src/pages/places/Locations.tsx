@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Building2, MoveRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, Building2, MoveRight, Pencil, Plus, Server, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
@@ -8,6 +8,8 @@ import type { Floor, Location } from '../../types';
 import { Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, Table, TextArea, TextField, useLoad, useToast } from '../../ui';
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
 import { MoveLocation } from './Move';
+import { AddRackButton, PlaceInRoom } from './Quick';
+import { DeviceForm } from '../devices/DeviceForm';
 import { ReportButton } from '../Exports';
 import { formatPhone } from '../../phone';
 
@@ -35,7 +37,14 @@ export function LocationsPage() {
       <PageHeader
         title="Locations"
         subtitle="Each location is a building, with its floors, rooms and racks. Give buildings a site to group them."
-        actions={canWrite && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>Add location</Button>}
+        actions={
+          canWrite && (
+            <>
+              <Button variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>Add location</Button>
+              <AddRackButton projectId={project.id} />
+            </>
+          )
+        }
       />
       <ErrorBox error={list.error} onRetry={list.reload} />
       {list.loading && !list.data && <Spinner />}
@@ -82,7 +91,21 @@ const LOCATION_FIELDS = [
   'isp_secondary_name', 'isp_secondary_circuit', 'isp_secondary_contact', 'notes', 'site',
 ] as const;
 
-function LocationForm({ projectId, existing, onClose, onSaved }: { projectId: number; existing?: Location; onClose: () => void; onSaved: (l: Location) => void }) {
+export function LocationForm({
+  projectId,
+  existing,
+  intro,
+  onClose,
+  onSaved,
+}: {
+  projectId: number;
+  existing?: Location;
+  /** A line above the form, e.g. why a location is needed now. */
+  intro?: string;
+  onClose: () => void;
+  /** Return false to keep the dialog open (a next step follows). */
+  onSaved: (l: Location) => unknown;
+}) {
   const init = Object.fromEntries(LOCATION_FIELDS.map((k) => [k, (existing?.[k] as string | null) ?? ''])) as Record<(typeof LOCATION_FIELDS)[number], string>;
   const f = useForm(init);
   // Sites already used in the project, offered as suggestions so a campus's
@@ -98,9 +121,10 @@ function LocationForm({ projectId, existing, onClose, onSaved }: { projectId: nu
         const saved = existing
           ? await api.patch<Location>(`/api/locations/${existing.id}`, f.values)
           : await api.post<Location>(`/api/projects/${projectId}/locations`, f.values);
-        onSaved(saved);
+        if (onSaved(saved) === false) return false;
       }}
     >
+      {intro && <p className="small muted">{intro}</p>}
       <div className="grid-2">
         <TextField label="Code" required maxLength={16} hint="Short and unique, e.g. HQ" {...f.bind('code')} />
         <TextField label="Name" {...f.bind('name')} />
@@ -163,6 +187,9 @@ export function LocationPage() {
   const l = loc.data;
   const devices = l.floors?.reduce((n, f) => n + f.devices, 0) ?? 0;
   const addr = [l.address_street, l.address_city, l.address_state, l.address_postcode, l.address_country].filter(Boolean).join(', ');
+  // One floor and no rooms drawn: skip the floor and room pages and show the
+  // racks and devices here. Floors and rooms show up once they're used.
+  const simple = l.floors?.length === 1 && l.floors[0].rooms <= 1;
   return (
     <div>
       <Crumbs path={l.path} links={[]} />
@@ -181,11 +208,17 @@ export function LocationPage() {
           </>
         }
       />
+      {simple && l.floors && <SimpleSite floorId={l.floors[0].id} locationId={l.id} canEdit={!!l.can_edit} />}
       <div className="grid-2">
         <Card
-          title="Floors"
+          title={simple ? 'Floors and rooms' : 'Floors'}
           actions={l.can_edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('floor')}>Add floor</Button>}
         >
+          {simple && (
+            <p className="small muted">
+              Everything is on one floor. Open it to upload a floor plan and draw rooms, or add a floor, when you need them.
+            </p>
+          )}
           {l.floors && l.floors.length > 0 ? (
             <ul className="list">
               {l.floors.map((f) => (
@@ -251,6 +284,80 @@ export function LocationPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** A one-floor location's racks and devices, shown on the location page. */
+function SimpleSite({ floorId, locationId, canEdit }: { floorId: number; locationId: number; canEdit: boolean }) {
+  const { project } = useProject();
+  const nav = useNavigate();
+  const floor = useLoad(() => api.get<Floor>(`/api/floors/${floorId}`), [floorId]);
+  const [modal, setModal] = useState<'device' | 'place' | null>(null);
+  if (!floor.data) return floor.error ? <ErrorBox error={floor.error} onRetry={floor.reload} /> : <Spinner />;
+  const f = floor.data;
+  const racks = f.racks ?? [];
+  const devices = f.devices ?? [];
+  const room = f.rooms?.find((r) => r.is_default) ?? f.rooms?.[0];
+  return (
+    <div className="grid-2 mb">
+      <Card title="Racks" actions={canEdit && <AddRackButton projectId={project.id} locationId={locationId} variant="ghost" />}>
+        {racks.length === 0 ? (
+          <Empty title="No racks yet">{canEdit ? 'Add one, then put devices in it.' : null}</Empty>
+        ) : (
+          <ul className="list">
+            {racks.map((k) => (
+              <li key={k.id}>
+                <Link to={link.rack(project.id, k.id)} className="row">
+                  <Server size={15} />
+                  <strong className="mono">{k.code}</strong>
+                  <span>{k.name}</span>
+                  <span className="grow" />
+                  <span className="small muted">{k.u_height}U · {k.device_count} device(s)</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      <Card
+        title="Devices not in a rack"
+        actions={
+          canEdit &&
+          room && (
+            <>
+              <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('device')}>Add</Button>
+              <Button variant="ghost" icon={<ArrowDownToLine size={15} />} onClick={() => setModal('place')}>Place from Unplaced</Button>
+            </>
+          )
+        }
+      >
+        {devices.length === 0 ? (
+          <p className="small muted">Access points, printers, desktops and other things that don't go in a rack.</p>
+        ) : (
+          <ul className="list">
+            {devices.map((d) => (
+              <li key={d.id}>
+                <Link to={link.device(project.id, d.id)} className="row">
+                  <strong className="mono">{d.code}</strong>
+                  <span>{d.name}</span>
+                  <span className="grow" />
+                  <span className="small muted">{d.device_type.label}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      {modal === 'device' && room && (
+        <DeviceForm
+          projectId={project.id}
+          placement={{ type: 'room', room_id: room.id, x: null, y: null, rotation: null }}
+          onClose={() => setModal(null)}
+          onSaved={(d) => nav(link.device(project.id, d.id))}
+        />
+      )}
+      {modal === 'place' && room && <PlaceInRoom projectId={project.id} roomId={room.id} onClose={() => setModal(null)} onSaved={floor.reload} />}
     </div>
   );
 }

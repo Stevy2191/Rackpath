@@ -66,11 +66,18 @@ privacy (encryption):
 
 Allow SNMP only from Rackpath's server address if the device can restrict it.
 
-> **UniFi:** SNMP is in the console's settings (look for *SNMP Monitoring*;
-> the menu moves between versions). If your device only offers MD5 or DES
-> for SNMPv3, Rackpath can't use them: they're broken. Use **v2c** with a
-> long random read-only community instead, and keep SNMP on the management
-> network.
+> **UniFi:** turn on *SNMP Monitoring* → *Version 3* in the UniFi Network
+> settings (search for "SNMP"), with a username and one password. UniFi's
+> protocols are fixed: in Rackpath choose **Authentication: SHA-1** and
+> **Privacy: AES-128**, and type UniFi's one password into **both** password
+> fields. Rackpath warns that SHA-1 is weak; UniFi offers nothing stronger,
+> and the traffic is still encrypted with AES. The same settings work for
+> UniFi switches; add each switch as its own SNMP device to get ports. Once
+> v3 works, turn *Version 1/2C* off in UniFi.
+>
+> Other devices that only offer MD5 or DES for SNMPv3 can't be used with v3:
+> those are broken. Use **v2c** with a long random read-only community
+> instead, and keep SNMP on the management network.
 
 ### 2. Add it in Rackpath
 
