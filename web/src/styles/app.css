@@ -369,3 +369,13 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .d-edge.selected line:not(.hit) { stroke: var(--color-accent); }
 .d-edge text { font-size: 11px; fill: var(--color-text-muted); text-anchor: middle; }
 @media (max-width: 1000px) { .diagram-layout { grid-template-columns: 1fr; } }
+
+/* One line of text, cut with an ellipsis (full text in the title). */
+.clip {
+  display: inline-block;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}

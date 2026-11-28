@@ -201,6 +201,12 @@ export function AddressTable({ rows, projectId, onOpen }: { rows: IpAddress[]; p
         { key: 'address', label: 'Address', render: (a) => <Link to={link.address(projectId, a.id)} className="mono" onClick={(e) => e.stopPropagation()}>{a.address}</Link> },
         { key: 'dns', label: 'DNS name', render: (a) => a.dns_name, sort: (a) => a.dns_name ?? '' },
         {
+          key: 'description',
+          label: 'Description',
+          render: (a) => a.description && <span className="clip" title={a.description}>{a.description}</span>,
+          sort: (a) => a.description ?? '',
+        },
+        {
           key: 'device',
           label: 'Device',
           render: (a) =>
@@ -210,7 +216,7 @@ export function AddressTable({ rows, projectId, onOpen }: { rows: IpAddress[]; p
                 {a.device_name && <span className="muted"> · {a.device_name}</span>}
               </Link>
             ) : (
-              <span className="muted">not linked</span>
+              <span className="muted">—</span>
             ),
           sort: (a) => a.device_path ?? '',
         },
