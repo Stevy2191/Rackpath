@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDownToLine, Pencil, Plus, Server, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
@@ -10,6 +10,7 @@ import { DeviceForm } from '../devices/DeviceForm';
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
 import { RackForm } from './Rack';
 import { PlaceInRoom } from './Quick';
+import { RackRow } from './RackRow';
 import { ReportButton } from '../Exports';
 import { formatPhone } from '../../phone';
 
@@ -83,26 +84,10 @@ export function RoomPage() {
           </>
         }
       />
+      <Card title="Racks" className="mb" actions={r.can_edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('rack')}>Add rack</Button>}>
+        {racks.length === 0 ? <Empty title="No racks in this room" /> : <RackRow projectId={project.id} racks={racks} canEdit={!!r.can_edit} onChanged={room.reload} />}
+      </Card>
       <div className="grid-2">
-        <Card title="Racks" actions={r.can_edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('rack')}>Add rack</Button>}>
-          {racks.length === 0 ? (
-            <Empty title="No racks in this room" />
-          ) : (
-            <ul className="list">
-              {racks.map((k) => (
-                <li key={k.id}>
-                  <Link to={link.rack(project.id, k.id)} className="row">
-                    <Server size={15} />
-                    <strong className="mono">{k.code}</strong>
-                    <span>{k.name}</span>
-                    <span className="grow" />
-                    <span className="small muted">{k.u_height}U · {k.device_count} device(s)</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
         <Card title="Details">
           <KeyValues
             rows={[

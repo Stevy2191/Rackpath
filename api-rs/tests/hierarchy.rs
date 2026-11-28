@@ -1433,3 +1433,65 @@ async fn phone_numbers_are_stored_formatted() {
         assert_eq!(stored, expected, "{s:?}");
     }
 }
+
+#[tokio::test]
+async fn racks_stand_in_rows() {
+    let app = spawn().await;
+    let owner = app.owner().await;
+    let s = site(&app, &owner).await;
+    let make = |body: Value| {
+        let (app, owner, room) = (&app, &owner, s.office);
+        async move {
+            let (st, r) = app
+                .post(owner, &format!("/api/rooms/{room}/racks"), body)
+                .await;
+            assert_eq!(st, StatusCode::CREATED, "{r}");
+            r
+        }
+    };
+    let b2 = make(json!({ "code": "B2", "row_label": " b ", "row_position": 2 })).await;
+    assert_eq!(b2["row_label"], "B", "trimmed and uppercased");
+    make(json!({ "code": "A2", "row_label": "A", "row_position": 2 })).await;
+    make(json!({ "code": "A1", "row_label": "A", "row_position": 1 })).await;
+    make(json!({ "code": "LOOSE" })).await;
+    let (_, room) = app.get(&owner, &format!("/api/rooms/{}", s.office)).await;
+    let order: Vec<&str> = room["racks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        order,
+        ["A1", "A2", "B2", "LOOSE"],
+        "rows, then position, then racks without a row"
+    );
+
+    // Clearing the row, and limits.
+    let id = b2["id"].as_i64().unwrap();
+    let (st, r) = app
+        .patch(
+            &owner,
+            &format!("/api/racks/{id}"),
+            json!({ "row_label": "", "row_position": null }),
+        )
+        .await;
+    assert_eq!(st, StatusCode::OK, "{r}");
+    assert_eq!(r["row_label"], Value::Null);
+    let (st, _) = app
+        .patch(
+            &owner,
+            &format!("/api/racks/{id}"),
+            json!({ "row_position": 0 }),
+        )
+        .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    let (st, _) = app
+        .patch(
+            &owner,
+            &format!("/api/racks/{id}"),
+            json!({ "row_label": "A-VERY-LONG-ROW-NAME" }),
+        )
+        .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+}

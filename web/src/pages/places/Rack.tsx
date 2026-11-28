@@ -42,6 +42,8 @@ export function RackForm({
     depth_mm: existing?.depth_mm != null ? String(existing.depth_mm) : '',
     numbering: existing?.numbering ?? 'bottom_up',
     rack_type: existing?.rack_type ?? 'enclosed',
+    row_label: existing?.row_label ?? '',
+    row_position: existing?.row_position != null ? String(existing.row_position) : '',
     notes: existing?.notes ?? '',
   });
   const roomId = f.values.room_id;
@@ -58,7 +60,14 @@ export function RackForm({
       title={existing ? `Edit rack ${existing.code}` : 'Add rack'}
       onClose={onClose}
       onSubmit={async () => {
-        const body = { ...f.values, room_id: Number(f.values.room_id), u_height: Number(f.values.u_height), depth_mm: num(f.values.depth_mm) };
+        const body = {
+          ...f.values,
+          room_id: Number(f.values.room_id),
+          u_height: Number(f.values.u_height),
+          depth_mm: num(f.values.depth_mm),
+          row_label: f.values.row_label.trim() || null,
+          row_position: f.values.row_position ? Number(f.values.row_position) : null,
+        };
         const saved = existing
           ? await api.patch<Rack>(`/api/racks/${existing.id}`, body)
           : await api.post<Rack>(`/api/rooms/${body.room_id}/racks`, body);
@@ -80,6 +89,8 @@ export function RackForm({
           {...f.bind('rack_type')}
           options={[{ value: 'enclosed', label: 'Enclosed cabinet' }, { value: 'open_frame', label: 'Open frame' }, { value: 'wall_mount', label: 'Wall mount' }, { value: 'other', label: 'Other' }]}
         />
+        <TextField label="Row" maxLength={16} placeholder="e.g. A" hint="Racks in the same row stand side by side" {...f.bind('row_label')} />
+        <TextField label="Position in the row" type="number" min={1} max={999} hint="1 is leftmost, seen from the front" {...f.bind('row_position')} />
         <SelectField label="U numbering" {...f.bind('numbering')} options={[{ value: 'bottom_up', label: 'U1 at the bottom' }, { value: 'top_down', label: 'U1 at the top' }]} />
       </div>
       <TextArea label="Notes" {...f.bind('notes')} />
@@ -361,6 +372,7 @@ export function Elevation({
   onSelect,
   onAdd,
   onMove,
+  findDevice,
 }: {
   rack: Rack;
   devices: Device[];
@@ -369,6 +381,8 @@ export function Elevation({
   onSelect: (id: number) => void;
   onAdd?: (u: number) => void;
   onMove?: (d: Device, u: number) => void;
+  /** Finds a dragged device that may come from another rack. */
+  findDevice?: (id: string) => Device | undefined;
 }) {
   const U = rack.u_height;
   const rows = U * 2;
@@ -379,7 +393,8 @@ export function Elevation({
   const drop = (u: number) => (e: DragEvent) => {
     e.preventDefault();
     setOver(null);
-    const d = devices.find((x) => String(x.id) === e.dataTransfer.getData('text/rackpath-device'));
+    const id = e.dataTransfer.getData('text/rackpath-device');
+    const d = devices.find((x) => String(x.id) === id) ?? findDevice?.(id);
     if (d && onMove) onMove(d, u);
   };
   return (

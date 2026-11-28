@@ -1,18 +1,19 @@
 // A floor: its plan image, rooms drawn as polygons, and racks and
 // floor-standing devices positioned on it (in plan pixels).
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ImagePlus, MoveRight, Pencil, PenLine, Plus, RotateCw, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
 import type { Device, Floor, RackSummary, Room } from '../../types';
-import { Badge, Button, Card, ErrorBox, FormModal, PageHeader, SelectField, Spinner, TextField, message, useLoad, useToast } from '../../ui';
+import { Badge, Button, Card, Empty, ErrorBox, FormModal, PageHeader, SelectField, Spinner, Tabs, TextField, message, useLoad, useToast } from '../../ui';
 import { Crumbs, DeleteModal } from './common';
 import { FloorForm } from './Locations';
 import { RackForm } from './Rack';
 import { RoomForm } from './Room';
 import { MoveFloor } from './Move';
+import { RackRow } from './RackRow';
 import { ReportButton } from '../Exports';
 
 const DEFAULT_W = 1200;
@@ -40,6 +41,7 @@ export function FloorPage() {
   const [error, setError] = useState<string | null>(null);
   const svg = useRef<SVGSVGElement>(null);
   const file = useRef<HTMLInputElement>(null);
+  const [params, setParams] = useSearchParams();
 
   if (floor.error) return <ErrorBox error={floor.error} onRetry={floor.reload} />;
   if (!floor.data) return <Spinner />;
@@ -47,6 +49,10 @@ export function FloorPage() {
   const rooms = f.rooms ?? [];
   const racks = f.racks ?? [];
   const devices = f.devices ?? [];
+  // Racks first; a floor with a plan image opens on its plan.
+  const defaultView = f.plan_image_type ? 'plan' : 'racks';
+  const asked = params.get('view');
+  const view: 'plan' | 'racks' = asked === 'plan' || asked === 'racks' ? asked : defaultView;
   const W = f.plan_width ?? DEFAULT_W;
   const H = f.plan_height ?? DEFAULT_H;
   const scale = f.scale_px_per_m ?? Math.min(W, H) / 15;
@@ -181,204 +187,224 @@ export function FloorPage() {
         }
       />
       <ErrorBox error={error} />
-      <div className="plan-layout">
-        <div className="plan-wrap">
-          {mode.type !== 'view' && (
-            <div className="plan-banner">
-              {mode.type === 'draw' ? (
-                <>
-                  <span>Click to add corners ({mode.points.length} so far).</span>
-                  <Button
-                    variant="primary"
-                    disabled={mode.points.length < 3}
-                    onClick={() => (mode.roomId ? saveShape(mode.roomId, mode.points) : setModal('shape'))}
-                  >
-                    Finish
-                  </Button>
-                  <Button variant="ghost" disabled={mode.points.length === 0} onClick={() => setMode({ ...mode, points: mode.points.slice(0, -1) })}>Undo</Button>
-                </>
-              ) : (
-                <span>Click on the plan to place it.</span>
-              )}
-              <Button variant="ghost" icon={<X size={15} />} onClick={() => setMode({ type: 'view' })}>Cancel</Button>
-            </div>
-          )}
-          <svg
-            ref={svg}
-            className={`plan${mode.type !== 'view' ? ' plan-crosshair' : ''}`}
-            viewBox={`0 0 ${W} ${H}`}
-            role="img"
-            aria-label={`Floor plan of ${f.code}`}
-            onClick={onCanvasClick}
-            onPointerMove={onMove}
-            onPointerUp={onUp}
-          >
-            <defs>
-              <pattern id="plan-grid" width={scale} height={scale} patternUnits="userSpaceOnUse">
-                <path d={`M ${scale} 0 L 0 0 0 ${scale}`} className="plan-gridline" />
-              </pattern>
-            </defs>
-            {f.plan_image_type ? (
-              <image href={`/api/floors/${f.id}/plan-image?v=${encodeURIComponent(f.updated_at)}`} width={W} height={H} />
-            ) : (
-              <rect width={W} height={H} fill="url(#plan-grid)" />
-            )}
-            {rooms.map(
-              (r) =>
-                r.shape && (
-                  <g key={r.id} className={`plan-room${selRoom?.id === r.id ? ' selected' : ''}`} onClick={(e) => { if (mode.type === 'view') { e.stopPropagation(); setSelected({ kind: 'room', id: r.id }); } }}>
-                    <polygon points={r.shape.points.map((p) => p.join(',')).join(' ')} style={{ fill: r.color ?? undefined, stroke: r.color ?? undefined }} />
-                    <text x={centroid(r.shape.points)[0]} y={centroid(r.shape.points)[1]} className="plan-label">{r.code}</text>
-                  </g>
-                ),
-            )}
-            {mode.type === 'draw' && mode.points.length > 0 && (
-              <g className="plan-drawing">
-                <polyline points={mode.points.map((p) => p.join(',')).join(' ')} />
-                {mode.points.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={4} />)}
-              </g>
-            )}
-            {racks.map((r) => {
-              const p = posOf({ kind: 'rack', id: r.id });
-              if (!p) return null;
-              const [wm, dm] = rackMetres(r);
-              const w = wm * scale;
-              const d = dm * scale;
-              return (
-                <g
-                  key={r.id}
-                  className={`plan-rack${selRack?.id === r.id ? ' selected' : ''}`}
-                  transform={`translate(${p[0]} ${p[1]}) rotate(${r.plan_rotation ?? 0})`}
-                  onPointerDown={startDrag({ kind: 'rack', id: r.id })}
-                  onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={() => nav(link.rack(project.id, r.id))}
-                  data-rack={r.code}
-                >
-                  <rect x={-w / 2} y={-d / 2} width={w} height={d} />
-                  <line x1={-w / 2} y1={d / 2} x2={w / 2} y2={d / 2} className="plan-front" />
-                  <text y={4} className="plan-label">{r.code}</text>
-                </g>
-              );
-            })}
-            {devices.map((dv) => {
-              const p = posOf({ kind: 'device', id: dv.id });
-              if (!p) return null;
-              return (
-                <g
-                  key={dv.id}
-                  className={`plan-device${selDevice?.id === dv.id ? ' selected' : ''}`}
-                  transform={`translate(${p[0]} ${p[1]})`}
-                  onPointerDown={startDrag({ kind: 'device', id: dv.id })}
-                  onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={() => nav(link.device(project.id, dv.id))}
-                >
-                  <circle r={scale * 0.25} />
-                  <text y={-scale * 0.35} className="plan-label">{dv.code}</text>
-                </g>
-              );
-            })}
-          </svg>
-          {!f.plan_image_type && <p className="small muted">No plan image yet{edit ? ': upload a PNG, JPEG or WebP drawing of this floor.' : '.'} Each grid square is a metre until you set the plan scale.</p>}
-        </div>
-        <aside className="plan-side stack">
-          {selRoom && (
-            <Card title={`Room ${selRoom.code}`}>
-              <div className="stack">
-                <div>{selRoom.name}</div>
-                <div className="row">
-                  <Link to={link.room(project.id, selRoom.id)}>Open room</Link>
-                  {edit && <Button variant="ghost" icon={<PenLine size={15} />} onClick={() => setMode({ type: 'draw', points: [], roomId: selRoom.id })}>Redraw shape</Button>}
-                </div>
-              </div>
-            </Card>
-          )}
-          {selRack && (
-            <Card title={`Rack ${selRack.code}`}>
-              <div className="stack">
-                <div className="small muted">{selRack.u_height}U · {selRack.device_count} device(s) · in {rooms.find((r) => r.id === selRack.room_id)?.code}</div>
-                <div className="row">
-                  <Link to={link.rack(project.id, selRack.id)}>Open rack</Link>
-                  {edit && (
-                    <Button
-                      variant="ghost"
-                      icon={<RotateCw size={15} />}
-                      onClick={async () => {
-                        const p = posOf({ kind: 'rack', id: selRack.id });
-                        if (p) await savePos({ kind: 'rack', id: selRack.id }, p, ((selRack.plan_rotation ?? 0) + 90) % 360);
-                        reload();
-                      }}
-                    >
-                      Rotate
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </Card>
-          )}
-          {selDevice && (
-            <Card title={`Device ${selDevice.code}`}>
-              <div className="stack">
-                <div className="small muted">{selDevice.device_type.label}{selDevice.name ? ` · ${selDevice.name}` : ''}</div>
-                <Link to={link.device(project.id, selDevice.id)}>Open device</Link>
-              </div>
-            </Card>
-          )}
-          <Card
-            title="Rooms"
-            actions={
-              edit && (
-                <>
-                  <Button variant="ghost" icon={<PenLine size={15} />} onClick={() => setMode({ type: 'draw', points: [] })}>Draw</Button>
-                  <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('room')}>Add</Button>
-                </>
-              )
-            }
-          >
-            <ul className="list">
-              {rooms.map((r) => (
-                <li key={r.id} className="row">
-                  <span className="swatch" style={{ background: r.color ?? 'var(--color-border-strong)' }} />
-                  <Link to={link.room(project.id, r.id)} className="mono">{r.code}</Link>
-                  <span className="small">{r.name}</span>
-                  {r.is_default && <Badge>default</Badge>}
-                  {!r.shape && !r.is_default && <span className="small muted">not drawn</span>}
-                </li>
-              ))}
-            </ul>
-          </Card>
-          <Card title="Racks" actions={edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('rack')}>Add</Button>}>
+      <Tabs
+        tabs={[
+          { id: 'racks', label: `Racks (${racks.length})` },
+          { id: 'plan', label: f.plan_image_type ? 'Floor plan' : 'Floor plan and rooms' },
+        ]}
+        value={view}
+        onChange={(v) => setParams(v === defaultView ? {} : { view: v }, { replace: true })}
+      />
+      {view === 'racks' ? (
+        <div className="tab-panel">
+          <Card title="Racks side by side" actions={edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('rack')}>Add rack</Button>}>
             {racks.length === 0 ? (
-              <p className="small muted">No racks on this floor.</p>
+              <Empty title="No racks on this floor">The floor plan is optional: add racks here and put devices in them.</Empty>
             ) : (
-              <ul className="list">
-                {racks.map((r) => (
-                  <li key={r.id} className="row">
-                    <Link to={link.rack(project.id, r.id)} className="mono">{r.code}</Link>
-                    <span className="small muted">{r.u_height}U · {r.device_count} dev.</span>
-                    <span className="grow" />
-                    {edit && unplacedRacks.includes(r) && (
-                      <Button variant="ghost" onClick={() => setMode({ type: 'place', item: { kind: 'rack', id: r.id } })}>Place</Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <RackRow projectId={project.id} racks={racks} canEdit={edit} onChanged={reload} />
             )}
           </Card>
-          {unplacedDevices.length > 0 && (
-            <Card title="Floor devices not on the plan">
+        </div>
+      ) : (
+      <div className="plan-layout">
+          <div className="plan-wrap">
+            {mode.type !== 'view' && (
+              <div className="plan-banner">
+                {mode.type === 'draw' ? (
+                  <>
+                    <span>Click to add corners ({mode.points.length} so far).</span>
+                    <Button
+                      variant="primary"
+                      disabled={mode.points.length < 3}
+                      onClick={() => (mode.roomId ? saveShape(mode.roomId, mode.points) : setModal('shape'))}
+                    >
+                      Finish
+                    </Button>
+                    <Button variant="ghost" disabled={mode.points.length === 0} onClick={() => setMode({ ...mode, points: mode.points.slice(0, -1) })}>Undo</Button>
+                  </>
+                ) : (
+                  <span>Click on the plan to place it.</span>
+                )}
+                <Button variant="ghost" icon={<X size={15} />} onClick={() => setMode({ type: 'view' })}>Cancel</Button>
+              </div>
+            )}
+            <svg
+              ref={svg}
+              className={`plan${mode.type !== 'view' ? ' plan-crosshair' : ''}`}
+              viewBox={`0 0 ${W} ${H}`}
+              role="img"
+              aria-label={`Floor plan of ${f.code}`}
+              onClick={onCanvasClick}
+              onPointerMove={onMove}
+              onPointerUp={onUp}
+            >
+              <defs>
+                <pattern id="plan-grid" width={scale} height={scale} patternUnits="userSpaceOnUse">
+                  <path d={`M ${scale} 0 L 0 0 0 ${scale}`} className="plan-gridline" />
+                </pattern>
+              </defs>
+              {f.plan_image_type ? (
+                <image href={`/api/floors/${f.id}/plan-image?v=${encodeURIComponent(f.updated_at)}`} width={W} height={H} />
+              ) : (
+                <rect width={W} height={H} fill="url(#plan-grid)" />
+              )}
+              {rooms.map(
+                (r) =>
+                  r.shape && (
+                    <g key={r.id} className={`plan-room${selRoom?.id === r.id ? ' selected' : ''}`} onClick={(e) => { if (mode.type === 'view') { e.stopPropagation(); setSelected({ kind: 'room', id: r.id }); } }}>
+                      <polygon points={r.shape.points.map((p) => p.join(',')).join(' ')} style={{ fill: r.color ?? undefined, stroke: r.color ?? undefined }} />
+                      <text x={centroid(r.shape.points)[0]} y={centroid(r.shape.points)[1]} className="plan-label">{r.code}</text>
+                    </g>
+                  ),
+              )}
+              {mode.type === 'draw' && mode.points.length > 0 && (
+                <g className="plan-drawing">
+                  <polyline points={mode.points.map((p) => p.join(',')).join(' ')} />
+                  {mode.points.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={4} />)}
+                </g>
+              )}
+              {racks.map((r) => {
+                const p = posOf({ kind: 'rack', id: r.id });
+                if (!p) return null;
+                const [wm, dm] = rackMetres(r);
+                const w = wm * scale;
+                const d = dm * scale;
+                return (
+                  <g
+                    key={r.id}
+                    className={`plan-rack${selRack?.id === r.id ? ' selected' : ''}`}
+                    transform={`translate(${p[0]} ${p[1]}) rotate(${r.plan_rotation ?? 0})`}
+                    onPointerDown={startDrag({ kind: 'rack', id: r.id })}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={() => nav(link.rack(project.id, r.id))}
+                    data-rack={r.code}
+                  >
+                    <rect x={-w / 2} y={-d / 2} width={w} height={d} />
+                    <line x1={-w / 2} y1={d / 2} x2={w / 2} y2={d / 2} className="plan-front" />
+                    <text y={4} className="plan-label">{r.code}</text>
+                  </g>
+                );
+              })}
+              {devices.map((dv) => {
+                const p = posOf({ kind: 'device', id: dv.id });
+                if (!p) return null;
+                return (
+                  <g
+                    key={dv.id}
+                    className={`plan-device${selDevice?.id === dv.id ? ' selected' : ''}`}
+                    transform={`translate(${p[0]} ${p[1]})`}
+                    onPointerDown={startDrag({ kind: 'device', id: dv.id })}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={() => nav(link.device(project.id, dv.id))}
+                  >
+                    <circle r={scale * 0.25} />
+                    <text y={-scale * 0.35} className="plan-label">{dv.code}</text>
+                  </g>
+                );
+              })}
+            </svg>
+            {!f.plan_image_type && <p className="small muted">No plan image yet{edit ? ': upload a PNG, JPEG or WebP drawing of this floor.' : '.'} Each grid square is a metre until you set the plan scale.</p>}
+          </div>
+          <aside className="plan-side stack">
+            {selRoom && (
+              <Card title={`Room ${selRoom.code}`}>
+                <div className="stack">
+                  <div>{selRoom.name}</div>
+                  <div className="row">
+                    <Link to={link.room(project.id, selRoom.id)}>Open room</Link>
+                    {edit && <Button variant="ghost" icon={<PenLine size={15} />} onClick={() => setMode({ type: 'draw', points: [], roomId: selRoom.id })}>Redraw shape</Button>}
+                  </div>
+                </div>
+              </Card>
+            )}
+            {selRack && (
+              <Card title={`Rack ${selRack.code}`}>
+                <div className="stack">
+                  <div className="small muted">{selRack.u_height}U · {selRack.device_count} device(s) · in {rooms.find((r) => r.id === selRack.room_id)?.code}</div>
+                  <div className="row">
+                    <Link to={link.rack(project.id, selRack.id)}>Open rack</Link>
+                    {edit && (
+                      <Button
+                        variant="ghost"
+                        icon={<RotateCw size={15} />}
+                        onClick={async () => {
+                          const p = posOf({ kind: 'rack', id: selRack.id });
+                          if (p) await savePos({ kind: 'rack', id: selRack.id }, p, ((selRack.plan_rotation ?? 0) + 90) % 360);
+                          reload();
+                        }}
+                      >
+                        Rotate
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
+            {selDevice && (
+              <Card title={`Device ${selDevice.code}`}>
+                <div className="stack">
+                  <div className="small muted">{selDevice.device_type.label}{selDevice.name ? ` · ${selDevice.name}` : ''}</div>
+                  <Link to={link.device(project.id, selDevice.id)}>Open device</Link>
+                </div>
+              </Card>
+            )}
+            <Card
+              title="Rooms"
+              actions={
+                edit && (
+                  <>
+                    <Button variant="ghost" icon={<PenLine size={15} />} onClick={() => setMode({ type: 'draw', points: [] })}>Draw</Button>
+                    <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('room')}>Add</Button>
+                  </>
+                )
+              }
+            >
               <ul className="list">
-                {unplacedDevices.map((d) => (
-                  <li key={d.id} className="row">
-                    <Link to={link.device(project.id, d.id)} className="mono">{d.code}</Link>
-                    <span className="grow" />
-                    {edit && <Button variant="ghost" onClick={() => setMode({ type: 'place', item: { kind: 'device', id: d.id } })}>Place</Button>}
+                {rooms.map((r) => (
+                  <li key={r.id} className="row">
+                    <span className="swatch" style={{ background: r.color ?? 'var(--color-border-strong)' }} />
+                    <Link to={link.room(project.id, r.id)} className="mono">{r.code}</Link>
+                    <span className="small">{r.name}</span>
+                    {r.is_default && <Badge>default</Badge>}
+                    {!r.shape && !r.is_default && <span className="small muted">not drawn</span>}
                   </li>
                 ))}
               </ul>
             </Card>
-          )}
-        </aside>
-      </div>
+            <Card title="Racks" actions={edit && <Button variant="ghost" icon={<Plus size={15} />} onClick={() => setModal('rack')}>Add</Button>}>
+              {racks.length === 0 ? (
+                <p className="small muted">No racks on this floor.</p>
+              ) : (
+                <ul className="list">
+                  {racks.map((r) => (
+                    <li key={r.id} className="row">
+                      <Link to={link.rack(project.id, r.id)} className="mono">{r.code}</Link>
+                      <span className="small muted">{r.u_height}U · {r.device_count} dev.</span>
+                      <span className="grow" />
+                      {edit && unplacedRacks.includes(r) && (
+                        <Button variant="ghost" onClick={() => setMode({ type: 'place', item: { kind: 'rack', id: r.id } })}>Place</Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+            {unplacedDevices.length > 0 && (
+              <Card title="Floor devices not on the plan">
+                <ul className="list">
+                  {unplacedDevices.map((d) => (
+                    <li key={d.id} className="row">
+                      <Link to={link.device(project.id, d.id)} className="mono">{d.code}</Link>
+                      <span className="grow" />
+                      {edit && <Button variant="ghost" onClick={() => setMode({ type: 'place', item: { kind: 'device', id: d.id } })}>Place</Button>}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </aside>
+        </div>
+      )}
       {modal === 'move' && (
         <MoveFloor
           projectId={project.id}

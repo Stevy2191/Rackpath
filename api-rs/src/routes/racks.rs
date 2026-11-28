@@ -38,6 +38,10 @@ pub struct Rack {
     pub plan_x: Option<f64>,
     pub plan_y: Option<f64>,
     pub plan_rotation: Option<f64>,
+    /// The row it stands in (A, B…) and its place in that row, left to right
+    /// seen from the front.
+    pub row_label: Option<String>,
+    pub row_position: Option<i64>,
     pub responsible_user_id: Option<i64>,
     pub notes: Option<String>,
     pub created_at: String,
@@ -47,7 +51,7 @@ pub struct Rack {
 macro_rules! rack_columns {
     () => {
         "k.id, k.room_id, k.code, k.name, k.u_height, k.width, k.depth_mm, k.numbering, k.rack_type, k.plan_x, k.plan_y, \
-         k.plan_rotation, k.responsible_user_id, k.notes, k.created_at, k.updated_at"
+         k.plan_rotation, k.row_label, k.row_position, k.responsible_user_id, k.notes, k.created_at, k.updated_at"
     };
 }
 
@@ -80,12 +84,14 @@ pub async fn racks_where(
         "floor" => concat!(
             "SELECT ", rack_columns!(), ", s.path, ",
             "(SELECT COUNT(*) FROM search_entries d WHERE d.kind = 'device' AND d.rack_id = k.id) AS device_count ",
-            "FROM racks k JOIN search_entries s ON s.kind = 'rack' AND s.ref_id = k.id WHERE s.floor_id = ? ORDER BY k.code"
+            "FROM racks k JOIN search_entries s ON s.kind = 'rack' AND s.ref_id = k.id WHERE s.floor_id = ? \
+             ORDER BY k.row_label IS NULL, k.row_label COLLATE NOCASE, k.row_position IS NULL, k.row_position, k.code"
         ),
         _ => concat!(
             "SELECT ", rack_columns!(), ", s.path, ",
             "(SELECT COUNT(*) FROM search_entries d WHERE d.kind = 'device' AND d.rack_id = k.id) AS device_count ",
-            "FROM racks k JOIN search_entries s ON s.kind = 'rack' AND s.ref_id = k.id WHERE s.room_id = ? ORDER BY k.code"
+            "FROM racks k JOIN search_entries s ON s.kind = 'rack' AND s.ref_id = k.id WHERE s.room_id = ? \
+             ORDER BY k.row_label IS NULL, k.row_label COLLATE NOCASE, k.row_position IS NULL, k.row_position, k.code"
         ),
     };
     let rows = sqlx::query_as::<_, Row>(sql)
@@ -167,9 +173,32 @@ pub struct RackFields {
     plan_y: Option<Option<f64>>,
     #[serde(default, deserialize_with = "super::nullable")]
     plan_rotation: Option<Option<f64>>,
+    /// Empty or null: not in a row.
+    #[serde(default, deserialize_with = "super::nullable")]
+    row_label: Option<Option<String>>,
+    #[serde(default, deserialize_with = "super::nullable")]
+    row_position: Option<Option<i64>>,
     #[serde(default, deserialize_with = "super::nullable")]
     responsible_user_id: Option<Option<i64>>,
     notes: Option<String>,
+}
+
+/// A row label as stored: trimmed, uppercase, 1–16 characters, or none.
+fn row_label(v: Option<Option<String>>, old: Option<String>) -> AppResult<Option<String>> {
+    match v {
+        None => Ok(old),
+        Some(None) => Ok(None),
+        Some(Some(s)) => {
+            let s = s.trim().to_uppercase();
+            if s.is_empty() {
+                Ok(None)
+            } else if s.chars().count() > 16 {
+                Err(AppError::bad("The row is at most 16 characters"))
+            } else {
+                Ok(Some(s))
+            }
+        }
+    }
 }
 
 fn validate(body: &RackFields) -> AppResult<()> {
@@ -190,6 +219,13 @@ fn validate(body: &RackFields) -> AppResult<()> {
         &body.rack_type,
         &["enclosed", "open_frame", "wall_mount", "other"],
     )?;
+    if body
+        .row_position
+        .flatten()
+        .is_some_and(|p| !(1..=999).contains(&p))
+    {
+        return Err(AppError::bad("row_position must be between 1 and 999"));
+    }
     for v in [body.plan_x, body.plan_y, body.plan_rotation]
         .into_iter()
         .flatten()
@@ -242,8 +278,8 @@ pub async fn create_rack(
     let now = now_ts();
     let id = sqlx::query(
         "INSERT INTO racks (room_id, code, name, u_height, width, depth_mm, numbering, rack_type, plan_x, plan_y,
-         plan_rotation, responsible_user_id, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         plan_rotation, row_label, row_position, responsible_user_id, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(room_id)
     .bind(&code)
@@ -256,6 +292,8 @@ pub async fn create_rack(
     .bind(body.plan_x.flatten())
     .bind(body.plan_y.flatten())
     .bind(body.plan_rotation.flatten())
+    .bind(row_label(body.row_label.clone(), None)?)
+    .bind(body.row_position.flatten())
     .bind(responsible)
     .bind(clean_text(body.notes))
     .bind(&now)
@@ -374,7 +412,8 @@ pub async fn update_rack_in(
     }
     sqlx::query(
         "UPDATE racks SET room_id = ?, code = ?, name = ?, u_height = ?, width = ?, depth_mm = ?, numbering = ?,
-         rack_type = ?, plan_x = ?, plan_y = ?, plan_rotation = ?, responsible_user_id = ?, notes = ?, updated_at = ?
+         rack_type = ?, plan_x = ?, plan_y = ?, plan_rotation = ?, row_label = ?, row_position = ?, responsible_user_id = ?,
+         notes = ?, updated_at = ?
          WHERE id = ?",
     )
     .bind(room_id)
@@ -388,6 +427,8 @@ pub async fn update_rack_in(
     .bind(apply_nullable(body.plan_x, old.plan_x))
     .bind(apply_nullable(body.plan_y, old.plan_y))
     .bind(apply_nullable(body.plan_rotation, old.plan_rotation))
+    .bind(row_label(body.row_label.clone(), old.row_label.clone())?)
+    .bind(apply_nullable(body.row_position, old.row_position))
     .bind(responsible)
     .bind(merge_text(body.notes, old.notes.clone()))
     .bind(now_ts())

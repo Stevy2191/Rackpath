@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDownToLine, Building2, MoveRight, Pencil, Plus, Server, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, Building2, MoveRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useProject } from '../../layout/Shell';
 import { link } from '../../links';
@@ -9,6 +9,7 @@ import { Button, Card, Empty, ErrorBox, FormModal, PageHeader, Spinner, Table, T
 import { Crumbs, DeleteModal, KeyValues, useForm } from './common';
 import { MoveLocation } from './Move';
 import { AddRackButton, PlaceInRoom } from './Quick';
+import { RackRow } from './RackRow';
 import { DeviceForm } from '../devices/DeviceForm';
 import { ReportButton } from '../Exports';
 import { formatPhone } from '../../phone';
@@ -300,24 +301,12 @@ function SimpleSite({ floorId, locationId, canEdit }: { floorId: number; locatio
   const devices = f.devices ?? [];
   const room = f.rooms?.find((r) => r.is_default) ?? f.rooms?.[0];
   return (
-    <div className="grid-2 mb">
+    <div className="stack mb">
       <Card title="Racks" actions={canEdit && <AddRackButton projectId={project.id} locationId={locationId} variant="ghost" />}>
         {racks.length === 0 ? (
           <Empty title="No racks yet">{canEdit ? 'Add one, then put devices in it.' : null}</Empty>
         ) : (
-          <ul className="list">
-            {racks.map((k) => (
-              <li key={k.id}>
-                <Link to={link.rack(project.id, k.id)} className="row">
-                  <Server size={15} />
-                  <strong className="mono">{k.code}</strong>
-                  <span>{k.name}</span>
-                  <span className="grow" />
-                  <span className="small muted">{k.u_height}U · {k.device_count} device(s)</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <RackRow projectId={project.id} racks={racks} canEdit={canEdit} onChanged={floor.reload} />
         )}
       </Card>
       <Card

@@ -141,6 +141,9 @@ export interface Rack {
   plan_x: number | null;
   plan_y: number | null;
   plan_rotation: number | null;
+  /** The row it stands in (A, B…) and its place in the row, from the front. */
+  row_label: string | null;
+  row_position: number | null;
   notes: string | null;
   path: string;
   devices?: Device[];
