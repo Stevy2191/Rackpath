@@ -9,7 +9,7 @@ This document designs the data model for Rackpath v2. That release:
 
 Features and ideas were taken from reviewing Patchdocs. None of its text, design or code is reused, and features tied to its own hardware (patchbox.one cassettes) are left out.
 
-**Rackpath is documentation software.** It records what exists and how it's connected. It does not probe, poll or monitor the network, and it stores no device logins. Network scanning, network tools, credential macros, SNMP polling and live state from integrations were removed from v1 in the same spirit (migration 0067), and none of them come back in v2.
+**Rackpath is documentation software.** It records what exists and how it's connected. It does not monitor the network. v1's scanning, network tools, credential macros, SNMP polling and live state were removed (migration 0067). v2 brings back one narrow piece, **opt-in discovery** (section 15a): ping sweeps of small private prefixes and read-only SNMP reads of ARP and MAC address tables, off until an admin turns them on, whose results wait for review instead of becoming documentation.
 
 What stays from v1: inventory-only integrations (UniFi and Zabbix), the logical topology diagram, UPS and power planning, VLANs, tags and self-hosting. New in v2 alongside the physical documentation: **IP address management (IPAM)**, filled automatically from Windows DHCP and DNS (section 9).
 
@@ -31,8 +31,8 @@ Decisions taken by the project owner are recorded in section 19.
 
 - Fibre breakout cables (MPO to LC fan-outs) with per-strand tracing. They are recorded as single ports, with a note. See Open questions.
 - Electrical circuits upstream of the rack (panels, breakers).
-- **Anything that touches the network or watches it:** scanning, SNMP or SSH polling, ping/traceroute tools, up/down status, port link state, live door or camera state. Rackpath is not a monitoring system and has no component that sends traffic to devices.
-- **Storing device credentials** (SNMP communities, SSH/HTTP logins, camera stream passwords, Wi-Fi passphrases). A note on a device can point to the entry in your password manager. The only secrets Rackpath stores are the logins and API keys for its own integrations.
+- **Watching the network:** SSH polling, ping/traceroute tools, up/down status, alerting, port link state, live door or camera state. Rackpath is not a monitoring system. The only traffic it sends to devices is the opt-in discovery of section 15a.
+- **Storing device logins** (SSH/HTTP logins, camera stream passwords, Wi-Fi passphrases). A note on a device can point to the entry in your password manager. The only secrets Rackpath stores are the logins and API keys for its own integrations and the read-only SNMP credentials for discovery.
 - **Outside services by default:** no map tiles, geocoding, or MAC-vendor lookups.
 - Hosted multi-company billing. "Pay per rack" has no meaning for self-hosted software.
 
@@ -422,7 +422,7 @@ Today's power maths (outlet counts, load in VA and W, UPS runtime curves, cross-
 
 ### IP address management (IPAM)
 
-IPAM **records the address plan**. It never pings, scans or checks whether an address is alive. Data comes from people, the CSV importer, and the integrations in section 15 (Windows DHCP/DNS, Zabbix, UniFi).
+IPAM **records the address plan**. Data comes from people, the CSV importer, and the integrations in section 15 (Windows DHCP/DNS, Zabbix, UniFi). The opt-in discovery of section 15a adds "last seen" facts and a review list; it never edits the plan by itself.
 
 #### Storage of addresses
 Every address and range bound is stored twice: as canonical text (`10.20.30.5`, `2001:db8::5`) for display, and as a **16-byte binary** for sorting and range queries. IPv4 is stored in its IPv4-mapped IPv6 form (`::ffff:10.20.30.5`), so one comparison works for both families. All maths (containment, next free, overlap) lives in pure Rust functions in `domain/` with unit tests.
@@ -648,7 +648,7 @@ The real move runs in one transaction, writes one audit entry group, and needs e
 
 ## 15. Integrations and imports
 
-All automation follows one rule: **Rackpath reads from systems that already hold the facts. It never contacts devices.** Connections between ports are always entered by hand (decision D7). There is no locations map: it would need outside tile and geocoding services.
+Integrations follow one rule: **Rackpath reads from systems that already hold the facts.** (Discovery, section 15a, is the one opt-in exception that contacts devices.) Connections between ports are always entered by hand (decision D7). There is no locations map: it would need outside tile and geocoding services.
 
 | Source | Direction | What it brings in |
 |---|---|---|
@@ -690,11 +690,27 @@ All automation follows one rule: **Rackpath reads from systems that already hold
 ### Ownership rules (all imports)
 - Every imported record carries `source`, `source_integration_id` and an `external_id` (for Windows: server name plus scope ID, reservation IP and so on), so later imports update the same record instead of creating duplicates.
 - **An import owns only the facts it brought in** (for an address: MAC, DNS name, reservation flag, description from Windows). **People own everything else** (notes, the device and port it's linked to, location, role). A sync never overwrites people's fields.
-- **When a record disappears at the source**, Rackpath sets `missing_from_source_at` and shows a warning. It is never deleted automatically; a person confirms the removal.
+- **When a record disappears at the source**, Rackpath sets `missing_from_source_at` and shows a warning. By default it is never deleted automatically. An admin can turn on `remove_missing` for an integration; syncs then delete the records it owns that are gone, except devices with documented cables or devices on them (kept and flagged). Deletions count toward the hold threshold and are listed in the sync's audit entry.
 - An import is processed in one transaction and writes one grouped `sync` entry in the audit log, with counts and the changed records.
 - An import that would change more than a set share of a source's records at once (default 50%) is held for an admin to approve, so a broken script or wrong token can't wipe the documentation.
 
 ---
+
+## 15a. Discovery (opt-in)
+
+An IPAM that only knows what someone typed in misses the static addresses nobody wrote down. Enterprise IPAMs fill the gap two ways, and Rackpath does both, narrowly:
+
+- **Ping sweeps** of a prefix: one ICMP echo per usable address, 32 in flight, 1 s timeout, then reverse DNS for hosts that answer. Only private IPv4 prefixes of /22 or smaller; never IPv6 (a /64 can't be swept). Pings use unprivileged ICMP sockets, so the container needs no capabilities.
+- **SNMP reads** of routers (ARP: IP → MAC) and switches (bridge forwarding tables: MAC → port). Read-only GET/GETBULK; SNMPv3 authPriv by default, v2c with a warning. Only private IP addresses. Credentials encrypted, write-only.
+
+Rules:
+- **Off by default**, per prefix and per SNMP device; admins only. By hand ("Scan now") or on a schedule of hourly to weekly. One run at a time server-wide.
+- **Review, never auto-document.** Unknown live addresses go to `discovered_hosts` (new or ignored). Documenting one creates the address; ignoring hides it for good. Documented addresses only get `last_seen_at`, `last_seen_mac` and `last_seen_port`.
+- **Warnings:** a different MAC at a documented address; a documented address in a scanned prefix silent for 30 days.
+- **Usage and free lists** count live discovered hosts as used.
+- **Audited:** one `sync` entry per run, written with its results; settings, SNMP devices and review actions are audited as usual.
+
+Tables (migration 0012): `prefixes.scan_enabled`, `scan_interval_minutes`, `last_scan_at`; `ip_addresses.last_seen_*`; `snmp_sources`; `discovery_runs`; `discovered_hosts`.
 
 ## 16. Exports
 
@@ -798,7 +814,7 @@ All resolved by the project owner.
 | D3 | Reading: project-wide, or narrowable to a location? | **Project-wide.** Narrowing reads would make traced cables disappear into places a user can't see |
 | D4 | Floor plans: bundle a PDF rasteriser, or images only? | **Images only** (PNG, JPEG, WebP) in the first release. A PDF page can be exported to PNG with any PDF viewer. Can be revisited later |
 | D5 | Frontend build: move from Create React App to Vite? | **Yes, in v2.** No user-facing change; clears the 28 remaining build-tool advisories |
-| D6 | Scope | **Documentation only.** No scanning, network tools, polling, live state, stored device credentials, map, or outbound email (section 1) |
+| D6 | Scope | **Documentation first.** No network tools, monitoring, live state, stored device logins, map, or outbound email (section 1). Opt-in, review-only discovery (ping sweeps, read-only SNMP) is the one exception (section 15a) |
 | D7 | How do connections get in? | **By hand, as in Patchdocs:** drag port to port in the rack view, pick the far end in a dialog, or the CSV importer for bulk loads. No connection data is imported from integrations, and no neighbour-table suggestions |
 | D8 | Integrations | **UniFi (Network, Protect, Access) and Zabbix**, inventory only. NetBox and LibreNMS removed (NetBox holds one site, not worth importing). **Windows DHCP/DNS** added for IPAM |
 | D9 | How does Windows data get in? | **Pushed by a read-only PowerShell scheduled task** with a revocable import token, or an uploaded `Export-DhcpServer` file. Rackpath stores no Windows credentials. DNS: static records only. Leases: optional snapshot, never documentation |

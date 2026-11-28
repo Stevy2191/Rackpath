@@ -58,6 +58,9 @@ export function AddressPage() {
             ['DHCP reservation', a.dhcp_reservation ? 'Yes' : null],
             ['Description', a.description],
             ['Source', a.source !== 'manual' ? a.source : null],
+            ['Last seen', a.last_seen_at && <>{fmtTime(a.last_seen_at)} <span className="small muted">by a scan or SNMP poll</span></>],
+            ['MAC seen', a.last_seen_mac && a.last_seen_mac !== a.mac && <span className="mono">{a.last_seen_mac}{a.mac ? <Badge tone="warn">differs from the documented MAC</Badge> : null}</span>],
+            ['Switch port', a.last_seen_port],
             ['Notes', a.notes && <span className="pre">{a.notes}</span>],
           ]}
         />

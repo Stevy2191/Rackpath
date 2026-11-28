@@ -122,4 +122,50 @@ export default function (test, { base, shots, allow }) {
     const vlans = (await call(page, 'get', `/api/ports/${p2.id}`)).vlans;
     assert.deepEqual(vlans.map((v) => [v.vid, v.mode]), [[30, 'untagged']]);
   });
+
+  test('turn on scanning for a prefix and add an SNMP device', async (page) => {
+    const prefix = (await call(page, 'get', `/api/projects/${s.pid}/prefixes`)).prefixes.find((p) => p.cidr === '10.30.5.0/24');
+    await page.goto(`${base}/p/${s.pid}/ipam/prefixes/${prefix.id}`);
+    const card = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Discovery' }) });
+    await card.getByText('Scanning is off').waitFor();
+    assert.equal(await card.getByRole('button', { name: 'Scan now' }).count(), 0, 'no scanning until it is turned on');
+    await card.getByRole('button', { name: 'Scan settings' }).click();
+    const dlg = page.getByRole('dialog');
+    await dlg.getByLabel('Scan this prefix').check();
+    await dlg.getByLabel('Schedule').selectOption({ label: 'Every day' });
+    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+    await card.getByText(/Scanning is on · Every day/).waitFor();
+    await card.getByRole('button', { name: 'Scan now' }).waitFor();
+    await card.getByText('Nothing waiting for review.').waitFor();
+    const d = await call(page, 'get', `/api/prefixes/${prefix.id}/discovery`);
+    assert.equal(d.scan_interval_minutes, 1440);
+
+    // A /16 can't be scanned.
+    const big = (await call(page, 'get', `/api/projects/${s.pid}/prefixes`)).prefixes.find((p) => p.cidr === '10.30.0.0/16');
+    await page.goto(`${base}/p/${s.pid}/ipam/prefixes/${big.id}`);
+    await page.getByText(/can't be scanned: Only prefixes of \/22 or smaller/).waitFor();
+
+    // SNMP devices: v2c warns, and the community is never shown again.
+    await page.goto(`${base}/p/${s.pid}/ipam?tab=snmp`);
+    await page.getByRole('button', { name: 'Add SNMP device' }).click();
+    await dlg.getByLabel('Name', { exact: true }).fill('core-switch');
+    await dlg.getByLabel('IP address', { exact: true }).fill('10.30.5.1');
+    await dlg.getByLabel('Version').selectOption('2c');
+    await dlg.getByText(/sends the community string and the tables in clear text/).waitFor();
+    await dlg.getByLabel('Community').fill('e2e-secret-community');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+    await page.getByRole('cell', { name: 'core-switch', exact: true }).waitFor();
+    await page.getByText('SNMP v2c', { exact: true }).waitFor();
+    assert.ok(!(await page.content()).includes('e2e-secret-community'));
+    await page.getByRole('button', { name: 'Edit core-switch' }).click();
+    assert.equal(await dlg.getByLabel('Community').inputValue(), '');
+    await dlg.getByText('Leave empty to keep the stored one').waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+
+    await page.getByRole('tab', { name: 'Discovered' }).click();
+    await page.getByText('Nothing waiting for review').waitFor();
+  });
 }

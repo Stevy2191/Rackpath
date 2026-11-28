@@ -34,7 +34,7 @@ use crate::error::{AppError, AppResult};
 use crate::hierarchy::{self, Subtree};
 use crate::middleware::RequestCtx;
 use crate::state::AppState;
-use crate::util::now_ts;
+use crate::util::{now_ts, ts_in};
 
 fn unique(e: sqlx::Error, msg: String) -> AppError {
     match &e {
@@ -544,6 +544,7 @@ pub async fn list_prefixes(
         addresses: i64,
         leases: i64,
         leased_only: i64,
+        found_only: i64,
     }
     let mut b: QueryBuilder<Sqlite> = QueryBuilder::new(concat!(
         "SELECT ",
@@ -555,7 +556,11 @@ pub async fn list_prefixes(
            (SELECT COUNT(DISTINCT l.addr_bin) FROM dhcp_lease_snapshots l WHERE l.space_id = p.space_id
              AND l.family = p.family AND l.addr_bin BETWEEN p.net_start AND p.net_end
              AND NOT EXISTS (SELECT 1 FROM ip_addresses a WHERE a.space_id = l.space_id
-                             AND a.family = l.family AND a.addr_bin = l.addr_bin)) AS leased_only
+                             AND a.family = l.family AND a.addr_bin = l.addr_bin)) AS leased_only,
+           (SELECT COUNT(*) FROM discovered_hosts d WHERE d.space_id = p.space_id AND d.family = p.family
+             AND d.addr_bin BETWEEN p.net_start AND p.net_end
+             AND NOT EXISTS (SELECT 1 FROM dhcp_lease_snapshots l WHERE l.space_id = d.space_id
+                             AND l.family = d.family AND l.addr_bin = d.addr_bin)) AS found_only
          FROM prefixes p WHERE p.project_id = "
     ));
     b.push_bind(project_id);
@@ -601,9 +606,11 @@ pub async fn list_prefixes(
         v["address_count"] = json!(r.addresses);
         v["lease_count"] = json!(r.leases);
         v["dhcp_pool_size"] = json!(pool as u64);
-        // In use: documented addresses plus DHCP leases (an address that is
-        // both counts once). A DHCP pool is room for clients, not usage.
-        let in_use = (r.addresses + r.leased_only) as u128;
+        v["discovered_count"] = json!(r.found_only);
+        // In use: documented addresses, DHCP leases and live hosts found by
+        // discovery (an address counts once). A DHCP pool is room for
+        // clients, not usage.
+        let in_use = (r.addresses + r.leased_only + r.found_only) as u128;
         v["in_use"] = json!(in_use as u64);
         if c.family() == Family::V4 {
             v["utilization"] = json!(utilization(in_use, usable));
@@ -831,12 +838,24 @@ pub async fn get_prefix(
     .bind(c.end().bin())
     .fetch_one(&mut *conn)
     .await?;
-    let in_use = (total + leased_only) as u128;
+    let found_only: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM discovered_hosts d WHERE d.space_id = ?1 AND d.family = ?2 AND d.addr_bin BETWEEN ?3 AND ?4
+         AND NOT EXISTS (SELECT 1 FROM dhcp_lease_snapshots l WHERE l.space_id = d.space_id
+                         AND l.family = d.family AND l.addr_bin = d.addr_bin)",
+    )
+    .bind(p.space_id)
+    .bind(p.family)
+    .bind(c.start().bin())
+    .bind(c.end().bin())
+    .fetch_one(&mut *conn)
+    .await?;
+    let in_use = (total + leased_only + found_only) as u128;
     let chain = prefix_chain(&mut conn, p.project_id, p.location_id).await?;
     let mut v = serde_json::to_value(&p).unwrap_or_default();
     v["size"] = size_json(&c);
     v["address_count"] = json!(total);
     v["lease_count"] = json!(leases);
+    v["discovered_count"] = json!(found_only);
     v["in_use"] = json!(in_use as u64);
     v["dhcp_pool_size"] = json!(pool as u64);
     if c.family() == Family::V4 {
@@ -962,7 +981,8 @@ pub async fn delete_prefix(
 }
 
 /// Address intervals a new address can't take in `p`: documented
-/// addresses, DHCP pools and reserved ranges, and the gateway.
+/// addresses, live hosts found by discovery, DHCP pools and reserved
+/// ranges, and the gateway.
 async fn taken_in(
     conn: &mut SqliteConnection,
     p: &Prefix,
@@ -971,8 +991,9 @@ async fn taken_in(
     let c = p.cidr();
     // One JSON value instead of one decoded row per address.
     let addrs: Option<String> = sqlx::query_scalar(
-        "SELECT json_group_array(hex(addr_bin)) FROM ip_addresses
-         WHERE space_id = ? AND family = ? AND addr_bin BETWEEN ? AND ?",
+        "SELECT json_group_array(hex(addr_bin)) FROM (
+           SELECT addr_bin FROM ip_addresses WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4
+           UNION SELECT addr_bin FROM discovered_hosts WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4)",
     )
     .bind(p.space_id)
     .bind(p.family)
@@ -1110,7 +1131,8 @@ pub async fn grid(
 }
 
 /// The free addresses in a prefix as runs, each inside a DHCP pool or not.
-/// Taken: documented addresses, current DHCP leases, the gateway, held
+/// Taken: documented addresses, current DHCP leases, live hosts found by
+/// discovery, the gateway, held
 /// ranges and smaller prefixes inside it (they have their own free list).
 pub async fn free_addresses(
     State(state): State<AppState>,
@@ -1125,7 +1147,8 @@ pub async fn free_addresses(
     let v6 = c.family() == Family::V6;
     let bins: Vec<Vec<u8>> = sqlx::query_scalar(
         "SELECT addr_bin FROM ip_addresses WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4
-         UNION SELECT addr_bin FROM dhcp_lease_snapshots WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4",
+         UNION SELECT addr_bin FROM dhcp_lease_snapshots WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4
+         UNION SELECT addr_bin FROM discovered_hosts WHERE space_id = ?1 AND family = ?2 AND addr_bin BETWEEN ?3 AND ?4",
     )
     .bind(p.space_id)
     .bind(p.family)
@@ -1455,6 +1478,10 @@ pub struct AddressRow {
     missing_from_source_at: Option<String>,
     created_at: String,
     updated_at: String,
+    /// What discovery last saw here.
+    last_seen_at: Option<String>,
+    last_seen_mac: Option<String>,
+    last_seen_port: Option<String>,
     device_path: Option<String>,
     /// The linked device's name (its path shows only codes).
     device_name: Option<String>,
@@ -1468,7 +1495,8 @@ macro_rules! address_select {
     () => {
         "SELECT a.id, a.project_id, a.space_id, a.address, a.family, a.addr_bin, a.prefix_len, a.device_id, a.port_id, \
          a.role, a.status, a.mac, a.dns_name, a.dns_aliases, a.dhcp_reservation, a.description, a.notes, a.source, \
-         a.external_id, a.missing_from_source_at, a.created_at, a.updated_at, ds.path AS device_path, \
+         a.external_id, a.missing_from_source_at, a.created_at, a.updated_at, a.last_seen_at, a.last_seen_mac, \
+         a.last_seen_port, ds.path AS device_path, \
          (SELECT d.name FROM devices d WHERE d.id = a.device_id) AS device_name, ps.path AS port_path, \
          EXISTS (SELECT 1 FROM ip_ranges r JOIN prefixes p ON p.id = r.prefix_id WHERE r.kind = 'dhcp_pool' \
                  AND p.space_id = a.space_id AND p.family = a.family \
@@ -1519,6 +1547,9 @@ impl AddressRow {
                 "device_path",
                 "device_name",
                 "kind",
+                "last_seen_at",
+                "last_seen_mac",
+                "last_seen_port",
             ] {
                 o.remove(k);
             }
@@ -2131,6 +2162,9 @@ pub async fn delete_address(
 // ---------------------------------------------------------------- warnings
 
 /// Everything in a project's address plan worth a second look.
+/// A documented address that a scanned prefix hasn't seen for this long is flagged.
+const STALE_AFTER_DAYS: i64 = 30;
+
 pub async fn warnings(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -2265,6 +2299,49 @@ pub async fn warnings(
             id,
             &what,
             format!("{what} is no longer in the source it was imported from"),
+        );
+    }
+
+    // From discovery: another MAC answering at a documented address, and
+    // documented addresses that stopped answering.
+    let mac_changed: Vec<(i64, String, String, String)> = sqlx::query_as(
+        "SELECT id, address, mac, last_seen_mac FROM ip_addresses WHERE project_id = ?
+         AND mac IS NOT NULL AND last_seen_mac IS NOT NULL AND mac <> last_seen_mac
+         ORDER BY addr_bin LIMIT 500",
+    )
+    .bind(project_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, addr, mac, seen) in mac_changed {
+        push(
+            "mac_changed",
+            "ip_address",
+            id,
+            &addr,
+            format!("{addr} is documented with MAC {mac}, but discovery saw {seen} there"),
+        );
+    }
+    let stale: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT a.id, a.address, a.last_seen_at FROM ip_addresses a WHERE a.project_id = ?
+         AND a.last_seen_at IS NOT NULL AND a.last_seen_at < ?
+         AND EXISTS (SELECT 1 FROM prefixes p WHERE p.space_id = a.space_id AND p.family = a.family
+                     AND a.addr_bin BETWEEN p.net_start AND p.net_end AND p.scan_enabled = 1)
+         ORDER BY a.addr_bin LIMIT 500",
+    )
+    .bind(project_id)
+    .bind(ts_in(time::Duration::days(-STALE_AFTER_DAYS)))
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, addr, at) in stale {
+        push(
+            "not_seen",
+            "ip_address",
+            id,
+            &addr,
+            format!(
+                "{addr} hasn't answered a scan since {} (over {STALE_AFTER_DAYS} days)",
+                at.get(..10).unwrap_or(&at)
+            ),
         );
     }
     Ok(Json(json!({ "warnings": out })))

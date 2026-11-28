@@ -1114,3 +1114,193 @@ async fn unifi_fixed_ips_are_static_or_reservations_by_pool() {
         .clone();
     assert!(printer["missing_from_source_at"].is_string(), "{printer}");
 }
+
+#[tokio::test]
+async fn records_gone_from_the_source_can_be_removed() {
+    let app = spawn().await;
+    let c = app.owner().await;
+    let p = app.project(&c, "GONE").await;
+    let mut data = unifi_data();
+    data["wlans"] = json!([
+        { "_id": "w1", "name": "Home", "security": "wpapsk", "networkconf_id": "n1" },
+        { "_id": "w2", "name": "Old", "security": "wpapsk", "networkconf_id": "n1" },
+    ]);
+    let (url, mock) = unifi_mock(data).await;
+    let i = post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/integrations"),
+        json!({ "kind": "unifi", "name": "UDM", "base_url": url, "auth_kind": "api_key", "secret": "good-key" }),
+    )
+    .await;
+    let iid = id(&i);
+    let sync = format!("/api/integrations/{iid}/sync");
+    let (s, r) = app.post(&c, &sync, json!({})).await;
+    assert_eq!(s, StatusCode::OK, "{r}");
+    // A cable documented by hand on the gateway.
+    let gw: i64 = sqlx::query_scalar("SELECT id FROM devices WHERE name = 'Gateway'")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    let loc = post_ok(
+        &app,
+        &c,
+        &format!("/api/projects/{p}/locations"),
+        json!({ "code": "HQ" }),
+    )
+    .await;
+    let (_, l) = app.get(&c, &format!("/api/locations/{}", id(&loc))).await;
+    let floor = l["floors"][0]["id"].as_i64().unwrap();
+    let room = post_ok(
+        &app,
+        &c,
+        &format!("/api/floors/{floor}/rooms"),
+        json!({ "code": "MDF" }),
+    )
+    .await;
+    let rack = post_ok(
+        &app,
+        &c,
+        &format!("/api/rooms/{}/racks", id(&room)),
+        json!({ "u_height": 42 }),
+    )
+    .await;
+    let (s, v) = app
+        .patch(
+            &c,
+            &format!("/api/devices/{gw}"),
+            json!({ "placement": { "type": "rack", "rack_id": id(&rack), "u": 10 } }),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    let (s, ports) = app
+        .post(
+            &c,
+            &format!("/api/devices/{gw}/ports/bulk"),
+            json!({ "count": 2, "connector": "rj45" }),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{ports}");
+    let (a, b) = (
+        ports["ports"][0]["id"].as_i64().unwrap(),
+        ports["ports"][1]["id"].as_i64().unwrap(),
+    );
+    let (s, v) = app
+        .post(
+            &c,
+            "/api/connections",
+            json!({ "kind": "patch", "a": { "port_id": a }, "b": { "port_id": b } }),
+        )
+        .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    let count = |sql: &'static str| {
+        let pool = app.pool.clone();
+        async move {
+            sqlx::query_scalar::<_, i64>(sql)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(
+        count("SELECT COUNT(*) FROM devices WHERE name = 'Switch'").await,
+        1
+    );
+
+    // Off (the default): gone from the source is only marked.
+    {
+        let mut d = mock.data.lock().unwrap();
+        d["devices"].as_array_mut().unwrap().remove(1);
+        d["wlans"].as_array_mut().unwrap().remove(1);
+        d["users"].as_array_mut().unwrap().remove(0);
+    }
+    let (_, r) = app.post(&c, &sync, json!({})).await;
+    assert_eq!(r["counts"]["device"]["missing"], 1, "{r}");
+    assert_eq!(count("SELECT COUNT(*) FROM devices WHERE name = 'Switch' AND missing_from_source_at IS NOT NULL").await, 1);
+    assert_eq!(
+        count("SELECT COUNT(*) FROM wlans WHERE ssid = 'Old'").await,
+        1
+    );
+    assert_eq!(
+        count("SELECT COUNT(*) FROM ip_addresses WHERE address = '192.168.1.10'").await,
+        1
+    );
+
+    // On: what was already missing is removed at the next sync. A dry run
+    // shows it first and changes nothing.
+    let (s, v) = app
+        .patch(
+            &c,
+            &format!("/api/integrations/{iid}"),
+            json!({ "options": { "remove_missing": true } }),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["options"]["remove_missing"], true);
+    let (_, r) = app
+        .post(&c, &format!("{sync}?dry_run=true"), json!({}))
+        .await;
+    assert_eq!(r["counts"]["device"]["removed"], 1, "{r}");
+    assert_eq!(
+        count("SELECT COUNT(*) FROM devices WHERE name = 'Switch'").await,
+        1
+    );
+    let (_, r) = app.post(&c, &sync, json!({})).await;
+    assert_eq!(r["counts"]["device"]["removed"], 1, "{r}");
+    assert_eq!(r["counts"]["wlan"]["removed"], 1, "{r}");
+    assert_eq!(
+        r["counts"]["address"]["removed"], 2,
+        "the NAS and the switch's address: {r}"
+    );
+    assert_eq!(
+        count("SELECT COUNT(*) FROM devices WHERE name = 'Switch'").await,
+        0
+    );
+    assert_eq!(
+        count("SELECT COUNT(*) FROM wlans WHERE ssid = 'Old'").await,
+        0
+    );
+    assert_eq!(
+        count("SELECT COUNT(*) FROM ip_addresses WHERE address = '192.168.1.10'").await,
+        0
+    );
+    assert_eq!(
+        count("SELECT COUNT(*) FROM devices WHERE name = 'Gateway'").await,
+        1,
+        "the rest stays"
+    );
+
+    // In the change history, in the sync entry.
+    let (_, log) = app.get(&c, "/api/audit?action=sync").await;
+    assert!(log.to_string().contains("removed device"), "{log}");
+
+    // A device with documented cables is kept, marked, with a warning.
+    mock.data.lock().unwrap()["devices"]
+        .as_array_mut()
+        .unwrap()
+        .remove(0);
+    let (_, r) = app.post(&c, &sync, json!({})).await;
+    assert_eq!(r["counts"]["device"]["missing"], 1, "{r}");
+    assert!(
+        r["counts"]["device"]["removed"].as_u64().unwrap_or(0) == 0,
+        "{r}"
+    );
+    assert!(r["warnings"].to_string().contains("kept"), "{r}");
+    assert_eq!(
+        count("SELECT COUNT(*) FROM devices WHERE name = 'Gateway'").await,
+        1
+    );
+    assert_eq!(count("SELECT COUNT(*) FROM connections").await, 1);
+
+    // Something removed at the source later goes in the same sync.
+    mock.data.lock().unwrap()["networks"]
+        .as_array_mut()
+        .unwrap()
+        .remove(1);
+    let (_, r) = app.post(&c, &sync, json!({})).await;
+    assert_eq!(r["counts"]["prefix"]["removed"], 1, "{r}");
+    assert_eq!(
+        count("SELECT COUNT(*) FROM prefixes WHERE cidr = '10.0.30.0/24'").await,
+        0
+    );
+}

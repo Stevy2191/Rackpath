@@ -23,6 +23,9 @@ pub struct Target {
     /// (false for a DHCP-only XML upload on a DNS-pushing integration), so
     /// unseen owned addresses can be marked missing.
     pub full_addresses: bool,
+    /// Delete owned records once they're missing at the source, instead of
+    /// only marking them (an option per integration).
+    pub remove_missing: bool,
 }
 
 #[derive(Serialize, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +34,8 @@ pub struct Counts {
     pub updated: usize,
     pub missing: usize,
     pub restored: usize,
+    /// Deleted because they're gone from the source (remove_missing).
+    pub removed: usize,
 }
 
 #[derive(Serialize, Default, Debug)]
@@ -41,6 +46,9 @@ pub struct Report {
     /// Records this integration owned before the run.
     pub owned_before: usize,
     pub warnings: Vec<String>,
+    /// Records removed that were already marked missing before this run
+    /// (the newly missing ones are counted in `newly_missing`).
+    pub removed_earlier: usize,
     /// What changed, for the change history (capped).
     pub changes: Vec<String>,
 }
@@ -63,8 +71,10 @@ impl Report {
     pub fn changed(&self) -> usize {
         self.counts.values().map(|c| c.updated + c.restored).sum()
     }
+    /// Records that leave the documentation or get marked: newly missing
+    /// ones, plus earlier-missing ones this run deletes. For the hold rule.
     pub fn newly_missing(&self) -> usize {
-        self.counts.values().map(|c| c.missing).sum()
+        self.counts.values().map(|c| c.missing).sum::<usize>() + self.removed_earlier
     }
 }
 
@@ -207,7 +217,146 @@ pub async fn apply(conn: &mut SqliteConnection, t: &Target, snap: &Snapshot) -> 
         }
         r.leases = Some(n);
     }
+    if t.remove_missing {
+        remove_missing(conn, t, &now, &mut r).await?;
+    }
     Ok(r)
+}
+
+/// Deletes the records this integration owns that are missing at the
+/// source. A device with documented cables or devices on it is kept (still
+/// marked missing), since deleting it would lose work done by hand.
+async fn remove_missing(
+    conn: &mut SqliteConnection,
+    t: &Target,
+    now: &str,
+    r: &mut Report,
+) -> AppResult<()> {
+    let devices: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, code, missing_from_source_at FROM devices
+         WHERE source_integration_id = ? AND missing_from_source_at IS NOT NULL",
+    )
+    .bind(t.integration_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, code, since) in devices {
+        let cables = crate::cabling::count_for_device(&mut *conn, id).await?;
+        let contents: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE parent_device_id = ?")
+                .bind(id)
+                .fetch_one(&mut *conn)
+                .await?;
+        if cables > 0 || contents > 0 {
+            r.warn(format!(
+                "device {code} is gone from the source but kept: it has documented cables or devices on it; delete it by hand"
+            ));
+            continue;
+        }
+        sqlx::query("DELETE FROM devices WHERE id = ?")
+            .bind(id)
+            .execute(&mut *conn)
+            .await?;
+        hierarchy::drop_subtree(&mut *conn, Subtree::Device(id)).await?;
+        removed(
+            r,
+            "device",
+            &since,
+            now,
+            format!("removed device {code} (gone from the source)"),
+        );
+    }
+    let wlans: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, ssid, missing_from_source_at FROM wlans
+         WHERE source_integration_id = ? AND missing_from_source_at IS NOT NULL",
+    )
+    .bind(t.integration_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, ssid, since) in wlans {
+        sqlx::query("DELETE FROM wlans WHERE id = ?")
+            .bind(id)
+            .execute(&mut *conn)
+            .await?;
+        removed(
+            r,
+            "wlan",
+            &since,
+            now,
+            format!("removed Wi-Fi network {ssid} (gone from the source)"),
+        );
+    }
+    let ranges: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, start_text || '-' || end_text, missing_from_source_at FROM ip_ranges
+         WHERE source_integration_id = ? AND missing_from_source_at IS NOT NULL",
+    )
+    .bind(t.integration_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, label, since) in ranges {
+        sqlx::query("DELETE FROM ip_ranges WHERE id = ?")
+            .bind(id)
+            .execute(&mut *conn)
+            .await?;
+        removed(
+            r,
+            "range",
+            &since,
+            now,
+            format!("removed range {label} (gone from the source)"),
+        );
+    }
+    let addresses: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, address, missing_from_source_at FROM ip_addresses
+         WHERE source_integration_id = ? AND missing_from_source_at IS NOT NULL",
+    )
+    .bind(t.integration_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, address, since) in addresses {
+        sqlx::query("DELETE FROM ip_addresses WHERE id = ?")
+            .bind(id)
+            .execute(&mut *conn)
+            .await?;
+        hierarchy::reindex(&mut *conn, Subtree::Address(id)).await?;
+        removed(
+            r,
+            "address",
+            &since,
+            now,
+            format!("removed address {address} (gone from the source)"),
+        );
+    }
+    // Prefixes last: their ranges go with them; documented addresses stay.
+    let prefixes: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, cidr, missing_from_source_at FROM prefixes
+         WHERE source_integration_id = ? AND missing_from_source_at IS NOT NULL",
+    )
+    .bind(t.integration_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, cidr, since) in prefixes {
+        sqlx::query("DELETE FROM prefixes WHERE id = ?")
+            .bind(id)
+            .execute(&mut *conn)
+            .await?;
+        hierarchy::reindex(&mut *conn, Subtree::Prefix(id)).await?;
+        removed(
+            r,
+            "prefix",
+            &since,
+            now,
+            format!("removed prefix {cidr} (gone from the source)"),
+        );
+    }
+    Ok(())
+}
+
+fn removed(r: &mut Report, kind: &'static str, since: &str, now: &str, note: String) {
+    r.c(kind).removed += 1;
+    if since != now {
+        r.removed_earlier += 1;
+    }
+    r.note(note);
 }
 
 // ---------------------------------------------------------------- devices
