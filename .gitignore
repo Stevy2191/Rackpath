@@ -31,3 +31,4 @@ db/data/
 # Rust API (v2)
 api-rs/target/
 api-rs/data/
+/site/

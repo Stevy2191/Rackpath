@@ -52,11 +52,13 @@ accounts out.) Rotate the token in Rackpath at any time; then run
 
 - Scopes become prefixes (with gateway, DNS servers and domain), DHCP
   ranges become DHCP pools split around exclusions, exclusions become
-  reserved ranges, reservations become reserved addresses linked to the
-  device with that MAC.
+  reserved ranges, reservations become addresses marked as DHCP
+  reservations, linked to the device with that MAC.
 - Static DNS names fill in addresses' DNS names; a second name becomes an
   alias; a PTR that disagrees with the A record is reported.
-- Records Windows no longer has are marked **missing**, never deleted.
+- Records Windows no longer has are marked **missing**. They're only
+  deleted if you turn on *Delete records that are gone from the source* on
+  the integration.
 - An import that would change more than half of what this integration
   owns at once is **held** for an admin to approve.
 - One import per minute per token; HTTPS only (unless `-AllowHttp`).
