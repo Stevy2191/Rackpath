@@ -184,7 +184,7 @@ function AddressGrid({ prefixId, version, onCell }: { prefixId: number; version:
     const special = o === g.network ? 'network' : o === g.broadcast ? 'broadcast' : o === g.gateway ? 'gateway' : null;
     const cls = ['cell', special ?? '', a ? `addr addr-${a.kind}` : '', r ? `range-${r.kind}` : '', l && !a ? 'lease' : ''].filter(Boolean).join(' ');
     const ip = offsetToIp(g.cidr, o);
-    const title = [ip, special, a ? `${a.dns_name ?? a.device_path?.split('/').pop() ?? ADDRESS_KIND_LABEL[a.kind]}` : null, r ? `${r.kind.replace('_', ' ')}${r.description ? `: ${r.description}` : ''}` : null, l && !a ? `lease: ${l.hostname ?? l.mac ?? ''}` : null]
+    const title = [ip, special, a ? `${a.dns_name ?? a.description ?? a.device_path?.split('/').pop() ?? ADDRESS_KIND_LABEL[a.kind]}` : null, r ? `${r.kind.replace('_', ' ')}${r.description ? `: ${r.description}` : ''}` : null, l && !a ? `lease: ${l.hostname ?? l.mac ?? ''}` : null]
       .filter(Boolean)
       .join(' · ');
     cells.push(

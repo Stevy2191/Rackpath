@@ -157,10 +157,11 @@ function DevicePortPicker({ projectId, deviceId, portId, onChange }: { projectId
       <TextField label="Find a device" placeholder="Code, name, hostname…" value={q} onChange={(e) => setQ(e.target.value)} />
       <SelectField
         label="Device"
+        hint="Optional: the device documented in Rackpath that uses this address"
         value={deviceId}
         onChange={(e) => onChange(e.target.value, '')}
         options={[
-          { value: '', label: 'None (not linked to a device)' },
+          { value: '', label: 'None' },
           ...(deviceId && !current ? [{ value: deviceId, label: 'Current device' }] : []),
           ...devices.map((d) => ({ value: String(d.id), label: d.path.split('/').slice(1).join(' / ') })),
         ]}
