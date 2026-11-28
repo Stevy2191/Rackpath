@@ -76,6 +76,12 @@ It's one small container (or one binary) with its data in one SQLite file.
 |---|---|
 | ![Prefix with its address map](docs/screenshots/prefix.png) | ![Template designer](docs/screenshots/template-designer.png) |
 
+## 📖 Guide
+
+The **[Rackpath guide](docs/guide/README.md)** walks through installing,
+setting up and using everything: places and racks, cabling, IP addresses,
+integrations, network discovery, users, backups and troubleshooting.
+
 ## 🚀 Install
 
 ```bash
