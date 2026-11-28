@@ -201,6 +201,7 @@ shows it as the author of every imported record.
 
 **How the hierarchy behaves:**
 - **Defaults:** a new location gets floor `0`, and every floor gets a `DEFAULT` room, so devices can be placed before any rooms are drawn.
+- **Rows:** racks have an optional `row_label` (1–16 characters, stored uppercase) and `row_position` (1–999, left to right from the front). Rack lists on rooms and floors come in row order, then by code for racks without a row.
 - **Codes:** uppercase, 1–16 characters, unique among siblings. Racks and floor devices share a room's namespace. When no code is given, one is generated from the type prefix (`SW01`, `SW02`, …), and a clash suggests a free alternative.
 - **Placement:** a device sits in a room (with optional floor-plan x/y), in a rack (U position in half-U steps, front/rear/full depth, full or half width, or zero-U), on a tray, or in the project's Unplaced list. Types only go where they make sense: a switch can't go on a floor, an access point can't go in a rack.
 - **Moving:** a device can only be moved by someone who can edit both where it is and where it's going.

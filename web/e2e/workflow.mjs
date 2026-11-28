@@ -3,7 +3,10 @@
 // device that waits in Unplaced. Uses its own project.
 import { strict as assert } from 'node:assert';
 
-export default function (test, { base }) {
+import { join } from 'node:path';
+
+export default function (test, { base, shots }) {
+  const snap = async (page, name) => shots && (await page.screenshot({ path: join(shots, `${name}.png`), fullPage: true }));
   const s = {};
   const call = async (page, method, path, data) => {
     const r = await page.request[method](base + path, data ? { data } : undefined);
@@ -50,5 +53,38 @@ export default function (test, { base }) {
     await page.goto(`${base}/p/${s.pid}`);
     await page.getByRole('heading', { name: 'Placed devices' }).waitFor();
     assert.equal(await page.getByRole('heading', { name: 'Get started' }).count(), 0);
+  });
+
+  test('racks stand side by side in rows, front and rear', async (page) => {
+    const loc = (await call(page, 'get', `/api/projects/${s.pid}/locations`))[0];
+    const l = await call(page, 'get', `/api/locations/${loc.id}`);
+    const floor = await call(page, 'get', `/api/floors/${l.floors[0].id}`);
+    const room = floor.rooms[0].id;
+    await call(page, 'patch', `/api/racks/${s.rack}`, { row_label: 'A', row_position: 1 });
+    const rk2 = await call(page, 'post', `/api/rooms/${room}/racks`, { code: 'RK02', u_height: 24, row_label: 'A', row_position: 2 });
+    await call(page, 'post', `/api/rooms/${room}/racks`, { code: 'RK03', u_height: 12 });
+    await call(page, 'post', `/api/projects/${s.pid}/devices`, { device_type: 'patch_panel', placement: { type: 'rack', rack_id: rk2.id, u: 20, face: 'front', mount: 'full_width' } });
+
+    await page.goto(`${base}/p/${s.pid}/locations/${loc.id}`);
+    const rowA = page.getByRole('region', { name: 'Row A' });
+    await rowA.waitFor();
+    const order = async (region) => (await region.locator('.rack-row-head a').allInnerTexts()).join(' ');
+    assert.equal(await order(rowA), 'RK01 RK02');
+    await page.getByRole('region', { name: 'Racks not in a row' }).getByText('RK03').waitFor();
+    await snap(page, 'rack-row');
+    // From the rear the row is mirrored.
+    await page.getByRole('button', { name: 'Rear', exact: true }).click();
+    assert.equal(await order(rowA), 'RK02 RK01');
+    await page.getByRole('button', { name: 'Front', exact: true }).click();
+
+    // Drag a device from one rack into another.
+    await rowA.locator('.rack-device[data-device=PP01]').dragTo(rowA.locator('.rack-row-item').first().getByRole('button', { name: 'Add a device at U30' }));
+    await page.waitForFunction(() => document.querySelectorAll('.rack-row-item')[0]?.querySelector('[data-device=PP01]'));
+    // Drag a rack's heading onto another to reorder the row.
+    await rowA.locator('.rack-row-head').nth(1).dragTo(rowA.locator('.rack-row-head').nth(0));
+    await page.getByText('Row A reordered').waitFor();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Row A"] .rack-row-head a')?.textContent === 'RK02');
+    const racks = (await call(page, 'get', `/api/rooms/${room}`)).racks.map((r) => `${r.code}:${r.row_label}${r.row_position}`);
+    assert.deepEqual(racks.slice(0, 2), ['RK02:A1', 'RK01:A2']);
   });
 }

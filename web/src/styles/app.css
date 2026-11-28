@@ -426,3 +426,13 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
   color: var(--color-text-muted, inherit);
   text-decoration: line-through;
 }
+
+/* Racks side by side. */
+.rack-row-group { display: grid; gap: 0.5rem; }
+.rack-row-group > h3:empty { display: none; }
+.rack-row { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 0.5rem; align-items: flex-end; }
+.rack-row-item { flex: 0 0 15rem; display: grid; gap: 0.4rem; }
+.rack-row-item.over .rack-row-head { outline: 2px dashed var(--color-accent); }
+.rack-row-head { display: flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.4rem; border-radius: 6px; background: var(--color-bg-subtle); }
+.rack-row-head[draggable='true'] { cursor: grab; }
+.rack-row-item .rack-elevation { flex: none; }

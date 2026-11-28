@@ -6,7 +6,7 @@ Rackpath models where things are as a tree:
 Project
 └── Location (a building), optionally grouped by Site
     └── Floor
-        └── Room (drawn on the floor plan)
+        └── Room (optionally drawn on a floor plan)
             ├── Rack ─ devices at U positions, trays, zero-U side mounts
             └── Floor-standing devices (access points, wall outlets, printers…)
 ```
@@ -47,15 +47,36 @@ A new location gets floor `0`, and every floor gets a `DEFAULT` room, so you
 can place devices before drawing anything. Add more floors from the
 location's page (code, name, level: 0 is ground, negative is below).
 
-### Floor plans
+### Floor plans (optional)
 
-1. Open a floor → **Upload plan** (PNG, JPEG or WebP).
+You don't need a floor plan for anything: racks and devices work without
+one. A floor opens on its racks; the plan is on the **Floor plan** tab.
+
+1. Open a floor → **Floor plan** tab → **Upload plan** (PNG, JPEG or WebP).
 2. Set **Plan scale (pixels per metre)** on the floor so racks are drawn to
    size.
 3. Draw **rooms** as outlines on the plan and give each a code (`MDF`,
    `IDF2`, `OFFICE-12`).
 4. Drag **racks** and **floor devices** onto the plan; rotate racks to match
    the room.
+
+## Racks side by side
+
+Rooms, floors and one-floor locations show their racks **side by side**,
+the way they stand, at one scale and standing on the floor (a 24U rack is
+shorter than a 42U one):
+
+- **Rows:** give racks a **Row** (`A`, `B`…) and a **Position in the row**
+  (1 is leftmost, seen from the front) when adding or editing them. Each row
+  is drawn left to right; racks without a row come last, by code.
+- **Front / Rear** switches every rack at once. From the rear a row is seen
+  from the other aisle, so its order is mirrored.
+- **Click a free U** in any rack to add a device, or place one waiting in
+  Unplaced. **Click a device** to open it.
+- **Drag a device** from one rack to another.
+- **Drag a rack's name** onto another rack to move it there in the row; the
+  row is renumbered for you, and dropping onto a rack in another row moves
+  it to that row.
 
 ## Racks
 
